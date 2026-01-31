@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/dev_analytics
+    username: postgres
+    password:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+  security:
+    jwt:
+      secret:
+server:
+  port: 8080
+logging:
+  level:
+    com.yourname: DEBUG
