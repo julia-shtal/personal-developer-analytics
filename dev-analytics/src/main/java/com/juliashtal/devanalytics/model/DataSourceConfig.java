@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -13,17 +14,42 @@ public class DataSourceConfig {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
+    @JsonIgnore
     private User user;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
     private DataSourceType type;
 
+    // clear name: "Local Git", "GitHub personal", "Jira Work"
+    @Column(nullable = false)
     private String name;
-    private String baseUrl; // https://github.com/org/repo, https://yourcompany.atlassian.net
-    private String path; // /path/to/local/repo
-    @Column(name = "api_token")
-    private String apiTokenEncrypted; // Jasypt
+
+    // for HTTP‑sources: base URL (https://github.com, https://yourcompany.atlassian.net)
+    private String baseUrl;
+
+    // for local git: path to repo
+    private String path;
+
+    // token/key (encrypted)
+    @Column(name = "api_token_encrypted")
+    private String apiTokenEncrypted;
+
+    private boolean enabled = true;
     private LocalDateTime lastSuccessSync;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    public void prePersist() {
+        createdAt = LocalDateTime.now();
+        updatedAt = createdAt;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }
