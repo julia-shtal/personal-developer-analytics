@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.security;
+package com.juliashtal.devanalytics.security.service;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;

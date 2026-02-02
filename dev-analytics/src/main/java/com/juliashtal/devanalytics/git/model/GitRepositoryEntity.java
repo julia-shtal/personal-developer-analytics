@@ -1,0 +1,49 @@
+package com.juliashtal.devanalytics.git.model;
+
+import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import jakarta.persistence.*;
+import lombok.Data;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+
+@Data
+@Entity
+@Table(name = "git_repositories")
+public class GitRepositoryEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "data_source_id")
+    private DataSourceConfig dataSourceConfig;
+
+    @Column(nullable = false)
+    private String name;
+
+    // for local repo: path to .git
+    @Column(nullable = false)
+    private String localPath;
+
+    // for incremental collecting
+    private String lastFetchedCommitHash;
+
+    private LocalDateTime lastScanAt;
+
+    private Instant createdAt;
+    private Instant updatedAt;
+
+    @PrePersist
+    public void prePersist() {
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = Instant.now();
+    }
+}

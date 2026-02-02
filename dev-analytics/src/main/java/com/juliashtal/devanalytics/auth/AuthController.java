@@ -1,5 +1,8 @@
 package com.juliashtal.devanalytics.auth;
 
+import com.juliashtal.devanalytics.auth.model.AuthResponse;
+import com.juliashtal.devanalytics.auth.model.LoginRequest;
+import com.juliashtal.devanalytics.auth.model.RegisterRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

@@ -1,6 +1,6 @@
 package com.juliashtal.devanalytics.config;
 
-import com.juliashtal.devanalytics.security.CustomUserDetailsService;
+import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -1,9 +1,9 @@
 package com.juliashtal.devanalytics.datasource;
 
-import com.juliashtal.devanalytics.model.DataSourceConfig;
-import com.juliashtal.devanalytics.model.User;
-import com.juliashtal.devanalytics.model.dto.CreateDataSourceRequest;
-import com.juliashtal.devanalytics.model.dto.UpdateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.user.User;
+import com.juliashtal.devanalytics.datasource.model.CreateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.model.UpdateDataSourceRequest;
 import com.juliashtal.devanalytics.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.repository.UserRepository;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
