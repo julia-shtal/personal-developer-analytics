@@ -1,7 +1,7 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/dev_analytics
-    username: postgres
+    url:
+    username:
     password:
   flyway:
     enabled: true
@@ -13,8 +13,12 @@ spring:
   security:
     jwt:
       secret:
+app:
+  jwt:
+    secret:
+    expiration: 3600000
 server:
   port: 8080
 logging:
   level:
-    com.yourname: DEBUG
+    com.juliashtal: DEBUG

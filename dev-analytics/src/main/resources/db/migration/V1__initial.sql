@@ -9,12 +9,17 @@ CREATE TABLE users (
 );
 
 CREATE TABLE data_source_configs (
-                                     id                 BIGSERIAL PRIMARY KEY,
-                                     user_id            BIGINT REFERENCES users(id) ON DELETE CASCADE,
-                                     type               VARCHAR(50) NOT NULL,          -- EnumType.STRING
-                                     name               VARCHAR(255) NOT NULL,
-                                     base_url           VARCHAR(512),
-                                     path               VARCHAR(1024),
-                                     api_token          VARCHAR(1024),
-                                     last_success_sync  TIMESTAMP
+                                     id                   BIGSERIAL PRIMARY KEY,
+                                     user_id              BIGINT       NOT NULL
+                                         REFERENCES users(id) ON DELETE CASCADE,
+                                     type                 VARCHAR(32)  NOT NULL,         -- EnumType.STRING
+                                     name                 VARCHAR(255) NOT NULL,
+                                     base_url             VARCHAR(512),
+                                     path                 VARCHAR(1024),
+                                     api_token_encrypted  VARCHAR(1024),
+                                     enabled              BOOLEAN      NOT NULL DEFAULT TRUE,
+                                     last_success_sync    TIMESTAMP,
+                                     created_at           TIMESTAMP,
+                                     updated_at           TIMESTAMP
 );
+
