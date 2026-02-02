@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.auth;
+package com.juliashtal.devanalytics.auth.model;
 
 import lombok.Data;
 

@@ -1,6 +1,5 @@
-package com.juliashtal.devanalytics.model.dto;
+package com.juliashtal.devanalytics.datasource.model;
 
-import com.juliashtal.devanalytics.model.DataSourceType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;

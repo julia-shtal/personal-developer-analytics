@@ -1,6 +1,6 @@
-package com.juliashtal.devanalytics.security;
+package com.juliashtal.devanalytics.security.model;
 
-import com.juliashtal.devanalytics.model.User;
+import com.juliashtal.devanalytics.user.User;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 

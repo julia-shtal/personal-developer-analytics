@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.model;
+package com.juliashtal.devanalytics.user;
 
 import jakarta.persistence.*;
 import lombok.Data;
