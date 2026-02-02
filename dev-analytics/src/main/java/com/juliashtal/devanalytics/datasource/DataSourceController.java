@@ -1,8 +1,8 @@
 package com.juliashtal.devanalytics.datasource;
 
-import com.juliashtal.devanalytics.model.DataSourceConfig;
-import com.juliashtal.devanalytics.model.dto.CreateDataSourceRequest;
-import com.juliashtal.devanalytics.model.dto.UpdateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.datasource.model.CreateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.model.UpdateDataSourceRequest;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;

@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.security;
 
+import com.juliashtal.devanalytics.security.model.CustomUserDetails;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 

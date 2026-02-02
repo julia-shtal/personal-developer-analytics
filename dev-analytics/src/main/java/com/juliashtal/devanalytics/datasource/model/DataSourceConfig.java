@@ -1,6 +1,7 @@
-package com.juliashtal.devanalytics.model;
+package com.juliashtal.devanalytics.datasource.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.juliashtal.devanalytics.user.User;
 import jakarta.persistence.*;
 import lombok.Data;
 
