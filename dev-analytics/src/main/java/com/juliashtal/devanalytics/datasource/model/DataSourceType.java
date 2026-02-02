@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.model;
+package com.juliashtal.devanalytics.datasource.model;
 
 public enum DataSourceType {
     GIT_LOCAL, GITHUB, JIRA, GITHUB_ISSUES

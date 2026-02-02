@@ -1,5 +1,7 @@
 package com.juliashtal.devanalytics.security;
 
+import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
+import com.juliashtal.devanalytics.security.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
