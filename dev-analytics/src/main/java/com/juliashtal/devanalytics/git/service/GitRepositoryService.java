@@ -55,10 +55,18 @@ public class GitRepositoryService {
             throw new IllegalArgumentException("Local path is not a directory: " + req.getLocalPath());
         }
 
+        String normalizedPath = folder.getAbsolutePath();
+        repoRepository.findAllByDataSourceConfig(dataSource).stream()
+                .filter(r -> normalizedPath.equals(r.getLocalPath()))
+                .findFirst()
+                .ifPresent(r -> {
+                    throw new IllegalArgumentException("Repository with this path already registered for this data source");
+                });
+
         GitRepositoryEntity repo = new GitRepositoryEntity();
         repo.setDataSourceConfig(dataSource);
         repo.setName(req.getName());
-        repo.setLocalPath(folder.getAbsolutePath());
+        repo.setLocalPath(normalizedPath);
         repo.setLastFetchedCommitHash(null);
         repo.setLastScanAt(LocalDateTime.now());
 
