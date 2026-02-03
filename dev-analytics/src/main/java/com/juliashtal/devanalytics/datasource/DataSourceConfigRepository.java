@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.repository;
+package com.juliashtal.devanalytics.datasource;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.user.User;

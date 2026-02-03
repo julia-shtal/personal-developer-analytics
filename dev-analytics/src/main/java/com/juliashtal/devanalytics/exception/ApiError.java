@@ -24,7 +24,7 @@ public class ApiError {
     @Schema(description = "Detailed error message", example = "Null pointer exception")
     private String message;
 
-    @Schema(description = "Request path where the error occurred", example = "/api/diagnostic-sheets/123")
+    @Schema(description = "Request path where the error occurred", example = "/api/datasources")
     private String path;
 }
 

@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.github;
+package com.juliashtal.devanalytics.github.controller;
 
 import com.juliashtal.devanalytics.github.model.dto.GitHubPullRequestDto;
 
@@ -21,16 +21,15 @@ public class GitHubPullRequestController {
         this.prCollector = prCollector;
     }
 
-    // 1. Запуск сбора PR’ов по репозиторию
+    // 1. Start collecting PRs for the repository
     @PostMapping("/repos/{repoId}/pull-requests/collect")
     public ResponseEntity<String> collectPrs(@PathVariable Long repoId) {
-        // TODO
-        Long userId = SecurityUtils.getCurrentUserId();
+        // TODO Long userId = SecurityUtils.getCurrentUserId();
         int processed = prCollector.collectPullRequests(repoId);
         return ResponseEntity.ok("Processed " + processed + " pull requests");
     }
 
-    // 2. Просмотр PR’ов по репо
+    // 2. Viewing PRs by repo
     @GetMapping("/repos/{repoId}/pull-requests")
     public Page<GitHubPullRequestDto> listPrs(
             @PathVariable Long repoId,

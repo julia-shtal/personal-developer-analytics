@@ -2,7 +2,7 @@ package com.juliashtal.devanalytics.security.service;
 
 import com.juliashtal.devanalytics.security.model.CustomUserDetails;
 import com.juliashtal.devanalytics.user.User;
-import com.juliashtal.devanalytics.repository.UserRepository;
+import com.juliashtal.devanalytics.user.UserRepository;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
