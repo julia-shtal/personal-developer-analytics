@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.github.dto;
+package com.juliashtal.devanalytics.github.model.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

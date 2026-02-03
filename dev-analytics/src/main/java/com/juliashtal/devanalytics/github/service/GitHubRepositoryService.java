@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.github;
+package com.juliashtal.devanalytics.github.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
