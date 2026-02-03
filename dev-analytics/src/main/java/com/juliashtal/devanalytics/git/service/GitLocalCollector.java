@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.git.service;
 
+import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
@@ -96,11 +97,18 @@ public class GitLocalCollector {
                 dbRepo.setLastFetchedCommitHash(newestHash);
             }
             dbRepo.setLastScanAt(LocalDateTime.now());
+
+            // ВАЖНО: раз это локальный git, считаем, что это успешная синхронизация источника
+            DataSourceConfig cfg = dbRepo.getDataSourceConfig();
+            cfg.setLastSuccessSync(LocalDateTime.now());
+
+            // Сохраняем и репо, и источник
             repoRepository.save(dbRepo);
 
             return saved;
 
         } catch (IOException | GitAPIException e) {
+            // если хочешь, можешь здесь логировать ошибку и НЕ обновлять lastSuccessSync
             throw new RuntimeException("Failed to collect git commits from " + dbRepo.getLocalPath(), e);
         }
     }
