@@ -1,6 +1,5 @@
-package com.juliashtal.devanalytics.repository;
+package com.juliashtal.devanalytics.user;
 
-import com.juliashtal.devanalytics.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.datasource.model;
+package com.juliashtal.devanalytics.datasource.model.dto;
 
 import lombok.Data;
 

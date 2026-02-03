@@ -4,7 +4,7 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.exception.GitHubException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.github.GitHubPullRequestRepository;
+import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import org.kohsuke.github.*;
 import org.springframework.data.domain.Page;
@@ -57,7 +57,6 @@ public class GitHubPullRequestCollector {
                 processed++;
             }
 
-            // update lastSuccessSync
             cfg.setLastSuccessSync(LocalDateTime.now());
             repoRepository.save(repo);
 

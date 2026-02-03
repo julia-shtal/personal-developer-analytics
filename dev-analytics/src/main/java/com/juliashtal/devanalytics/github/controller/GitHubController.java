@@ -1,6 +1,6 @@
-package com.juliashtal.devanalytics.github;
+package com.juliashtal.devanalytics.github.controller;
 
-import com.juliashtal.devanalytics.git.model.GitRepositoryDto;
+import com.juliashtal.devanalytics.git.model.dto.GitRepositoryDto;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.github.model.dto.RegisterGitHubRepoRequest;
 import com.juliashtal.devanalytics.github.service.GitHubCollector;

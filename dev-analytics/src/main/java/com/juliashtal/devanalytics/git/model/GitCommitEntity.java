@@ -37,7 +37,6 @@ public class GitCommitEntity {
     private int deletions;
     private int filesChanged;
 
-    // optional: save the parent as string (for metrics)
     private String parentHash;
 }
 

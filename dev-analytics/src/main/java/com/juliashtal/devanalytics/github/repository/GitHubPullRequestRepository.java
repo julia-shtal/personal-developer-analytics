@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.github;
+package com.juliashtal.devanalytics.github.repository;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;

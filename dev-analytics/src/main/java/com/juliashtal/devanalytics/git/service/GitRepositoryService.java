@@ -4,13 +4,12 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
-import com.juliashtal.devanalytics.git.model.RegisterLocalRepoRequest;
+import com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.repository.DataSourceConfigRepository;
-import com.juliashtal.devanalytics.repository.UserRepository;
+import com.juliashtal.devanalytics.datasource.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.user.UserRepository;
 import com.juliashtal.devanalytics.user.User;
-import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -75,8 +74,7 @@ public class GitRepositoryService {
             throw new IllegalArgumentException("Local path is not a directory: " + req.getLocalPath());
         }
 
-        String normalizedPath = folder.getAbsolutePath();
-        return normalizedPath;
+        return folder.getAbsolutePath();
     }
 
     @Transactional(readOnly = true)
