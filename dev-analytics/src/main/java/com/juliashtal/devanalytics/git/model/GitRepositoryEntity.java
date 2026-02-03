@@ -9,7 +9,15 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(name = "git_repositories")
+@Table(
+        name = "git_repositories",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_git_repo_datasource_path",
+                        columnNames = {"data_source_id", "local_path"}
+                )
+        }
+)
 public class GitRepositoryEntity {
 
     @Id
