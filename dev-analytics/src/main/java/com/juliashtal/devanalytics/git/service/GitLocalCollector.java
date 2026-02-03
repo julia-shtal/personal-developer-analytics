@@ -26,6 +26,7 @@ import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 public class GitLocalCollector {
@@ -47,11 +48,11 @@ public class GitLocalCollector {
     @Transactional
     public int collectForRepository(Long repoId) {
         GitRepositoryEntity dbRepo = repoRepository.findById(repoId)
-                .orElseThrow(() -> new IllegalArgumentException("Git repo not found: " + repoId));
+                .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
 
         File repoDir = new File(dbRepo.getLocalPath());
         if (!repoDir.exists()) {
-            throw new IllegalArgumentException("Local repo path does not exist: " + dbRepo.getLocalPath());
+            throw new NoSuchElementException("Local repo path does not exist: " + dbRepo.getLocalPath());
         }
 
         try (Git git = Git.open(repoDir)) {
