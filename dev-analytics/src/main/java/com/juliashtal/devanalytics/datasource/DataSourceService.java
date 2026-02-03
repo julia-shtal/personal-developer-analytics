@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 public class DataSourceService {
@@ -36,7 +37,7 @@ public class DataSourceService {
     public DataSourceConfig create(Long userId, CreateDataSourceRequest req) {
         validator.validateCreate(req);
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+                .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
 
         DataSourceConfig cfg = new DataSourceConfig();
         cfg.setUser(user);
@@ -62,7 +63,7 @@ public class DataSourceService {
     public DataSourceConfig getForUser(Long userId, Long id) {
         User user = userRepository.getReferenceById(userId);
         return repository.findByIdAndUser(id, user)
-                .orElseThrow(() -> new IllegalArgumentException("DataSource not found: " + id));
+                .orElseThrow(() -> new NoSuchElementException("DataSource not found: " + id));
     }
 
     @Transactional
