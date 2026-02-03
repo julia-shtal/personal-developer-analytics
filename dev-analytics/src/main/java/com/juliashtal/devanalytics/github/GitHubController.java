@@ -2,7 +2,9 @@ package com.juliashtal.devanalytics.github;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryDto;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
-import com.juliashtal.devanalytics.github.dto.RegisterGitHubRepoRequest;
+import com.juliashtal.devanalytics.github.model.dto.RegisterGitHubRepoRequest;
+import com.juliashtal.devanalytics.github.service.GitHubCollector;
+import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
