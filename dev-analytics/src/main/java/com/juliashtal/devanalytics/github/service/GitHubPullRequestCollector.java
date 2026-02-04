@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
 
@@ -78,10 +77,10 @@ public class GitHubPullRequestCollector {
         entity.setState(pr.getState().name().toLowerCase()); // OPEN/CLOSED → open/closed
         entity.setMerged(pr.isMerged());
 
-        entity.setCreatedAt(toInstant(pr.getCreatedAt()));
-        entity.setUpdatedAt(toInstant(pr.getUpdatedAt()));
-        entity.setClosedAt(toInstant(pr.getClosedAt()));
-        entity.setMergedAt(toInstant(pr.getMergedAt()));
+        entity.setCreatedAt(pr.getCreatedAt());
+        entity.setUpdatedAt(pr.getUpdatedAt());
+        entity.setClosedAt(pr.getClosedAt());
+        entity.setMergedAt(pr.getMergedAt());
 
         entity.setAdditions(pr.getAdditions());
         entity.setDeletions(pr.getDeletions());
@@ -91,10 +90,6 @@ public class GitHubPullRequestCollector {
         entity.setCommitsCount(pr.getCommits());
 
         prRepository.save(entity);
-    }
-
-    private Instant toInstant(java.util.Date date) {
-        return date != null ? date.toInstant() : null;
     }
 
     @Transactional(readOnly = true)

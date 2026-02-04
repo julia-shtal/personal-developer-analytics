@@ -93,7 +93,7 @@ public class GitHubCollector {
         if (info != null) {
             entity.setAuthorName(info.getAuthor().getName());
             entity.setAuthorEmail(info.getAuthor().getEmail());
-            entity.setAuthorDate(info.getAuthoredDate().toInstant());
+            entity.setAuthorDate(info.getAuthoredDate());
             entity.setMessage(info.getMessage());
         } else {
             entity.setAuthorName(
