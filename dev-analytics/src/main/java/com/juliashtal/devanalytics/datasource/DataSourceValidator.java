@@ -1,6 +1,6 @@
 package com.juliashtal.devanalytics.datasource;
 
-import com.juliashtal.devanalytics.datasource.model.CreateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
 import org.springframework.stereotype.Service;
 
 import java.io.File;

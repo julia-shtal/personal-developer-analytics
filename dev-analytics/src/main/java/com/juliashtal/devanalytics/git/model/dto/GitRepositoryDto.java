@@ -1,4 +1,6 @@
-package com.juliashtal.devanalytics.git.model;
+package com.juliashtal.devanalytics.git.model.dto;
+
+import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 
 import java.time.LocalDateTime;
 
