@@ -1,8 +1,8 @@
 package com.juliashtal.devanalytics.git;
 
-import com.juliashtal.devanalytics.git.model.GitCommitDto;
-import com.juliashtal.devanalytics.git.model.GitRepositoryDto;
-import com.juliashtal.devanalytics.git.model.RegisterLocalRepoRequest;
+import com.juliashtal.devanalytics.git.model.dto.GitCommitDto;
+import com.juliashtal.devanalytics.git.model.dto.GitRepositoryDto;
+import com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest;
 import com.juliashtal.devanalytics.git.service.GitLocalCollector;
 import com.juliashtal.devanalytics.git.service.GitRepositoryService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
@@ -70,8 +70,7 @@ public class GitLocalController {
     // 5. Manual start of the collector
     @PostMapping("/repos/{repoId}/collect")
     public ResponseEntity<String> collect(@PathVariable Long repoId) {
-        // verification that the repo belongs to the user, already exists in the collector or service
-        Long saved = (long) gitLocalCollector.collectForRepository(repoId);
+        long saved = gitLocalCollector.collectForRepository(repoId);
         return ResponseEntity.ok("Collected " + saved + " commits");
     }
 }

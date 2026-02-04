@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.git.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.exception.GitException;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
@@ -26,6 +27,7 @@ import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 public class GitLocalCollector {
@@ -47,27 +49,17 @@ public class GitLocalCollector {
     @Transactional
     public int collectForRepository(Long repoId) {
         GitRepositoryEntity dbRepo = repoRepository.findById(repoId)
-                .orElseThrow(() -> new IllegalArgumentException("Git repo not found: " + repoId));
+                .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
 
         File repoDir = new File(dbRepo.getLocalPath());
         if (!repoDir.exists()) {
-            throw new IllegalArgumentException("Local repo path does not exist: " + dbRepo.getLocalPath());
+            throw new NoSuchElementException("Local repo path does not exist: " + dbRepo.getLocalPath());
         }
 
         try (Git git = Git.open(repoDir)) {
             Repository repository = git.getRepository();
 
-            Iterable<RevCommit> log;
-            if (dbRepo.getLastFetchedCommitHash() == null) {
-                // entire history
-                log = git.log().call();
-            } else {
-                // We only want commits after the last one in the database.
-                ObjectId lastId = repository.resolve(dbRepo.getLastFetchedCommitHash());
-                // Simple option: take the entire history, but skip the ones that have already been saved.
-                log = git.log().call();
-            }
-
+            Iterable<RevCommit> log = git.log().call();
             int saved = 0;
             String newestHash = dbRepo.getLastFetchedCommitHash();
 
@@ -98,18 +90,15 @@ public class GitLocalCollector {
             }
             dbRepo.setLastScanAt(LocalDateTime.now());
 
-            // ВАЖНО: раз это локальный git, считаем, что это успешная синхронизация источника
             DataSourceConfig cfg = dbRepo.getDataSourceConfig();
             cfg.setLastSuccessSync(LocalDateTime.now());
 
-            // Сохраняем и репо, и источник
             repoRepository.save(dbRepo);
 
             return saved;
 
         } catch (IOException | GitAPIException e) {
-            // если хочешь, можешь здесь логировать ошибку и НЕ обновлять lastSuccessSync
-            throw new RuntimeException("Failed to collect git commits from " + dbRepo.getLocalPath(), e);
+            throw new GitException("Failed to collect git commits from " + dbRepo.getLocalPath(), e);
         }
     }
 
@@ -119,7 +108,7 @@ public class GitLocalCollector {
         entity.setHash(commit.getName());
         entity.setAuthorName(commit.getAuthorIdent().getName());
         entity.setAuthorEmail(commit.getAuthorIdent().getEmailAddress());
-        entity.setAuthorDate(commit.getAuthorIdent().getWhen().toInstant());
+        entity.setAuthorDate(commit.getAuthorIdent().getWhenAsInstant());
         entity.setMessage(commit.getFullMessage());
 
         // parent

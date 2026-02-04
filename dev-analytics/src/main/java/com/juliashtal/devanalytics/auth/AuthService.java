@@ -3,7 +3,7 @@ package com.juliashtal.devanalytics.auth;
 import com.juliashtal.devanalytics.auth.model.LoginRequest;
 import com.juliashtal.devanalytics.auth.model.RegisterRequest;
 import com.juliashtal.devanalytics.user.User;
-import com.juliashtal.devanalytics.repository.UserRepository;
+import com.juliashtal.devanalytics.user.UserRepository;
 import com.juliashtal.devanalytics.security.model.CustomUserDetails;
 import com.juliashtal.devanalytics.security.service.JwtService;
 import org.springframework.security.authentication.AuthenticationManager;

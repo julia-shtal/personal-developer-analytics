@@ -1,7 +1,6 @@
 package com.juliashtal.devanalytics.user;
 
 import com.juliashtal.devanalytics.auth.model.RegisterRequest;
-import com.juliashtal.devanalytics.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
