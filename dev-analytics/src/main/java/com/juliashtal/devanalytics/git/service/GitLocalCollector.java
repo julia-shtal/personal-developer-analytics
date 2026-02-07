@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
+import lombok.RequiredArgsConstructor;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
@@ -30,16 +31,11 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 @Service
+@RequiredArgsConstructor
 public class GitLocalCollector {
 
     private final GitCommitEntityRepository commitRepository;
     private final GitRepositoryEntityRepository repoRepository;
-
-    public GitLocalCollector(GitCommitEntityRepository commitRepository,
-                             GitRepositoryEntityRepository repoRepository) {
-        this.commitRepository = commitRepository;
-        this.repoRepository = repoRepository;
-    }
 
     /**
      * Collects commits for the specified local repository.

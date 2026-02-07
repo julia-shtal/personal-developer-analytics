@@ -1,8 +1,6 @@
-package com.juliashtal.devanalytics.issue;
+package com.juliashtal.devanalytics.issue.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonSetter;
 import lombok.Data;
 import java.util.List;
 
@@ -30,8 +28,8 @@ public class JiraSearchResponse {
         private String created;
         private String updated;
         private String resolutiondate;
-        private JiraStatus status;     // ← single object, not list
-        private List<String> labels;   // ← list of strings, not JiraLabel
+        private JiraStatus status;
+        private List<String> labels;
     }
 
     @Data
@@ -39,15 +37,11 @@ public class JiraSearchResponse {
     public static class JiraUser {
         private String displayName;
         private String emailAddress;
-        // optional: private String accountId; String self; if needed
     }
 
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class JiraStatus {
         private String name;
-        // optional: private String id; String self; etc.
     }
-
-    // Drop JiraLabel; labels is just List<String>
 }

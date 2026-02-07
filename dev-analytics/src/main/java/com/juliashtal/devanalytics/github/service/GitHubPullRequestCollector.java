@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
+import lombok.RequiredArgsConstructor;
 import org.kohsuke.github.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,19 +18,12 @@ import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
 
 @Service
+@RequiredArgsConstructor
 public class GitHubPullRequestCollector {
 
     private final GitRepositoryEntityRepository repoRepository;
     private final GitHubPullRequestRepository prRepository;
     private final GitHubClientFactory clientFactory;
-
-    public GitHubPullRequestCollector(GitRepositoryEntityRepository repoRepository,
-                                      GitHubPullRequestRepository prRepository,
-                                      GitHubClientFactory clientFactory) {
-        this.repoRepository = repoRepository;
-        this.prRepository = prRepository;
-        this.clientFactory = clientFactory;
-    }
 
     /**
      * Collects/updates PRs for a single GitHub repository.

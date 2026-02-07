@@ -7,9 +7,10 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.datasource.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.user.UserRepository;
 import com.juliashtal.devanalytics.user.User;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -21,21 +22,13 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 @Service
+@RequiredArgsConstructor
 public class GitRepositoryService {
 
     private final GitRepositoryEntityRepository repoRepository;
     private final DataSourceConfigRepository dataSourceRepository;
     private final UserRepository userRepository;
     private final GitCommitEntityRepository commitRepository;
-
-    public GitRepositoryService(GitRepositoryEntityRepository repoRepository,
-                                DataSourceConfigRepository dataSourceRepository,
-                                UserRepository userRepository, GitCommitEntityRepository commitRepository) {
-        this.repoRepository = repoRepository;
-        this.dataSourceRepository = dataSourceRepository;
-        this.userRepository = userRepository;
-        this.commitRepository = commitRepository;
-    }
 
     @Transactional
     public GitRepositoryEntity registerLocalRepo(Long userId, RegisterLocalRepoRequest req) {

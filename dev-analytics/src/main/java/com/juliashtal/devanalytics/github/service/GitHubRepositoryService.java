@@ -4,28 +4,22 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.datasource.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.user.UserRepository;
 import com.juliashtal.devanalytics.user.User;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.NoSuchElementException;
 
 @Service
+@RequiredArgsConstructor
 public class GitHubRepositoryService {
 
     private final GitRepositoryEntityRepository repoRepository;
     private final DataSourceConfigRepository dataSourceRepository;
     private final UserRepository userRepository;
-
-    public GitHubRepositoryService(GitRepositoryEntityRepository repoRepository,
-                                   DataSourceConfigRepository dataSourceRepository,
-                                   UserRepository userRepository) {
-        this.repoRepository = repoRepository;
-        this.dataSourceRepository = dataSourceRepository;
-        this.userRepository = userRepository;
-    }
 
     @Transactional
     public GitRepositoryEntity registerGitHubRepo(Long userId, Long dataSourceId, String fullName) {

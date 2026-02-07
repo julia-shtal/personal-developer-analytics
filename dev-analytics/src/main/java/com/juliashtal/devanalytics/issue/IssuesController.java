@@ -1,13 +1,15 @@
 package com.juliashtal.devanalytics.issue;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.juliashtal.devanalytics.datasource.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.datasource.service.DataSourceService;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
+import com.juliashtal.devanalytics.issue.model.IssueDto;
+import com.juliashtal.devanalytics.issue.service.IssueService;
 import com.juliashtal.devanalytics.jira.JiraCollector;
 import com.juliashtal.devanalytics.security.SecurityUtils;
-import com.juliashtal.devanalytics.user.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -17,22 +19,13 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/issues")
 @PreAuthorize("isAuthenticated()")
+@RequiredArgsConstructor
 public class IssuesController {
 
-    private final DataSourceConfigRepository dataSourceRepository;
-    private final IssueRepository issueRepository;
+    private final IssueService issueService;
     private final JiraCollector jiraCollector;
     private final GitHubIssuesCollector gitHubIssuesCollector;
-
-    public IssuesController(DataSourceConfigRepository dataSourceRepository,
-                            IssueRepository issueRepository,
-                            JiraCollector jiraCollector,
-                            GitHubIssuesCollector gitHubIssuesCollector) {
-        this.dataSourceRepository = dataSourceRepository;
-        this.issueRepository = issueRepository;
-        this.jiraCollector = jiraCollector;
-        this.gitHubIssuesCollector = gitHubIssuesCollector;
-    }
+    private final DataSourceService dataSourceService;
 
     @PostMapping("/jira/{dataSourceId}/collect")
     public ResponseEntity<String> collectJira(@PathVariable Long dataSourceId) throws JsonProcessingException {
@@ -64,20 +57,18 @@ public class IssuesController {
             @RequestParam(defaultValue = "50") int size
     ) {
         Long userId = SecurityUtils.getCurrentUserId();
-        DataSourceConfig cfg = dataSourceRepository.findById(dataSourceId)
-                .orElseThrow(() -> new IllegalArgumentException("DataSource not found: " + dataSourceId));
+        DataSourceConfig cfg = dataSourceService.getDataSource(dataSourceId);
 
         if (!cfg.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("DataSource does not belong to current user");
         }
 
-        var issuesPage = issueRepository.findByDataSource(cfg, PageRequest.of(page, size));
+        var issuesPage = issueService.getByDataSource(cfg, PageRequest.of(page, size));
         return issuesPage.map(IssueDto::fromEntity);
     }
 
     private DataSourceConfig getUserDataSource(Long userId, Long dataSourceId, DataSourceType expectedType) {
-        DataSourceConfig cfg = dataSourceRepository.findById(dataSourceId)
-                .orElseThrow(() -> new IllegalArgumentException("DataSource not found: " + dataSourceId));
+        DataSourceConfig cfg = dataSourceService.getDataSource(dataSourceId);
         if (!cfg.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("DataSource does not belong to current user");
         }

@@ -1,8 +1,10 @@
 package com.juliashtal.devanalytics.github.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
-import com.juliashtal.devanalytics.issue.IssueEntity;
+import com.juliashtal.devanalytics.exception.GitHubException;
+import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.issue.IssueRepository;
+import lombok.RequiredArgsConstructor;
 import org.kohsuke.github.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,16 +14,11 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class GitHubIssuesCollector {
 
     private final GitHubClientFactory clientFactory;
     private final IssueRepository issueRepository;
-
-    public GitHubIssuesCollector(GitHubClientFactory clientFactory,
-                                 IssueRepository issueRepository) {
-        this.clientFactory = clientFactory;
-        this.issueRepository = issueRepository;
-    }
 
     /**
      * Collects issues for a specific repository (name = “owner/repo”).
@@ -45,7 +42,7 @@ public class GitHubIssuesCollector {
             }
             return saved;
         } catch (IOException e) {
-            throw new RuntimeException("Failed to collect GitHub issues for " + fullName, e);
+            throw new GitHubException("Failed to collect GitHub issues for " + fullName, e);
         }
     }
 

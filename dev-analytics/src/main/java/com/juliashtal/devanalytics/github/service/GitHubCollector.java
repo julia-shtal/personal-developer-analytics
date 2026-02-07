@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
+import lombok.RequiredArgsConstructor;
 import org.kohsuke.github.GHCommit;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
@@ -18,19 +19,12 @@ import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
 
 @Service
+@RequiredArgsConstructor
 public class GitHubCollector {
 
     private final GitRepositoryEntityRepository repoRepository;
     private final GitCommitEntityRepository commitRepository;
     private final GitHubClientFactory clientFactory;
-
-    public GitHubCollector(GitRepositoryEntityRepository repoRepository,
-                           GitCommitEntityRepository commitRepository,
-                           GitHubClientFactory clientFactory) {
-        this.repoRepository = repoRepository;
-        this.commitRepository = commitRepository;
-        this.clientFactory = clientFactory;
-    }
 
     @Transactional
     public int collectForRepository(Long gitRepoId) {
