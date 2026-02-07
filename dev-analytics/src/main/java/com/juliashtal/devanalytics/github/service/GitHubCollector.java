@@ -101,9 +101,9 @@ public class GitHubCollector {
         }
 
         try {
-            int additions = ghCommit.getLinesAdded();     // call populate() и take stats.additions
-            int deletions = ghCommit.getLinesDeleted();   // stats.deletions
-            int total = ghCommit.getLinesChanged();       // stats.total
+            int additions = ghCommit.getLinesAdded();
+            int deletions = ghCommit.getLinesDeleted();
+            int total = ghCommit.getLinesChanged();
 
             entity.setAdditions(additions);
             entity.setDeletions(deletions);
