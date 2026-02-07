@@ -3,8 +3,10 @@ package com.juliashtal.devanalytics.datasource;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
 import com.juliashtal.devanalytics.datasource.model.dto.UpdateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.service.DataSourceService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -15,13 +17,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/datasources")
 @PreAuthorize("isAuthenticated()")
+@RequiredArgsConstructor
 public class DataSourceController {
 
     private final DataSourceService dataSourceService;
-
-    public DataSourceController(DataSourceService dataSourceService) {
-        this.dataSourceService = dataSourceService;
-    }
 
     @PostMapping
     public ResponseEntity<DataSourceConfig> create(@RequestBody @Valid CreateDataSourceRequest request) {

@@ -7,6 +7,7 @@ import com.juliashtal.devanalytics.git.service.GitLocalCollector;
 import com.juliashtal.devanalytics.git.service.GitRepositoryService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -18,16 +19,11 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/git/local")
 @PreAuthorize("isAuthenticated()")
+@RequiredArgsConstructor
 public class GitLocalController {
 
     private final GitRepositoryService gitRepositoryService;
     private final GitLocalCollector gitLocalCollector;
-
-    public GitLocalController(GitRepositoryService gitRepositoryService,
-                              GitLocalCollector gitLocalCollector) {
-        this.gitRepositoryService = gitRepositoryService;
-        this.gitLocalCollector = gitLocalCollector;
-    }
 
     // 1. Local repo registration
     @PostMapping("/repos")
