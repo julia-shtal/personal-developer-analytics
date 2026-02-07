@@ -3,10 +3,11 @@ package com.juliashtal.devanalytics.jira;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
-import com.juliashtal.devanalytics.issue.IssueEntity;
+import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.issue.IssueRepository;
-import com.juliashtal.devanalytics.issue.JiraSearchResponse;
+import com.juliashtal.devanalytics.issue.model.JiraSearchResponse;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,22 +20,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 
-
 @Service
+@RequiredArgsConstructor
 public class JiraCollector {
 
     private final RestTemplate restTemplate;
     private final IssueRepository issueRepository;
     private final SimpleTokenEncryptor tokenEncryptor;
     ObjectMapper objectMapper = new ObjectMapper();
-
-    public JiraCollector(RestTemplate restTemplate,
-                         IssueRepository issueRepository,
-                         SimpleTokenEncryptor tokenEncryptor) {
-        this.restTemplate = restTemplate;
-        this.issueRepository = issueRepository;
-        this.tokenEncryptor = tokenEncryptor;
-    }
 
     public record JiraSearchRequest(
             String jql,
@@ -61,7 +54,7 @@ public class JiraCollector {
                 .queryParam("jql", jql)
                 .queryParam("startAt", 0)
                 .queryParam("maxResults", 200)
-                .queryParam("fields", "summary,description,assignee,reporter,created,updated,resolutiondate,status,labels") // <<=== ADD THIS
+                .queryParam("fields", "summary,description,assignee,reporter,created,updated,resolutiondate,status,labels")
                 .build()
                 .toUri();
 
@@ -81,7 +74,7 @@ public class JiraCollector {
     }
 
     private void upsertJiraIssue(DataSourceConfig config, JiraSearchResponse.JiraIssue jiraIssue) {
-        String externalId = jiraIssue.getKey(); // "PROJ-123"
+        String externalId = jiraIssue.getKey();
 
         IssueEntity issue = issueRepository
                 .findByDataSourceAndExternalId(config, externalId)
@@ -103,7 +96,7 @@ public class JiraCollector {
             issue.setUpdatedAt(parseJiraDate(f.getUpdated()));
             issue.setClosedAt(parseJiraDate(f.getResolutiondate()));
 
-            issue.setState(String.valueOf(f.getStatus()));
+            issue.setState(f.getStatus().getName());
 
             if (f.getLabels() != null) {
                 issue.setLabels(String.join(",", f.getLabels()));

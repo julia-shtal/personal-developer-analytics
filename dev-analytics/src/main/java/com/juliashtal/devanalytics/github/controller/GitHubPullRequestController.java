@@ -3,7 +3,7 @@ package com.juliashtal.devanalytics.github.controller;
 import com.juliashtal.devanalytics.github.model.dto.GitHubPullRequestDto;
 
 import com.juliashtal.devanalytics.github.service.GitHubPullRequestCollector;
-import com.juliashtal.devanalytics.security.SecurityUtils;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -13,13 +13,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/github")
 @PreAuthorize("isAuthenticated()")
+@RequiredArgsConstructor
 public class GitHubPullRequestController {
 
     private final GitHubPullRequestCollector prCollector;
-
-    public GitHubPullRequestController(GitHubPullRequestCollector prCollector) {
-        this.prCollector = prCollector;
-    }
 
     // 1. Start collecting PRs for the repository
     @PostMapping("/repos/{repoId}/pull-requests/collect")

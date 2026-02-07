@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.github.model.dto.RegisterGitHubRepoRequest;
 import com.juliashtal.devanalytics.github.service.GitHubCollector;
 import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -13,16 +14,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/github")
 @PreAuthorize("isAuthenticated()")
+@RequiredArgsConstructor
 public class GitHubController {
 
     private final GitHubRepositoryService gitHubRepositoryService;
     private final GitHubCollector gitHubCollector;
-
-    public GitHubController(GitHubRepositoryService gitHubRepositoryService,
-                            GitHubCollector gitHubCollector) {
-        this.gitHubRepositoryService = gitHubRepositoryService;
-        this.gitHubCollector = gitHubCollector;
-    }
 
     // 1. GitHub repository registration (by fullName “owner/repo”)
     @PostMapping("/repos")

@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.issue;
+package com.juliashtal.devanalytics.issue.model;
 
 import java.time.Instant;
 
