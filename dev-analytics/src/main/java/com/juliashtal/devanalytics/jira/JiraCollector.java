@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -29,13 +30,6 @@ public class JiraCollector {
     private final SimpleTokenEncryptor tokenEncryptor;
     ObjectMapper objectMapper = new ObjectMapper();
 
-    public record JiraSearchRequest(
-            String jql,
-            int startAt,
-            int maxResults,
-            List<String> fields
-    ) {}
-
     @Transactional
     public int collectIssues(DataSourceConfig config) throws JsonProcessingException {
         String jql = "assignee = currentUser() ORDER BY created DESC";
@@ -50,7 +44,7 @@ public class JiraCollector {
         String[] parts = decryptedToken.split(":", 2);
         headers.setBasicAuth(parts[0], parts[1]);
 
-        java.net.URI uri = UriComponentsBuilder.fromHttpUrl(searchUrl)
+        URI uri = UriComponentsBuilder.fromUriString(searchUrl)
                 .queryParam("jql", jql)
                 .queryParam("startAt", 0)
                 .queryParam("maxResults", 200)
@@ -59,14 +53,14 @@ public class JiraCollector {
                 .toUri();
 
         HttpEntity<Void> entity = new HttpEntity<>(headers);
-        ResponseEntity<String> rawResp =
+        ResponseEntity<String> response =
                 restTemplate.exchange(uri, HttpMethod.GET, entity, String.class);
 
-        JiraSearchResponse bodyResp =
-                objectMapper.readValue(rawResp.getBody(), JiraSearchResponse.class);
+        JiraSearchResponse jiraSearchResponse =
+                objectMapper.readValue(response.getBody(), JiraSearchResponse.class);
 
         int saved = 0;
-        for (JiraSearchResponse.JiraIssue ji : bodyResp.getIssues()) {
+        for (JiraSearchResponse.JiraIssue ji : jiraSearchResponse.getIssues()) {
             upsertJiraIssue(config, ji);
             saved++;
         }
