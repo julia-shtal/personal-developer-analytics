@@ -16,6 +16,47 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     Page<IssueEntity> findByDataSource(DataSourceConfig source, Pageable pageable);
 
     @Query("""
+      select i.repoName, i.createdAt, i.closedAt
+      from IssueEntity i
+      join i.dataSource ds
+      join ds.user u
+      where u.id = :userId
+        and i.createdAt is not null
+        and i.closedAt is not null
+        and i.closedAt between :from and :to
+  """)
+    List<Object[]> findIssueLeadTimesPerRepo(Long userId, Instant from, Instant to);
+
+    @Query("""
+      select date(i.createdAt) as day,
+             i.repoName        as repoName,
+             count(i.id)       as createdCount
+      from IssueEntity i
+      join i.dataSource ds
+      join ds.user u
+      where u.id = :userId
+        and i.createdAt between :from and :to
+      group by date(i.createdAt), i.repoName
+      order by day, repoName
+  """)
+    List<Object[]> aggregateIssuesCreatedDailyPerRepo(Long userId, Instant from, Instant to);
+
+    @Query("""
+      select date(i.closedAt) as day,
+             i.repoName        as repoName,
+             count(i.id)       as closedCount
+      from IssueEntity i
+      join i.dataSource ds
+      join ds.user u
+      where u.id = :userId
+        and i.closedAt is not null
+        and i.closedAt between :from and :to
+      group by date(i.closedAt), i.repoName
+      order by day, repoName
+  """)
+    List<Object[]> aggregateIssuesClosedDailyPerRepo(Long userId, Instant from, Instant to);
+
+    @Query("""
         select date(i.createdAt) as day,
                count(i.id)       as createdCount
         from IssueEntity i
@@ -42,7 +83,6 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
         """)
     List<Object[]> aggregateIssuesClosedDaily(Long userId, Instant from, Instant to);
 
-    // lead time: createdAt -> closedAt
     @Query("""
         select i.createdAt, i.closedAt
         from IssueEntity i

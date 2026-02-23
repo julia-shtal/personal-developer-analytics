@@ -1,7 +1,7 @@
 package com.juliashtal.devanalytics.metrics.model;
 
 public record MetricAggregateDto(
-        String metricType,
+        MetricType metricType,
         double value,
         String dimensionsJson
 ) { }

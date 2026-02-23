@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.metrics;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
+import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -12,14 +13,14 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
 
     List<MetricSnapshot> findByUserAndMetricTypeAndDateBetween(
             User user,
-            String metricType,
+            MetricType metricType,
             LocalDate from,
             LocalDate to
     );
 
     List<MetricSnapshot> findByUserAndMetricTypeAndRepositoryAndDateBetween(
             User user,
-            String metricType,
+            MetricType metricType,
             GitRepositoryEntity repository,
             LocalDate from,
             LocalDate to

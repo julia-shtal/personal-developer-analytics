@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.metrics.model.MetricAggregateDto;
 import com.juliashtal.devanalytics.metrics.model.MetricPointDto;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
+import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.user.User;
 import com.juliashtal.devanalytics.user.UserRepository;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 
@@ -25,10 +27,21 @@ import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 @RequiredArgsConstructor
 public class MetricsController {
 
-    private final MetricSnapshotRepository metricRepo;
+    private final MetricSnapshotRepository metricSnapshotRepository;
     private final MetricSnapshotService metricSnapshotService;
-    private final UserRepository userRepo;
+    private final MetricsService metricsService;
+    private final UserRepository userRepository;
     private final GitRepositoryEntityRepository gitRepoRepository;
+
+    @GetMapping("/calculate")
+    public void calculate(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        User user = currentUser();
+        metricsService.calculateDailyMetrics(user.getId(), from, to);
+    }
 
     @GetMapping("/daily-commits")
     public List<MetricPointDto> getDailyCommits(
@@ -37,20 +50,20 @@ public class MetricsController {
             @RequestParam(required = false) Long repoId
     ) {
         User user = currentUser();
-
         List<MetricSnapshot> snapshots;
+
         if (repoId == null) {
-            snapshots = metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(
+            snapshots = metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
                             user,
                             DAILY_COMMITS_COUNT,
                             from,
                             to
                     ).stream()
                     .filter(s -> s.getRepository() == null)
-                    .toList();
+                    .collect(Collectors.toList());
         } else {
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            snapshots = metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(
+            snapshots = metricSnapshotRepository.findByUserAndMetricTypeAndRepositoryAndDateBetween(
                     user,
                     DAILY_COMMITS_COUNT,
                     repo,
@@ -60,20 +73,127 @@ public class MetricsController {
         }
 
         return snapshots.stream()
+                .sorted(Comparator.comparing(MetricSnapshot::getDate))
                 .map(MetricPointDto::fromEntity)
                 .toList();
     }
 
+    @GetMapping("/daily-pr-created")
+    public List<MetricPointDto> getDailyPrCreated(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getDailyPrMetric(DAILY_PR_CREATED, from, to, repoId);
+    }
+
+    @GetMapping("/daily-pr-merged")
+    public List<MetricPointDto> getDailyPrMerged(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getDailyPrMetric(DAILY_PR_MERGED, from, to, repoId);
+    }
+
+    private List<MetricPointDto> getDailyPrMetric(MetricType metricType,
+                                                  LocalDate from,
+                                                  LocalDate to,
+                                                  Long repoId) {
+        User user = currentUser();
+        List<MetricSnapshot> snapshots;
+
+        if (repoId == null) {
+            snapshots = metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
+                            user, metricType, from, to
+                    ).stream()
+                    .filter(s -> s.getRepository() == null)
+                    .collect(Collectors.toList());
+        } else {
+            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
+            snapshots = metricSnapshotRepository.findByUserAndMetricTypeAndRepositoryAndDateBetween(
+                    user, metricType, repo, from, to
+            );
+        }
+
+        return snapshots.stream()
+                .sorted(Comparator.comparing(MetricSnapshot::getDate))
+                .map(MetricPointDto::fromEntity)
+                .toList();
+    }
+
+    @GetMapping("/daily-issues-created")
+    public List<MetricPointDto> getDailyIssuesCreated(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String repoName
+    ) {
+        return getDailyIssueMetric("DAILY_ISSUES_CREATED", from, to, repoName);
+    }
+
+    @GetMapping("/daily-issues-closed")
+    public List<MetricPointDto> getDailyIssuesClosed(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String repoName
+    ) {
+        return getDailyIssueMetric("DAILY_ISSUES_CLOSED", from, to, repoName);
+    }
+
+    private List<MetricPointDto> getDailyIssueMetric(String metricType,
+                                                     LocalDate from,
+                                                     LocalDate to,
+                                                     String repoName) {
+        User user = currentUser();
+        var all = metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
+                user, MetricType.valueOf(metricType), from, to
+        );
+
+        return all.stream()
+                .filter(s -> {
+                    if (repoName == null) {
+                        return s.getDimensionsJson() == null;
+                    } else {
+                        return s.getDimensionsJson() != null
+                                && s.getDimensionsJson().contains("\"repoName\":\"" + repoName + "\"");
+                    }
+                })
+                .sorted(Comparator.comparing(MetricSnapshot::getDate))
+                .map(MetricPointDto::fromEntity)
+                .toList();
+    }
 
     @GetMapping("/daily-churn")
     public List<MetricPointDto> getDailyChurn(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
     ) {
-        Long userId = SecurityUtils.getCurrentUserId();
-        User user = userRepo.getReferenceById(userId);
-        return metricRepo.findByUserAndMetricTypeAndDateBetween(user, DAILY_CHURN_RATIO.name(), from, to)
-                .stream()
+        User user = currentUser();
+        List<MetricSnapshot> snapshots;
+
+        if (repoId == null) {
+            snapshots = metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
+                            user,
+                            DAILY_CHURN_RATIO,
+                            from,
+                            to
+                    ).stream()
+                    .filter(s -> s.getRepository() == null)
+                    .collect(Collectors.toList());
+        } else {
+            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
+            snapshots = metricSnapshotRepository.findByUserAndMetricTypeAndRepositoryAndDateBetween(
+                    user,
+                    DAILY_CHURN_RATIO,
+                    repo,
+                    from,
+                    to
+            );
+        }
+
+        return snapshots.stream()
+                .sorted(Comparator.comparing(MetricSnapshot::getDate))
                 .map(MetricPointDto::fromEntity)
                 .toList();
     }
@@ -84,23 +204,132 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long repoId
     ) {
+        return getLeadTimeAggregate(PR_LEAD_TIME_HOURS_MEDIAN, from, to, repoId);
+    }
+
+    @GetMapping("/pr-first-commit-lead-time")
+    public MetricAggregateDto getPrFirstCommitLeadTimeMedian(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getLeadTimeAggregate(PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN, from, to, repoId);
+    }
+
+    @GetMapping("/issue-lead-time")
+    public MetricAggregateDto getIssueLeadTimeMedian(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String repoName
+    ) {
+        User user = currentUser();
+        var list = metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
+                user,
+                ISSUE_LEAD_TIME_HOURS_MEDIAN,
+                from,
+                to
+        );
+
+        List<MetricSnapshot> filtered;
+        if (repoName == null) {
+            filtered = list.stream()
+                    .filter(s -> s.getDimensionsJson() == null
+                            || !s.getDimensionsJson().contains("\"repoName\""))
+                    .collect(Collectors.toList());
+        } else {
+            filtered = list.stream()
+                    .filter(s -> s.getDimensionsJson() != null
+                            && s.getDimensionsJson().contains("\"repoName\":\"" + repoName + "\""))
+                    .collect(Collectors.toList());
+        }
+
+        if (filtered.isEmpty()) {
+            return new MetricAggregateDto(ISSUE_LEAD_TIME_HOURS_MEDIAN, 0.0, null);
+        }
+
+        MetricSnapshot last = filtered.stream()
+                .max(Comparator.comparing(MetricSnapshot::getDate))
+                .orElseThrow();
+
+        return new MetricAggregateDto(
+                last.getMetricType(),
+                last.getValue(),
+                last.getDimensionsJson()
+        );
+    }
+
+    @GetMapping("/review-response-time")
+    public MetricAggregateDto getReviewResponseTimeMedian(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getLeadTimeAggregate(REVIEW_RESPONSE_TIME_HOURS_MEDIAN, from, to, repoId);
+    }
+
+    @GetMapping("/focus-ratio/series")
+    public List<MetricPointDto> getFocusRatioSeries(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        User user = currentUser();
+        return metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
+                        user,
+                        FOCUS_RATIO_DAYS_TASKS,
+                        from,
+                        to
+                ).stream()
+                .sorted(Comparator.comparing(MetricSnapshot::getDate))
+                .map(MetricPointDto::fromEntity)
+                .toList();
+    }
+
+    @GetMapping("/focus-ratio")
+    public MetricAggregateDto getFocusRatioAggregate(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        User user = currentUser();
+        var list = metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
+                user,
+                FOCUS_RATIO_DAYS_TASKS,
+                from,
+                to
+        );
+
+        if (list.isEmpty()) {
+            return new MetricAggregateDto(FOCUS_RATIO_DAYS_TASKS, 0.0, null);
+        }
+
+        double avg = list.stream()
+                .mapToDouble(MetricSnapshot::getValue)
+                .average()
+                .orElse(0.0);
+
+        return new MetricAggregateDto(FOCUS_RATIO_DAYS_TASKS, avg, null);
+    }
+
+    private MetricAggregateDto getLeadTimeAggregate(MetricType metricType,
+                                                    LocalDate from,
+                                                    LocalDate to,
+                                                    Long repoId) {
         User user = currentUser();
         List<MetricSnapshot> list;
 
         if (repoId == null) {
-            list = metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(
+            list = metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
                             user,
-                            PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
+                            metricType,
                             from,
                             to
                     ).stream()
                     .filter(s -> s.getRepository() == null)
-                    .toList();
+                    .collect(Collectors.toList());
         } else {
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            list = metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(
+            list = metricSnapshotRepository.findByUserAndMetricTypeAndRepositoryAndDateBetween(
                     user,
-                    PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
+                    metricType,
                     repo,
                     from,
                     to
@@ -108,24 +337,23 @@ public class MetricsController {
         }
 
         if (list.isEmpty()) {
-            return new MetricAggregateDto(PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN.name(), 0.0, null);
+            return new MetricAggregateDto(metricType, 0.0, null);
         }
 
-        var last = list.stream()
+        MetricSnapshot last = list.stream()
                 .max(Comparator.comparing(MetricSnapshot::getDate))
                 .orElseThrow();
 
         return new MetricAggregateDto(
-                last.getMetricType().name(),
+                last.getMetricType(),
                 last.getValue(),
                 last.getDimensionsJson()
         );
     }
 
-
     private User currentUser() {
         Long userId = SecurityUtils.getCurrentUserId();
-        return userRepo.getReferenceById(userId);
+        return userRepository.getReferenceById(userId);
     }
 }
 

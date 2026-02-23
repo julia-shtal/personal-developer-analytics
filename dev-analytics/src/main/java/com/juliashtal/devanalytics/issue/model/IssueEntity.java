@@ -31,6 +31,8 @@ public class IssueEntity {
     @Column(name = "external_id", nullable = false)
     private String externalId;   // JIRA: "KEY-123"; GitHub: "owner/repo#123"
 
+    private String repoName;
+
     @Column(nullable = false)
     private String title;
 
