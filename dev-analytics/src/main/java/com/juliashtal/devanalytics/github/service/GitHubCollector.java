@@ -36,8 +36,6 @@ public class GitHubCollector {
 
         try {
             GHRepository ghRepo = github.getRepository(repo.getName()); // "owner/repo"
-
-            // List of commits (hub4j returns Iterable)
             Iterable<GHCommit> commits = ghRepo.listCommits();
 
             String lastFetched = repo.getLastFetchedCommitHash();
@@ -47,7 +45,6 @@ public class GitHubCollector {
             for (GHCommit ghCommit : commits) {
                 String hash = ghCommit.getSHA1();
 
-                // if we have already reached the last saved commit — stop
                 if (lastFetched != null && lastFetched.equals(hash)) {
                     break;
                 }
