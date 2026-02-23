@@ -20,7 +20,7 @@ public class MetricSnapshotService {
                                                                              MetricType metricType,
                                                                              LocalDate from,
                                                                              LocalDate to) {
-        return repository.findByUserAndMetricTypeAndDateBetween(user, metricType.name(), from, to);
+        return repository.findByUserAndMetricTypeAndDateBetween(user, metricType, from, to);
     }
 
     List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(User user,
@@ -28,7 +28,7 @@ public class MetricSnapshotService {
                                                                                           GitRepositoryEntity repo,
                                                                                           LocalDate from,
                                                                                           LocalDate to) {
-        return repository.findByUserAndMetricTypeAndRepositoryAndDateBetween(user, metricType.name(), repo, from, to);
+        return repository.findByUserAndMetricTypeAndRepositoryAndDateBetween(user, metricType, repo, from, to);
     }
 
 }

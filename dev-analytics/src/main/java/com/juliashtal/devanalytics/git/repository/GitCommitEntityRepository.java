@@ -17,6 +17,22 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     Page<GitCommitEntity> findByRepositoryIdOrderByAuthorDateDesc(Long repositoryId, Pageable pageable);
 
     @Query("""
+      select date(c.authorDate) as day,
+             r.id               as repoId,
+             sum(c.additions)   as additions,
+             sum(c.deletions)   as deletions
+      from GitCommitEntity c
+      join c.repository r
+      join r.dataSourceConfig ds
+      join ds.user u
+      where u.id = :userId
+        and c.authorDate between :from and :to
+      group by date(c.authorDate), r.id
+      order by day, repoId
+  """)
+    List<Object[]> aggregateChurnDailyPerRepo(Long userId, Instant from, Instant to);
+
+    @Query("""
     select c
     from GitCommitEntity c
     where c.repository = :repository

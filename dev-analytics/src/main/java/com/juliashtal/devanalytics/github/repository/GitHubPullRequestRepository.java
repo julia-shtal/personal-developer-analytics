@@ -15,6 +15,51 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     Optional<GitHubPullRequestEntity> findByRepositoryAndNumber(GitRepositoryEntity repository, int number);
     Page<GitHubPullRequestEntity> findByRepositoryOrderByCreatedAtDesc(GitRepositoryEntity repository, Pageable pageable);
 
+    @Query("""
+      select p.repository.id as repoId,
+             p.createdAt,
+             p.mergedAt
+      from GitHubPullRequestEntity p
+      join p.repository r
+      join r.dataSourceConfig ds
+      join ds.user u
+      where u.id = :userId
+        and p.merged = true
+        and p.mergedAt between :from and :to
+  """)
+    List<Object[]> findMergedLeadTimesPerRepo(Long userId, Instant from, Instant to);
+
+    @Query("""
+  select date(p.createdAt) as day,
+         r.id             as repoId,
+         count(p.id)      as createdCount
+  from GitHubPullRequestEntity p
+  join p.repository r
+  join r.dataSourceConfig ds
+  join ds.user u
+  where u.id = :userId
+    and p.createdAt between :from and :to
+  group by date(p.createdAt), r.id
+  order by day, repoId
+  """)
+    List<Object[]> aggregatePrCreatedDailyPerRepo(Long userId, Instant from, Instant to);
+
+    @Query("""
+  select date(p.mergedAt) as day,
+         r.id             as repoId,
+         count(p.id)      as mergedCount
+  from GitHubPullRequestEntity p
+  join p.repository r
+  join r.dataSourceConfig ds
+  join ds.user u
+  where u.id = :userId
+    and p.merged = true
+    and p.mergedAt between :from and :to
+  group by date(p.mergedAt), r.id
+  order by day, repoId
+  """)
+    List<Object[]> aggregatePrMergedDailyPerRepo(Long userId, Instant from, Instant to);
+
 
     @Query("""
     select p

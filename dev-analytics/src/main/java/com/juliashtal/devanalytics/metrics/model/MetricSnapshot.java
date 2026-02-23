@@ -33,6 +33,7 @@ public class MetricSnapshot {
     private LocalDate date;
 
     @Column(nullable = false, length = 64)
+    @Enumerated(EnumType.STRING)
     private MetricType metricType;
 
     @Column(nullable = false)
