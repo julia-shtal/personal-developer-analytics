@@ -44,10 +44,10 @@ public class MetricsService {
 
         calcDailyCommits(user, from, to);
         calcDailyPrs(user, from, to);
-        calcDailyIssues(user, from, to);
+        calcDailyIssues(user, from, to); //todo
         calcDailyChurn(user, from, to);
         calcLeadTimePrs(user, fromDate, from, to);
-        calcLeadTimeIssues(user, fromDate, from, to);
+        calcLeadTimeIssues(user, fromDate, from, to); //todo
         calcLeadTimeFirstCommitToMerge(user, fromDate, from, to);
     }
 

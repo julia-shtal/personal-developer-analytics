@@ -62,6 +62,7 @@ public class GitHubIssuesCollector {
         issue.setState(gi.getState().name().toLowerCase()); // open/closed
         issue.setAssignee(gi.getAssignee() != null ? gi.getAssignee().getLogin() : null);
         issue.setCreator(gi.getUser() != null ? gi.getUser().getLogin() : null);
+        issue.setRepoName(ghRepo.getFullName());
 
         issue.setCreatedAt(gi.getCreatedAt());
         issue.setUpdatedAt(gi.getUpdatedAt());
