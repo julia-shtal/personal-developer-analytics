@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.issue.model;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -30,6 +31,10 @@ public class IssueEntity {
 
     @Column(name = "external_id", nullable = false)
     private String externalId;   // JIRA: "KEY-123"; GitHub: "owner/repo#123"
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "repository_id")
+    private GitRepositoryEntity repository;
 
     private String repoName;
 
