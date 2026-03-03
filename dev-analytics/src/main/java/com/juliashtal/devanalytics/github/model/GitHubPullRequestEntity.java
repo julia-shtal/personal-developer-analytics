@@ -39,6 +39,7 @@ public class GitHubPullRequestEntity {
 
     private String state;       // open, closed
     private boolean merged;
+    private Long leadTimeHours;
 
     private Instant createdAt;
     private Instant updatedAt;
