@@ -30,7 +30,6 @@ public class GitCommitEntity {
     @Column(nullable = false)
     private Instant authorDate;
 
-    @Column(length = 4096)
     private String message;
 
     private int additions;

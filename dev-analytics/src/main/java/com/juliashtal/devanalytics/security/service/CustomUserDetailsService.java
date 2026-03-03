@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.security.service;
 import com.juliashtal.devanalytics.security.model.CustomUserDetails;
 import com.juliashtal.devanalytics.user.User;
 import com.juliashtal.devanalytics.user.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -12,13 +13,10 @@ import java.util.NoSuchElementException;
 
 // TODO Загружает пользователя по username (можно расширить до email)
 @Service
+@RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
-
-    public CustomUserDetailsService(UserRepository userRepository) {
-        this.userRepository = userRepository;
-    }
 
     @Override
     public UserDetails loadUserByUsername(String usernameOrEmail) throws UsernameNotFoundException {

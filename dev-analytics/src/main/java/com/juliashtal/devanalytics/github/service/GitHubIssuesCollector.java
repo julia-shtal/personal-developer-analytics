@@ -2,6 +2,8 @@ package com.juliashtal.devanalytics.github.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.exception.GitHubException;
+import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.issue.IssueRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ public class GitHubIssuesCollector {
 
     private final GitHubClientFactory clientFactory;
     private final IssueRepository issueRepository;
+    private final GitRepositoryEntityRepository  gitRepositoryEntityRepository;
 
     /**
      * Collects issues for a specific repository (name = “owner/repo”).
@@ -46,23 +49,31 @@ public class GitHubIssuesCollector {
         }
     }
 
-    private void upsertGitHubIssue(DataSourceConfig config, GHRepository ghRepo, GHIssue gi) throws IOException {
-        String externalId = ghRepo.getFullName() + "#" + gi.getNumber(); // "owner/repo#123"
+    private void upsertGitHubIssue(DataSourceConfig config,
+                                   GHRepository ghRepo,
+                                   GHIssue gi) throws IOException {
+
+        String fullName = ghRepo.getFullName(); // "owner/repo"
+        String externalId = fullName + "#" + gi.getNumber();
+
+        GitRepositoryEntity repo = gitRepositoryEntityRepository
+                .findByDataSourceConfigAndName(config, fullName)
+                .orElseThrow(() -> new IllegalStateException(
+                        "GitRepositoryEntity not found for " + fullName));
 
         IssueEntity issue = issueRepository
                 .findByDataSourceAndExternalId(config, externalId)
                 .orElseGet(IssueEntity::new);
 
         issue.setDataSource(config);
+        issue.setRepository(repo);
         issue.setExternalId(externalId);
 
         issue.setTitle(gi.getTitle());
         issue.setDescription(gi.getBody());
-
-        issue.setState(gi.getState().name().toLowerCase()); // open/closed
+        issue.setState(gi.getState().name().toLowerCase());
         issue.setAssignee(gi.getAssignee() != null ? gi.getAssignee().getLogin() : null);
         issue.setCreator(gi.getUser() != null ? gi.getUser().getLogin() : null);
-
         issue.setCreatedAt(gi.getCreatedAt());
         issue.setUpdatedAt(gi.getUpdatedAt());
         issue.setClosedAt(gi.getClosedAt());
@@ -76,5 +87,6 @@ public class GitHubIssuesCollector {
 
         issueRepository.save(issue);
     }
+
 }
 

@@ -20,7 +20,6 @@ public class GitHubController {
     private final GitHubRepositoryService gitHubRepositoryService;
     private final GitHubCollector gitHubCollector;
 
-    // 1. GitHub repository registration (by fullName “owner/repo”)
     @PostMapping("/repos")
     public ResponseEntity<GitRepositoryDto> registerRepo(@RequestBody RegisterGitHubRepoRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -32,7 +31,6 @@ public class GitHubController {
         return ResponseEntity.ok(GitRepositoryDto.fromEntity(repo));
     }
 
-    // 2. Manually trigger the collector for a specific GitHub repository
     @PostMapping("/repos/{repoId}/collect")
     public ResponseEntity<String> collect(@PathVariable Long repoId) {
         int saved = gitHubCollector.collectForRepository(repoId);
