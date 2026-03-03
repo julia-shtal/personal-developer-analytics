@@ -119,11 +119,11 @@ public class MetricsService {
         var createdRows = issueRepository.aggregateIssuesCreatedDailyPerRepo(user.getId(), from, to);
         for (Object[] row : createdRows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
-            String repoName = (String) row[1];
+            Long repoId = ((Number) row[1]).longValue();
             long count = ((Number) row[2]).longValue();
 
-            saveMetric(user, day, DAILY_ISSUES_CREATED, count, null,
-                    Map.of("repoName", repoName));
+            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
+            saveMetric(user, day, DAILY_ISSUES_CREATED, count, repo, null);
 
             createdAll.merge(day, count, Long::sum);
         }
@@ -131,11 +131,11 @@ public class MetricsService {
         var closedRows = issueRepository.aggregateIssuesClosedDailyPerRepo(user.getId(), from, to);
         for (Object[] row : closedRows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
-            String repoName = (String) row[1];
+            Long repoId = ((Number) row[1]).longValue();
             long count = ((Number) row[2]).longValue();
 
-            saveMetric(user, day, DAILY_ISSUES_CLOSED, count, null,
-                    Map.of("repoName", repoName));
+            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
+            saveMetric(user, day, DAILY_ISSUES_CLOSED, count, repo, null);
 
             closedAll.merge(day, count, Long::sum);
         }
@@ -145,6 +145,7 @@ public class MetricsService {
         closedAll.forEach((day, total) ->
                 saveMetric(user, day, DAILY_ISSUES_CLOSED, total, null, null));
     }
+
 
     private void calcDailyChurn(User user, Instant from, Instant to) {
         Map<LocalDate, Long> totalAdditions = new HashMap<>();
@@ -211,36 +212,43 @@ public class MetricsService {
     private void calcLeadTimeIssues(User user, LocalDate fromDate, Instant from, Instant to) {
         var rows = issueRepository.findIssueLeadTimesPerRepo(user.getId(), from, to);
 
-        Map<String, List<Long>> perRepo = new HashMap<>();
+        Map<Long, List<Long>> perRepo = new HashMap<>();
         List<Long> all = new ArrayList<>();
 
         for (Object[] row : rows) {
-            String repoName = (String) row[0];
+            Long repoId = ((Number) row[0]).longValue();
             Instant created = (Instant) row[1];
             Instant closed = (Instant) row[2];
-
             long hours = Duration.between(created, closed).toHours();
-            perRepo.computeIfAbsent(repoName, k -> new ArrayList<>()).add(hours);
+
+            perRepo.computeIfAbsent(repoId, id -> new ArrayList<>()).add(hours);
             all.add(hours);
         }
 
-        perRepo.forEach((repoName, values) -> {
+        perRepo.forEach((repoId, values) -> {
             Collections.sort(values);
             double median = medianOfLongs(values);
-            saveMetric(user, fromDate, ISSUE_LEAD_TIME_HOURS_MEDIAN, median, null,
-                    Map.of("repoName", repoName,
-                            "from", fromDate.toString(),
+            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
+            saveMetric(user, fromDate,
+                    ISSUE_LEAD_TIME_HOURS_MEDIAN,
+                    median,
+                    repo,
+                    Map.of("from", fromDate.toString(),
                             "to", fromDate.plusDays(1).toString()));
         });
 
         if (!all.isEmpty()) {
             Collections.sort(all);
             double medianAll = medianOfLongs(all);
-            saveMetric(user, fromDate, ISSUE_LEAD_TIME_HOURS_MEDIAN, medianAll, null,
+            saveMetric(user, fromDate,
+                    ISSUE_LEAD_TIME_HOURS_MEDIAN,
+                    medianAll,
+                    null,
                     Map.of("from", fromDate.toString(),
                             "to", fromDate.plusDays(1).toString()));
         }
     }
+
 
     private void saveMetric(User user,
                             LocalDate date,
