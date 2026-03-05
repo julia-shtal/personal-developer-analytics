@@ -25,7 +25,7 @@ public class DataSourceService {
 
     public DataSourceConfig getDataSource(Long dataSourceId) {
         return repository.findById(dataSourceId)
-                .orElseThrow(() -> new IllegalArgumentException("DataSource not found: " + dataSourceId));
+                .orElseThrow(() -> new NoSuchElementException("DataSource not found: " + dataSourceId));
     }
 
     @Transactional

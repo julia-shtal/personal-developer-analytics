@@ -1,8 +1,7 @@
-package com.juliashtal.devanalytics.metrics;
+package com.juliashtal.devanalytics.metrics.service;
 
 import com.juliashtal.devanalytics.user.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;

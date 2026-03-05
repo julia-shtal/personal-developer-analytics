@@ -6,10 +6,9 @@ import com.juliashtal.devanalytics.metrics.model.MetricAggregateDto;
 import com.juliashtal.devanalytics.metrics.model.MetricPointDto;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
-import com.juliashtal.devanalytics.security.SecurityUtils;
-import com.juliashtal.devanalytics.security.UserDetectionHelper;
+import com.juliashtal.devanalytics.metrics.service.MetricsService;
+import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.user.User;
-import com.juliashtal.devanalytics.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -31,7 +30,7 @@ public class MetricsController {
     private final MetricSnapshotRepository metricSnapshotRepository;
     private final MetricsService metricsService;
     private final GitRepositoryEntityRepository gitRepoRepository;
-    private final UserDetectionHelper  userDetectionHelper;
+    private final CheckHelper checkHelper;
 
     @GetMapping("/calculate")
     public void calculate(
@@ -39,7 +38,7 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long repoId
     ) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         metricsService.calculateDailyMetrics(user.getId(), from, to);
     }
 
@@ -49,7 +48,7 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long repoId
     ) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         List<MetricSnapshot> snapshots;
 
         if (repoId == null) {
@@ -100,7 +99,7 @@ public class MetricsController {
                                                   LocalDate from,
                                                   LocalDate to,
                                                   Long repoId) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         List<MetricSnapshot> snapshots;
 
         if (repoId == null) {
@@ -135,7 +134,7 @@ public class MetricsController {
                                                      LocalDate from,
                                                      LocalDate to,
                                                      String repoName) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         var all = metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
                 user, MetricType.valueOf(metricType), from, to
         );
@@ -160,7 +159,7 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long repoId
     ) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         List<MetricSnapshot> snapshots;
 
         if (repoId == null) {
@@ -221,7 +220,7 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         return metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
                         user,
                         FOCUS_RATIO_DAYS_TASKS,
@@ -238,7 +237,7 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         var list = metricSnapshotRepository.findByUserAndMetricTypeAndDateBetween(
                 user,
                 FOCUS_RATIO_DAYS_TASKS,
@@ -264,7 +263,7 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long repoId
     ) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         List<MetricSnapshot> snapshots;
 
         if (repoId == null) {
@@ -299,7 +298,7 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long repoId
     ) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         List<MetricSnapshot> list;
 
         if (repoId == null) {
@@ -342,7 +341,7 @@ public class MetricsController {
                                                     LocalDate from,
                                                     LocalDate to,
                                                     Long repoId) {
-        User user = userDetectionHelper.currentUser();
+        User user = checkHelper.currentUser();
         List<MetricSnapshot> list;
 
         if (repoId == null) {

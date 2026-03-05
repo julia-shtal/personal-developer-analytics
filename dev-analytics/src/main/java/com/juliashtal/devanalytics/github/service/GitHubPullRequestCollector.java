@@ -6,6 +6,8 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
+import com.juliashtal.devanalytics.user.User;
+import com.juliashtal.devanalytics.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.kohsuke.github.*;
 import org.springframework.data.domain.Page;
@@ -24,17 +26,22 @@ public class GitHubPullRequestCollector {
     private final GitRepositoryEntityRepository repoRepository;
     private final GitHubPullRequestRepository prRepository;
     private final GitHubClientFactory clientFactory;
+    private final UserRepository userRepository;
 
     /**
      * Collects/updates PRs for a single GitHub repository.
      * Strategy: go through all PRs (or the last N) and upsert them by (repo, number).
      */
     @Transactional
-    public int collectPullRequests(Long gitRepoId) {
+    public int collectPullRequests(Long userId, Long gitRepoId) {
+        User user = userRepository.getReferenceById(userId);
         GitRepositoryEntity repo = repoRepository.findById(gitRepoId)
                 .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + gitRepoId));
 
         DataSourceConfig cfg = repo.getDataSourceConfig();
+        if (!cfg.getUser().getId().equals(user.getId())) {
+            throw new IllegalArgumentException("DataSource does not belong to current user");
+        }
         GitHub github = clientFactory.createClient(cfg);
 
         try {
@@ -68,7 +75,7 @@ public class GitHubPullRequestCollector {
         entity.setNumber(pr.getNumber());
         entity.setTitle(pr.getTitle());
         entity.setAuthorLogin(pr.getUser() != null ? pr.getUser().getLogin() : null);
-        entity.setState(pr.getState().name().toLowerCase()); // OPEN/CLOSED → open/closed
+        entity.setState(pr.getState().name().toLowerCase()); // OPEN/CLOSED -> open/closed
         entity.setMerged(pr.isMerged());
 
         entity.setCreatedAt(pr.getCreatedAt());
@@ -87,9 +94,9 @@ public class GitHubPullRequestCollector {
     }
 
     @Transactional(readOnly = true)
-    public Page<GitHubPullRequestEntity> listPullRequests(Long gitRepoId, Pageable pageable) {
-        GitRepositoryEntity repo = repoRepository.findById(gitRepoId)
-                .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + gitRepoId));
+    public Page<GitHubPullRequestEntity> listPullRequests(Long repoId, Pageable pageable) {
+        GitRepositoryEntity repo = repoRepository.findById(repoId)
+                .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
         return prRepository.findByRepositoryOrderByCreatedAtDesc(repo, pageable);
     }
 }
