@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,7 +23,7 @@ public class GitHubIssuesCollector {
     private final GitRepositoryEntityRepository  gitRepositoryEntityRepository;
 
     /**
-     * Collects issues for a specific repository (name = “owner/repo”).
+     * Collects issues for a specific repository (name = "owner/repo").
      */
     @Transactional
     public int collectIssuesForRepo(DataSourceConfig config, String fullName) {
@@ -33,15 +32,12 @@ public class GitHubIssuesCollector {
         try {
             GHRepository ghRepo = github.getRepository(fullName);
 
-            // open + closed issues, except PR’s.
-            List<GHIssue> issues = ghRepo.getIssues(GHIssueState.ALL).stream()
-                    .filter(i -> i.getPullRequest() == null)
-                    .toList();
-
             int saved = 0;
-            for (GHIssue gi : issues) {
-                upsertGitHubIssue(config, ghRepo, gi);
-                saved++;
+            for (GHIssue gi : ghRepo.queryIssues().state(GHIssueState.ALL).list()) {
+                if (gi.getPullRequest() == null) {  // Skip PRs
+                    upsertGitHubIssue(config, ghRepo, gi);
+                    saved++;
+                }
             }
             return saved;
         } catch (IOException e) {

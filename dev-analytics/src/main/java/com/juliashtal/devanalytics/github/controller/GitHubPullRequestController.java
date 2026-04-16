@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.github.controller;
 import com.juliashtal.devanalytics.github.model.dto.GitHubPullRequestDto;
 
 import com.juliashtal.devanalytics.github.service.GitHubPullRequestCollector;
+import com.juliashtal.devanalytics.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -18,15 +19,13 @@ public class GitHubPullRequestController {
 
     private final GitHubPullRequestCollector prCollector;
 
-    // 1. Start collecting PRs for the repository
     @PostMapping("/repos/{repoId}/pull-requests/collect")
     public ResponseEntity<String> collectPrs(@PathVariable Long repoId) {
-        // TODO Long userId = SecurityUtils.getCurrentUserId();
-        int processed = prCollector.collectPullRequests(repoId);
+        Long userId = SecurityUtils.getCurrentUserId();
+        int processed = prCollector.collectPullRequests(userId, repoId);
         return ResponseEntity.ok("Processed " + processed + " pull requests");
     }
 
-    // 2. Viewing PRs by repo
     @GetMapping("/repos/{repoId}/pull-requests")
     public Page<GitHubPullRequestDto> listPrs(
             @PathVariable Long repoId,

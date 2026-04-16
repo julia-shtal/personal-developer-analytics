@@ -8,8 +8,8 @@ import com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
-import com.juliashtal.devanalytics.user.UserRepository;
-import com.juliashtal.devanalytics.user.User;
+import com.juliashtal.devanalytics.user.repository.UserRepository;
+import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -73,7 +73,6 @@ public class GitRepositoryService {
     @Transactional(readOnly = true)
     public List<GitRepositoryEntity> listReposForUser(Long userId) {
         User user = userRepository.getReferenceById(userId);
-        // all Git repositories whose DataSource belongs to this user
         return repoRepository.findAll().stream()
                 .filter(r -> r.getDataSourceConfig() != null
                         && r.getDataSourceConfig().getUser().getId().equals(user.getId()))
@@ -82,19 +81,24 @@ public class GitRepositoryService {
 
     @Transactional(readOnly = true)
     public GitRepositoryEntity getRepoForUser(Long userId, Long repoId) {
-        User user = userRepository.getReferenceById(userId);
         GitRepositoryEntity repo = repoRepository.findById(repoId)
                 .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
-
-        if (!repo.getDataSourceConfig().getUser().getId().equals(user.getId())) {
-            throw new IllegalArgumentException("Repo does not belong to current user");
-        }
+        checkRepoForUser(userId, repo);
         return repo;
     }
 
     @Transactional(readOnly = true)
     public Page<GitCommitEntity> listCommitsForRepo(Long userId, Long repoId, Pageable pageable) {
-        getRepoForUser(userId, repoId);
+        GitRepositoryEntity repo = repoRepository.findById(repoId)
+                .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
+        checkRepoForUser(userId, repo);
         return commitRepository.findByRepositoryIdOrderByAuthorDateDesc(repoId, pageable);
+    }
+
+    private void checkRepoForUser(Long userId, GitRepositoryEntity repo) {
+        User user = userRepository.getReferenceById(userId);
+        if (!repo.getDataSourceConfig().getUser().getId().equals(user.getId())) {
+            throw new IllegalArgumentException("Repo does not belong to current user");
+        }
     }
 }

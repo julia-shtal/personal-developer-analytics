@@ -1,20 +1,19 @@
 package com.juliashtal.devanalytics.auth;
 
-import com.juliashtal.devanalytics.auth.model.AuthResponse;
-import com.juliashtal.devanalytics.auth.model.LoginRequest;
-import com.juliashtal.devanalytics.auth.model.RegisterRequest;
+import com.juliashtal.devanalytics.auth.model.*;
+import com.juliashtal.devanalytics.auth.model.request.*;
+import com.juliashtal.devanalytics.auth.service.PasswordResetService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
-
-    public AuthController(AuthService authService) {
-        this.authService = authService;
-    }
+    private final PasswordResetService passwordResetService;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
@@ -24,8 +23,29 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
-        String token = authService.login(request);
-        return ResponseEntity.ok(new AuthResponse(token));
+        return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<AuthResponse> refresh(@RequestBody TokenRefreshRequest request) {
+        return ResponseEntity.ok(authService.refreshToken(request.getRefreshToken()));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestBody TokenRefreshRequest request) {
+        authService.logout(request.getRefreshToken());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody PasswordResetRequest request) {
+        passwordResetService.initiatePasswordReset(request.getEmail());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody PasswordResetConfirmRequest request) {
+        passwordResetService.resetPassword(request.getToken(), request.getNewPassword());
+        return ResponseEntity.ok().build();
     }
 }
-

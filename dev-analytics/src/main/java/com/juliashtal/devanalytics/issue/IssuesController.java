@@ -1,6 +1,5 @@
 package com.juliashtal.devanalytics.issue;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.juliashtal.devanalytics.datasource.service.DataSourceService;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
@@ -28,7 +27,7 @@ public class IssuesController {
     private final DataSourceService dataSourceService;
 
     @PostMapping("/jira/{dataSourceId}/collect")
-    public ResponseEntity<String> collectJira(@PathVariable Long dataSourceId) throws JsonProcessingException {
+    public ResponseEntity<String> collectJira(@PathVariable Long dataSourceId) {
         Long userId = SecurityUtils.getCurrentUserId();
         DataSourceConfig cfg = getUserDataSource(userId, dataSourceId, DataSourceType.JIRA);
 

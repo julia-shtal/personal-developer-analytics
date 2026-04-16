@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.metrics;
+package com.juliashtal.devanalytics.metrics.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -9,10 +9,11 @@ import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
+import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
-import com.juliashtal.devanalytics.user.User;
-import com.juliashtal.devanalytics.user.UserRepository;
+import com.juliashtal.devanalytics.user.model.User;
+import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -1,7 +1,7 @@
 package com.juliashtal.devanalytics.metrics.model;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
-import com.juliashtal.devanalytics.user.User;
+import com.juliashtal.devanalytics.user.model.User;
 import jakarta.persistence.*;
 import lombok.Data;
 
