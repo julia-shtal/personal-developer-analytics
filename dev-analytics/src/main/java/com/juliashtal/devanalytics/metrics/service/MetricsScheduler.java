@@ -1,6 +1,6 @@
 package com.juliashtal.devanalytics.metrics.service;
 
-import com.juliashtal.devanalytics.user.UserRepository;
+import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

@@ -2,10 +2,10 @@ package com.juliashtal.devanalytics.datasource.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
-import com.juliashtal.devanalytics.user.User;
+import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
 import com.juliashtal.devanalytics.datasource.model.dto.UpdateDataSourceRequest;
-import com.juliashtal.devanalytics.user.UserRepository;
+import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
