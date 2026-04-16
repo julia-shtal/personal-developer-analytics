@@ -1,7 +1,7 @@
 package com.juliashtal.devanalytics.datasource.repository;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
-import com.juliashtal.devanalytics.user.User;
+import com.juliashtal.devanalytics.user.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

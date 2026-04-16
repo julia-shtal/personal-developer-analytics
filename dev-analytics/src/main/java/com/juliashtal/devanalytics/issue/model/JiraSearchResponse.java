@@ -22,7 +22,7 @@ public class JiraSearchResponse {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Fields {
         private String summary;
-        //private String description;
+        private Object description;
         private JiraUser assignee;
         private JiraUser reporter;
         private String created;

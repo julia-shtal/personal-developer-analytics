@@ -1,0 +1,45 @@
+package com.juliashtal.devanalytics.user.controller;
+
+import com.juliashtal.devanalytics.user.service.TeamService;
+import com.juliashtal.devanalytics.user.model.request.AddTeamMemberRequest;
+import com.juliashtal.devanalytics.user.model.request.CreateTeamRequest;
+import com.juliashtal.devanalytics.user.model.Team;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/teams")
+@PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+@RequiredArgsConstructor
+public class TeamController {
+
+    private final TeamService teamService;
+
+    @PostMapping
+    public ResponseEntity<Team> createTeam(@RequestBody CreateTeamRequest request) {
+        return ResponseEntity.ok(teamService.createTeam(request.getName()));
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Team>> getMyTeams() {
+        return ResponseEntity.ok(teamService.getMyTeams());
+    }
+
+    @PostMapping("/{teamId}/members")
+    public ResponseEntity<Team> addMember(
+            @PathVariable Long teamId,
+            @RequestBody AddTeamMemberRequest request) {
+        return ResponseEntity.ok(teamService.addMember(teamId, request.getUserId()));
+    }
+
+    @DeleteMapping("/{teamId}/members/{userId}")
+    public ResponseEntity<Team> removeMember(
+            @PathVariable Long teamId,
+            @PathVariable Long userId) {
+        return ResponseEntity.ok(teamService.removeMember(teamId, userId));
+    }
+}

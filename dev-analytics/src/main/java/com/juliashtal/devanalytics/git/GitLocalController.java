@@ -25,7 +25,6 @@ public class GitLocalController {
     private final GitRepositoryService gitRepositoryService;
     private final GitLocalCollector gitLocalCollector;
 
-    // 1. Local repo registration
     @PostMapping("/repos")
     public ResponseEntity<GitRepositoryDto> registerLocalRepo(
             @RequestBody @Valid RegisterLocalRepoRequest request) {
@@ -34,7 +33,6 @@ public class GitLocalController {
         return ResponseEntity.ok(GitRepositoryDto.fromEntity(repo));
     }
 
-    // 2. List of all local repositories for the current user
     @GetMapping("/repos")
     public List<GitRepositoryDto> listRepos() {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -43,7 +41,6 @@ public class GitLocalController {
                 .toList();
     }
 
-    // 3. Details of one repo
     @GetMapping("/repos/{repoId}")
     public GitRepositoryDto getRepo(@PathVariable Long repoId) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -51,7 +48,6 @@ public class GitLocalController {
         return GitRepositoryDto.fromEntity(repo);
     }
 
-    // 4. Repo commits with pagination
     @GetMapping("/repos/{repoId}/commits")
     public Page<GitCommitDto> listCommits(
             @PathVariable Long repoId,
@@ -63,7 +59,6 @@ public class GitLocalController {
         return commitsPage.map(GitCommitDto::fromEntity);
     }
 
-    // 5. Manual start of the collector
     @PostMapping("/repos/{repoId}/collect")
     public ResponseEntity<String> collect(@PathVariable Long repoId) {
         long saved = gitLocalCollector.collectForRepository(repoId);

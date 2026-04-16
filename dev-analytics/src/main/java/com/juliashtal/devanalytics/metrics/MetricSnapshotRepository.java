@@ -3,7 +3,7 @@ package com.juliashtal.devanalytics.metrics;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
-import com.juliashtal.devanalytics.user.User;
+import com.juliashtal.devanalytics.user.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;

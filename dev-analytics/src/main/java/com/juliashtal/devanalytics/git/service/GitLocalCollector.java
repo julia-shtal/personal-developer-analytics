@@ -125,51 +125,47 @@ public class GitLocalCollector {
      * Simple calculation of additions/deletions/filesChanged via DiffFormatter.
      */
     private DiffStats calculateDiffStats(Repository repository, RevCommit commit) throws IOException {
+        ObjectId oldTreeId;
+        ObjectId newTreeId = commit.getTree().getId();
+
         if (commit.getParentCount() == 0) {
-            // initial commit: count everything as additions
-            // we can simply count the number of lines as additions, but for MVP we will set it to 0
-            return new DiffStats(0, 0, 0);
+            oldTreeId = ObjectId.zeroId();
+        } else {
+            RevCommit parent = commit.getParent(0);
+            try (RevWalk walk = new RevWalk(repository)) {
+                oldTreeId = walk.parseCommit(parent.getId()).getTree().getId();
+            }
         }
 
-        RevCommit parent = commit.getParent(0);
+        try (ObjectReader reader = repository.newObjectReader();
+             ByteArrayOutputStream out = new ByteArrayOutputStream();
+             DiffFormatter diffFormatter = new DiffFormatter(out)) {
 
-        try (RevWalk walk = new RevWalk(repository)) {
-            RevCommit parentCommit = walk.parseCommit(parent.getId());
-            RevCommit thisCommit = walk.parseCommit(commit.getId());
+            CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
+            oldTreeIter.reset(reader, oldTreeId);
 
-            ObjectId oldTree = parentCommit.getTree().getId();
-            ObjectId newTree = thisCommit.getTree().getId();
+            CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
+            newTreeIter.reset(reader, newTreeId);
 
-            try (ObjectReader reader = repository.newObjectReader()) {
-                CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
-                oldTreeIter.reset(reader, oldTree);
+            diffFormatter.setRepository(repository);
+            diffFormatter.setDiffComparator(RawTextComparator.DEFAULT);
+            diffFormatter.setDetectRenames(true);
 
-                CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
-                newTreeIter.reset(reader, newTree);
+            List<DiffEntry> diffs = diffFormatter.scan(oldTreeIter, newTreeIter);
 
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                try (DiffFormatter diffFormatter = new DiffFormatter(out)) {
-                    diffFormatter.setRepository(repository);
-                    diffFormatter.setDiffComparator(RawTextComparator.DEFAULT);
-                    diffFormatter.setDetectRenames(true);
+            int filesChanged = diffs.size();
+            int additions = 0;
+            int deletions = 0;
 
-                    List<DiffEntry> diffs = diffFormatter.scan(oldTreeIter, newTreeIter);
-
-                    int filesChanged = diffs.size();
-                    int additions = 0;
-                    int deletions = 0;
-
-                    for (DiffEntry diff : diffs) {
-                        diffFormatter.format(diff);
-                        EditList edits = diffFormatter.toFileHeader(diff).toEditList();
-                        for (Edit edit : edits) {
-                            additions += edit.getEndB() - edit.getBeginB();
-                            deletions += edit.getEndA() - edit.getBeginA();
-                        }
-                    }
-                    return new DiffStats(additions, deletions, filesChanged);
+            for (DiffEntry diff : diffs) {
+                diffFormatter.format(diff);
+                EditList edits = diffFormatter.toFileHeader(diff).toEditList();
+                for (Edit edit : edits) {
+                    additions += edit.getEndB() - edit.getBeginB();
+                    deletions += edit.getEndA() - edit.getBeginA();
                 }
             }
+            return new DiffStats(additions, deletions, filesChanged);
         }
     }
 
