@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.security;
 
+import com.juliashtal.devanalytics.security.model.CustomUserDetails;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.service.JwtService;
 import jakarta.servlet.FilterChain;
@@ -34,21 +35,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String jwt = null;
         String username = null;
 
-        // ждём "Authorization: Bearer <token>"
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             jwt = authHeader.substring(7);
             try {
                 username = jwtService.extractUsername(jwt);
             } catch (Exception e) {
-                // опционально: логирование, но не бросаем дальше
             }
         }
 
-        // если username есть и контекст ещё пустой — проверяем токен
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-            if (jwtService.isTokenValid(jwt, userDetails)) {
+            if (jwtService.isTokenValid(jwt, userDetails) && isTokenVersionValid(jwt, userDetails)) {
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(
                                 userDetails,
@@ -64,10 +62,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    private boolean isTokenVersionValid(String jwt, UserDetails userDetails) {
+        if (!(userDetails instanceof CustomUserDetails custom)) return true;
+        Integer tokenVersion = jwtService.extractTokenVersion(jwt);
+        return tokenVersion != null && tokenVersion == custom.getUser().getTokenVersion();
+    }
+
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        // не фильтруем публичные эндпоинты
         return path.startsWith("/api/auth/");
     }
 }

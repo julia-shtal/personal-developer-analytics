@@ -1,7 +1,7 @@
 package com.juliashtal.devanalytics.security;
 
-import com.juliashtal.devanalytics.user.User;
-import com.juliashtal.devanalytics.user.UserRepository;
+import com.juliashtal.devanalytics.user.model.User;
+import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

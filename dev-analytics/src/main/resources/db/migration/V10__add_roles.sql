@@ -1,0 +1,3 @@
+ALTER TABLE users ADD COLUMN role VARCHAR(32) NOT NULL DEFAULT 'DEVELOPER';
+
+CREATE INDEX idx_users_role ON users(role);

@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.user;
+package com.juliashtal.devanalytics.user.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -12,6 +12,13 @@ public class User {
     private Long id;
     private String username;
     private String email;
-    private String passwordHash; // BCrypt
+    private String passwordHash;
     private String timezone = "Europe/Berlin";
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Role role = Role.DEVELOPER;
+
+    @Column(nullable = false)
+    private int tokenVersion = 0;
 }
