@@ -1,7 +1,10 @@
 package com.juliashtal.devanalytics.metrics.model;
 
+import java.time.LocalDate;
+
 public record MetricAggregateDto(
         MetricType metricType,
         double value,
-        String dimensionsJson
+        LocalDate periodFrom,
+        LocalDate periodTo
 ) { }

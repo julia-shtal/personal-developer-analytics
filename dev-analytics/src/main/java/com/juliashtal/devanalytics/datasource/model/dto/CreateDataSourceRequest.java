@@ -22,5 +22,8 @@ public class CreateDataSourceRequest {
 
     // token required for GitHub / Jira / GitHub Issues
     private String apiToken;
+
+    // optional: if set, the data source is team-scoped (GITHUB/JIRA/GITHUB_ISSUES only)
+    private Long teamId;
 }
 

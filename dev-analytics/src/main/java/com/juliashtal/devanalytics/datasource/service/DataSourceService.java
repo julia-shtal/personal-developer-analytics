@@ -1,16 +1,23 @@
 package com.juliashtal.devanalytics.datasource.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.exception.ForbiddenException;
+import com.juliashtal.devanalytics.user.model.Role;
+import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
 import com.juliashtal.devanalytics.datasource.model.dto.UpdateDataSourceRequest;
+import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
+import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -20,6 +27,7 @@ public class DataSourceService {
 
     private final DataSourceConfigRepository repository;
     private final UserRepository userRepository;
+    private final TeamRepository teamRepository;
     private final SimpleTokenEncryptor tokenEncryptor;
     private final DataSourceValidator validator;
 
@@ -45,25 +53,55 @@ public class DataSourceService {
         }
         cfg.setEnabled(true);
 
+        if (req.getTeamId() != null) {
+            Team team = teamRepository.findById(req.getTeamId())
+                    .orElseThrow(() -> new NoSuchElementException("Team not found: " + req.getTeamId()));
+            assertCanManageTeam(userId, team);
+            cfg.setTeam(team);
+        }
+
         return repository.save(cfg);
     }
 
     @Transactional(readOnly = true)
     public List<DataSourceConfig> listForUser(Long userId) {
         User user = userRepository.getReferenceById(userId);
-        return repository.findAllByUser(user);
+        List<DataSourceConfig> result = new ArrayList<>(repository.findAllByUser(user));
+
+        // Include team-scoped configs for teams where user is a member
+        for (Team team : teamRepository.findByMembersId(userId)) {
+            result.addAll(repository.findAllByTeam(team));
+        }
+        // Include team-scoped configs for teams where user is the manager
+        for (Team team : teamRepository.findByManagerId(userId)) {
+            result.addAll(repository.findAllByTeam(team));
+        }
+
+        return result;
     }
 
     @Transactional(readOnly = true)
     public DataSourceConfig getForUser(Long userId, Long id) {
         User user = userRepository.getReferenceById(userId);
-        return repository.findByIdAndUser(id, user)
+        // Try user-owned first
+        var cfg = repository.findByIdAndUser(id, user);
+        if (cfg.isPresent()) {
+            return cfg.get();
+        }
+        // Try team-scoped — user must be a member or manager of the owning team
+        DataSourceConfig teamCfg = repository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("DataSource not found: " + id));
+
+        if (teamCfg.getTeam() != null && canAccessTeam(userId, teamCfg.getTeam())) {
+            return teamCfg;
+        }
+
+        throw new NoSuchElementException("DataSource not found: " + id);
     }
 
     @Transactional
     public DataSourceConfig update(Long userId, Long id, UpdateDataSourceRequest req) {
-        DataSourceConfig cfg = getForUser(userId, id);
+        DataSourceConfig cfg = loadForWrite(userId, id);
 
         if (req.getName() != null) {
             cfg.setName(req.getName());
@@ -86,8 +124,51 @@ public class DataSourceService {
 
     @Transactional
     public void delete(Long userId, Long id) {
-        DataSourceConfig cfg = getForUser(userId, id);
+        DataSourceConfig cfg = loadForWrite(userId, id);
         repository.delete(cfg);
     }
-}
 
+    /**
+     * Loads a config that the current user is allowed to modify.
+     * Creator always can; for team-scoped configs the user must also be the team manager or ADMIN.
+     */
+    private DataSourceConfig loadForWrite(Long userId, Long id) {
+        DataSourceConfig cfg = repository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("DataSource not found: " + id));
+
+        // Creator can always modify
+        if (cfg.getUser() != null && cfg.getUser().getId().equals(userId)) {
+            return cfg;
+        }
+
+        // For team-scoped configs, only the team manager or ADMIN can modify
+        if (cfg.getTeam() != null) {
+            assertCanManageTeam(userId, cfg.getTeam());
+            return cfg;
+        }
+
+        throw new ForbiddenException("Access denied to DataSource: " + id);
+    }
+
+    /**
+     * Returns true if the user can read data from a team-scoped data source
+     * (i.e. is a team member, the team manager, or an ADMIN).
+     */
+    private boolean canAccessTeam(Long userId, Team team) {
+        Role role = SecurityUtils.getCurrentUserRole();
+        if (role == Role.ADMIN) return true;
+        return team.getManager().getId().equals(userId)
+                || teamRepository.existsByIdAndMembersId(team.getId(), userId);
+    }
+
+    /**
+     * Asserts the current user can manage (create/update/delete) a team data source.
+     * Only the team manager or ADMIN may do so.
+     */
+    private void assertCanManageTeam(Long userId, Team team) {
+        Role role = SecurityUtils.getCurrentUserRole();
+        if (role == Role.ADMIN) return;
+        if (role == Role.MANAGER && team.getManager().getId().equals(userId)) return;
+        throw new ForbiddenException("Only the team manager or an admin can manage team data sources");
+    }
+}
