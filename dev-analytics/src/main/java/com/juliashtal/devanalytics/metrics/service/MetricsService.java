@@ -1,7 +1,5 @@
 package com.juliashtal.devanalytics.metrics.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
@@ -23,7 +21,6 @@ import java.util.*;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 
-//TODO сделать сохранение ещё и по репо
 @Service
 @RequiredArgsConstructor
 public class MetricsService {
@@ -34,7 +31,6 @@ public class MetricsService {
     private final IssueRepository issueRepository;
     private final UserRepository userRepository;
     private final GitRepositoryEntityRepository gitRepoRepository;
-    private final ObjectMapper objectMapper;
 
     @Transactional
     public void calculateDailyMetrics(Long userId, LocalDate fromDate, LocalDate toDate) {
@@ -45,11 +41,11 @@ public class MetricsService {
 
         calcDailyCommits(user, from, to);
         calcDailyPrs(user, from, to);
-        calcDailyIssues(user, from, to); //todo
+        calcDailyIssues(user, from, to);
         calcDailyChurn(user, from, to);
-        calcLeadTimePrs(user, fromDate, from, to);
-        calcLeadTimeIssues(user, fromDate, from, to); //todo
-        calcLeadTimeFirstCommitToMerge(user, fromDate, from, to);
+        calcLeadTimePrs(user, fromDate, toDate, from, to);
+        calcLeadTimeIssues(user, fromDate, toDate, from, to);
+        calcLeadTimeFirstCommitToMerge(user, fromDate, toDate, from, to);
     }
 
     private void calcDailyCommits(User user, Instant from, Instant to) {
@@ -64,8 +60,8 @@ public class MetricsService {
 
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
 
-            saveMetric(user, day, DAILY_COMMITS_COUNT, count, repo, null);
-            saveMetric(user, day, DAILY_COMMITS_AVG_SIZE, avgSize, repo, null);
+            saveMetric(user, day, DAILY_COMMITS_COUNT, count, repo, null, null);
+            saveMetric(user, day, DAILY_COMMITS_AVG_SIZE, avgSize, repo, null, null);
 
             perDayStats
                     .computeIfAbsent(day, d -> new LongSummaryStatistics())
@@ -75,7 +71,7 @@ public class MetricsService {
         for (var entry : perDayStats.entrySet()) {
             LocalDate day = entry.getKey();
             long total = entry.getValue().getSum();
-            saveMetric(user, day, DAILY_COMMITS_COUNT, total, null, null);
+            saveMetric(user, day, DAILY_COMMITS_COUNT, total, null, null, null);
         }
     }
 
@@ -90,7 +86,7 @@ public class MetricsService {
             long count = ((Number) row[2]).longValue();
 
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_PR_CREATED, count, repo, null);
+            saveMetric(user, day, DAILY_PR_CREATED, count, repo, null, null);
 
             createdAll.merge(day, count, Long::sum);
         }
@@ -102,15 +98,15 @@ public class MetricsService {
             long count = ((Number) row[2]).longValue();
 
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_PR_MERGED, count, repo, null);
+            saveMetric(user, day, DAILY_PR_MERGED, count, repo, null, null);
 
             mergedAll.merge(day, count, Long::sum);
         }
 
         createdAll.forEach((day, total) ->
-                saveMetric(user, day, DAILY_PR_CREATED, total, null, null));
+                saveMetric(user, day, DAILY_PR_CREATED, total, null, null, null));
         mergedAll.forEach((day, total) ->
-                saveMetric(user, day, DAILY_PR_MERGED, total, null, null));
+                saveMetric(user, day, DAILY_PR_MERGED, total, null, null, null));
     }
 
     private void calcDailyIssues(User user, Instant from, Instant to) {
@@ -124,7 +120,7 @@ public class MetricsService {
             long count = ((Number) row[2]).longValue();
 
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_ISSUES_CREATED, count, repo, null);
+            saveMetric(user, day, DAILY_ISSUES_CREATED, count, repo, null, null);
 
             createdAll.merge(day, count, Long::sum);
         }
@@ -136,17 +132,16 @@ public class MetricsService {
             long count = ((Number) row[2]).longValue();
 
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_ISSUES_CLOSED, count, repo, null);
+            saveMetric(user, day, DAILY_ISSUES_CLOSED, count, repo, null, null);
 
             closedAll.merge(day, count, Long::sum);
         }
 
         createdAll.forEach((day, total) ->
-                saveMetric(user, day, DAILY_ISSUES_CREATED, total, null, null));
+                saveMetric(user, day, DAILY_ISSUES_CREATED, total, null, null, null));
         closedAll.forEach((day, total) ->
-                saveMetric(user, day, DAILY_ISSUES_CLOSED, total, null, null));
+                saveMetric(user, day, DAILY_ISSUES_CLOSED, total, null, null, null));
     }
-
 
     private void calcDailyChurn(User user, Instant from, Instant to) {
         Map<LocalDate, Long> totalAdditions = new HashMap<>();
@@ -163,7 +158,7 @@ public class MetricsService {
             double churn = total > 0 ? (double) deletions / total : 0.0;
 
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_CHURN_RATIO, churn, repo, null);
+            saveMetric(user, day, DAILY_CHURN_RATIO, churn, repo, null, null);
 
             totalAdditions.merge(day, additions, Long::sum);
             totalDeletions.merge(day, deletions, Long::sum);
@@ -174,11 +169,12 @@ public class MetricsService {
             long del = totalDeletions.getOrDefault(day, 0L);
             long total = add + del;
             double churnAll = total > 0 ? (double) del / total : 0.0;
-            saveMetric(user, day, DAILY_CHURN_RATIO, churnAll, null, null);
+            saveMetric(user, day, DAILY_CHURN_RATIO, churnAll, null, null, null);
         }
     }
 
-    private void calcLeadTimePrs(User user, LocalDate fromDate, Instant from, Instant to) {
+    private void calcLeadTimePrs(User user, LocalDate fromDate, LocalDate toDate,
+                                 Instant from, Instant to) {
         var rows = pullRequestRepository.findMergedLeadTimesPerRepo(user.getId(), from, to);
 
         Map<Long, List<Long>> perRepo = new HashMap<>();
@@ -198,19 +194,18 @@ public class MetricsService {
             Collections.sort(values);
             double median = medianOfLongs(values);
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, fromDate, PR_LEAD_TIME_HOURS_MEDIAN, median, repo,
-                    Map.of("from", fromDate.toString(), "to", fromDate.plusDays(1).toString()));
+            saveMetric(user, fromDate, PR_LEAD_TIME_HOURS_MEDIAN, median, repo, fromDate, toDate);
         });
 
         if (!all.isEmpty()) {
             Collections.sort(all);
             double medianAll = medianOfLongs(all);
-            saveMetric(user, fromDate, PR_LEAD_TIME_HOURS_MEDIAN, medianAll, null,
-                    Map.of("from", fromDate.toString(), "to", fromDate.plusDays(1).toString()));
+            saveMetric(user, fromDate, PR_LEAD_TIME_HOURS_MEDIAN, medianAll, null, fromDate, toDate);
         }
     }
 
-    private void calcLeadTimeIssues(User user, LocalDate fromDate, Instant from, Instant to) {
+    private void calcLeadTimeIssues(User user, LocalDate fromDate, LocalDate toDate,
+                                    Instant from, Instant to) {
         var rows = issueRepository.findIssueLeadTimesPerRepo(user.getId(), from, to);
 
         Map<Long, List<Long>> perRepo = new HashMap<>();
@@ -230,50 +225,18 @@ public class MetricsService {
             Collections.sort(values);
             double median = medianOfLongs(values);
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, fromDate,
-                    ISSUE_LEAD_TIME_HOURS_MEDIAN,
-                    median,
-                    repo,
-                    Map.of("from", fromDate.toString(),
-                            "to", fromDate.plusDays(1).toString()));
+            saveMetric(user, fromDate, ISSUE_LEAD_TIME_HOURS_MEDIAN, median, repo, fromDate, toDate);
         });
 
         if (!all.isEmpty()) {
             Collections.sort(all);
             double medianAll = medianOfLongs(all);
-            saveMetric(user, fromDate,
-                    ISSUE_LEAD_TIME_HOURS_MEDIAN,
-                    medianAll,
-                    null,
-                    Map.of("from", fromDate.toString(),
-                            "to", fromDate.plusDays(1).toString()));
+            saveMetric(user, fromDate, ISSUE_LEAD_TIME_HOURS_MEDIAN, medianAll, null, fromDate, toDate);
         }
     }
 
-
-    private void saveMetric(User user,
-                            LocalDate date,
-                            MetricType metricType,
-                            double value,
-                            GitRepositoryEntity repo,
-                            Map<String, String> dims) {
-        MetricSnapshot snapshot = new MetricSnapshot();
-        snapshot.setUser(user);
-        snapshot.setRepository(repo);
-        snapshot.setDate(date);
-        snapshot.setMetricType(metricType);
-        snapshot.setValue(value);
-        if (dims != null && !dims.isEmpty()) {
-            try {
-                snapshot.setDimensionsJson(objectMapper.writeValueAsString(dims));
-            } catch (JsonProcessingException e) {
-                snapshot.setDimensionsJson(null);
-            }
-        }
-        repository.save(snapshot);
-    }
-
-    private void calcLeadTimeFirstCommitToMerge(User user, LocalDate fromDate, Instant from, Instant to) {
+    private void calcLeadTimeFirstCommitToMerge(User user, LocalDate fromDate, LocalDate toDate,
+                                                Instant from, Instant to) {
         var prs = pullRequestRepository.findMergedPrsForLeadTime(user.getId(), from, to);
         Map<Long, List<Long>> perRepo = new HashMap<>();
 
@@ -302,11 +265,8 @@ public class MetricsService {
             double median = medianOfLongs(hours);
 
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, fromDate,
-                    PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
-                    median,
-                    repo,
-                    Map.of("from", fromDate.toString(), "to", fromDate.plusDays(1).toString()));
+            saveMetric(user, fromDate, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
+                    median, repo, fromDate, toDate);
 
             allHours.addAll(hours);
         }
@@ -314,12 +274,38 @@ public class MetricsService {
         if (!allHours.isEmpty()) {
             Collections.sort(allHours);
             double medianAll = medianOfLongs(allHours);
-            saveMetric(user, fromDate,
-                    PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
-                    medianAll,
-                    null,
-                    Map.of("from", fromDate.toString(), "to", fromDate.plusDays(1).toString()));
+            saveMetric(user, fromDate, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
+                    medianAll, null, fromDate, toDate);
         }
+    }
+
+    /**
+     * Saves a metric snapshot. If an identical snapshot already exists
+     * (same user, repository, date, metricType, periodFrom, periodTo) its value
+     * is updated in place instead of inserting a duplicate row.
+     */
+    private void saveMetric(User user,
+                            LocalDate date,
+                            MetricType metricType,
+                            double value,
+                            GitRepositoryEntity repo,
+                            LocalDate periodFrom,
+                            LocalDate periodTo) {
+        Long repoId = repo != null ? repo.getId() : null;
+
+        MetricSnapshot snapshot = repository
+                .findExisting(user.getId(), repoId, date, metricType.name(), periodFrom, periodTo)
+                .orElseGet(MetricSnapshot::new);
+
+        snapshot.setUser(user);
+        snapshot.setRepository(repo);
+        snapshot.setDate(date);
+        snapshot.setMetricType(metricType);
+        snapshot.setPeriodFrom(periodFrom);
+        snapshot.setPeriodTo(periodTo);
+        snapshot.setValue(value);
+
+        repository.save(snapshot);
     }
 
     private double medianOfLongs(List<Long> values) {
@@ -328,6 +314,4 @@ public class MetricsService {
         if (n % 2 == 1) return values.get(n / 2);
         return (values.get(n / 2 - 1) + values.get(n / 2)) / 2.0;
     }
-
 }
-

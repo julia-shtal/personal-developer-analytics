@@ -39,8 +39,10 @@ public class MetricSnapshot {
     @Column(nullable = false)
     private double value;
 
-    // dimension: {"repoId": 10,"granularity":"DAY"}
-    @Column(columnDefinition = "text")
-    private String dimensionsJson;
+    @Column(name = "period_from")
+    private LocalDate periodFrom;
+
+    @Column(name = "period_to")
+    private LocalDate periodTo;
 }
 

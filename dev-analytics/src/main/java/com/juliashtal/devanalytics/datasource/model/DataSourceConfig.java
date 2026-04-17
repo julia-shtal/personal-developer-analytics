@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.datasource.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -19,6 +20,11 @@ public class DataSourceConfig {
     @JoinColumn(name = "user_id")
     @JsonIgnore
     private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_id")
+    @JsonIgnore
+    private Team team;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
