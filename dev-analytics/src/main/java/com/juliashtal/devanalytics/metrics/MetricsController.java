@@ -158,7 +158,8 @@ public class MetricsController {
         var list = metricSnapshotRepository
                 .findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, FOCUS_RATIO_DAYS_TASKS, from, to);
 
-        if (list.isEmpty()) return new MetricAggregateDto(FOCUS_RATIO_DAYS_TASKS, 0.0, null, null);
+        if (list.isEmpty())
+            return new MetricAggregateDto(FOCUS_RATIO_DAYS_TASKS, 0.0, null, null);
 
         double avg = list.stream().mapToDouble(MetricSnapshot::getValue).average().orElse(0.0);
         return new MetricAggregateDto(FOCUS_RATIO_DAYS_TASKS, avg, null, null);
