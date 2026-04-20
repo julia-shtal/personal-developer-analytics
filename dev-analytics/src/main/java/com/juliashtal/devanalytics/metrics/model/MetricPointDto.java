@@ -6,10 +6,16 @@ public record MetricPointDto(
         LocalDate date,
         double value,
         String metricType,
-        String dimensionsJson
+        LocalDate periodFrom,
+        LocalDate periodTo
 ) {
     public static MetricPointDto fromEntity(MetricSnapshot s) {
-        return new MetricPointDto(s.getDate(), s.getValue(), s.getMetricType().name(), s.getDimensionsJson());
+        return new MetricPointDto(
+                s.getDate(),
+                s.getValue(),
+                s.getMetricType().name(),
+                s.getPeriodFrom(),
+                s.getPeriodTo()
+        );
     }
 }
-

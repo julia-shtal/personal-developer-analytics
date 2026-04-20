@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.metrics.model;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -26,6 +27,10 @@ public class MetricSnapshot {
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_id")
+    private Team team;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "repository_id")
     private GitRepositoryEntity repository;
 
@@ -39,8 +44,10 @@ public class MetricSnapshot {
     @Column(nullable = false)
     private double value;
 
-    // dimension: {"repoId": 10,"granularity":"DAY"}
-    @Column(columnDefinition = "text")
-    private String dimensionsJson;
+    @Column(name = "period_from")
+    private LocalDate periodFrom;
+
+    @Column(name = "period_to")
+    private LocalDate periodTo;
 }
 

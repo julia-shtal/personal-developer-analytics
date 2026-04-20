@@ -35,6 +35,10 @@ public class GitRepositoryEntity {
     @Column(nullable = false)
     private String localPath;
 
+    // for GitHub repos: "owner/repo" — globally unique, used for idempotent registration
+    @Column(unique = true)
+    private String repoFullName;
+
     // for incremental collecting
     private String lastFetchedCommitHash;
 
