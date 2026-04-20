@@ -4,6 +4,8 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.exception.GitHubException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
+import com.juliashtal.devanalytics.github.model.GitHubPrReviewEntity;
+import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.user.model.User;
@@ -16,7 +18,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 @Service
@@ -25,6 +30,7 @@ public class GitHubPullRequestCollector {
 
     private final GitRepositoryEntityRepository repoRepository;
     private final GitHubPullRequestRepository prRepository;
+    private final GitHubPrReviewRepository reviewRepository;
     private final GitHubClientFactory clientFactory;
     private final UserRepository userRepository;
 
@@ -53,7 +59,8 @@ public class GitHubPullRequestCollector {
             int processed = 0;
 
             for (GHPullRequest pr : query.list()) {
-                upsertPullRequest(repo, pr);
+                GitHubPullRequestEntity entity = upsertPullRequest(repo, pr);
+                upsertReviews(entity, pr);
                 processed++;
             }
 
@@ -66,7 +73,7 @@ public class GitHubPullRequestCollector {
         }
     }
 
-    private void upsertPullRequest(GitRepositoryEntity repo, GHPullRequest pr) throws IOException {
+    private GitHubPullRequestEntity upsertPullRequest(GitRepositoryEntity repo, GHPullRequest pr) throws IOException {
         GitHubPullRequestEntity entity = prRepository
                 .findByRepositoryAndNumber(repo, pr.getNumber())
                 .orElseGet(GitHubPullRequestEntity::new);
@@ -75,7 +82,7 @@ public class GitHubPullRequestCollector {
         entity.setNumber(pr.getNumber());
         entity.setTitle(pr.getTitle());
         entity.setAuthorLogin(pr.getUser() != null ? pr.getUser().getLogin() : null);
-        entity.setState(pr.getState().name().toLowerCase()); // OPEN/CLOSED -> open/closed
+        entity.setState(pr.getState().name().toLowerCase());
         entity.setMerged(pr.isMerged());
 
         entity.setCreatedAt(pr.getCreatedAt());
@@ -90,7 +97,25 @@ public class GitHubPullRequestCollector {
         entity.setReviewCommentsCount(pr.getReviewComments());
         entity.setCommitsCount(pr.getCommits());
 
-        prRepository.save(entity);
+        return prRepository.save(entity);
+    }
+
+    private void upsertReviews(GitHubPullRequestEntity entity, GHPullRequest pr) throws IOException {
+        List<GitHubPrReviewEntity> reviews = new ArrayList<>();
+        for (GHPullRequestReview ghReview : pr.listReviews()) {
+            Instant submittedAt = ghReview.getSubmittedAt();
+            if (submittedAt == null) continue;
+
+            GitHubPrReviewEntity review = new GitHubPrReviewEntity();
+            review.setPullRequest(entity);
+            review.setReviewerLogin(ghReview.getUser() != null ? ghReview.getUser().getLogin() : null);
+            review.setState(ghReview.getState() != null ? ghReview.getState().name() : null);
+            review.setSubmittedAt(submittedAt);
+            reviews.add(review);
+        }
+
+        reviewRepository.deleteAllByPullRequest(entity);
+        reviewRepository.saveAll(reviews);
     }
 
     @Transactional(readOnly = true)
