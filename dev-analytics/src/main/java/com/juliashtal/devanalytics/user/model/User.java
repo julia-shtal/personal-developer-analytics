@@ -21,4 +21,7 @@ public class User {
 
     @Column(nullable = false)
     private int tokenVersion = 0;
+
+    // GitHub username — required for attributing PRs from team-scoped repos
+    private String githubLogin;
 }

@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.metrics;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -14,29 +15,54 @@ import java.util.Optional;
 
 public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, Long> {
 
-    List<MetricSnapshot> findByUserAndMetricTypeAndDateBetween(
-            User user,
-            MetricType metricType,
-            LocalDate from,
-            LocalDate to
-    );
+    // -------------------------------------------------------------------------
+    // Personal metrics (team IS NULL)
+    // -------------------------------------------------------------------------
 
-    List<MetricSnapshot> findByUserAndMetricTypeAndRepositoryAndDateBetween(
-            User user,
-            MetricType metricType,
-            GitRepositoryEntity repository,
-            LocalDate from,
-            LocalDate to
-    );
+    List<MetricSnapshot> findByUserAndTeamIsNullAndMetricTypeAndDateBetween(
+            User user, MetricType metricType, LocalDate from, LocalDate to);
 
-    /**
-     * Finds an existing snapshot for upsert purposes.
-     * Handles nullable repository, periodFrom and periodTo correctly via IS NOT DISTINCT FROM
-     * (standard SQL NULL-safe equality, supported by PostgreSQL).
-     */
+    List<MetricSnapshot> findByUserAndTeamIsNullAndMetricTypeAndRepositoryAndDateBetween(
+            User user, MetricType metricType, GitRepositoryEntity repository,
+            LocalDate from, LocalDate to);
+
+    // -------------------------------------------------------------------------
+    // Team-scoped metrics (team = X)
+    // -------------------------------------------------------------------------
+
+    List<MetricSnapshot> findByUserAndTeamAndMetricTypeAndDateBetween(
+            User user, Team team, MetricType metricType, LocalDate from, LocalDate to);
+
+    List<MetricSnapshot> findByUserAndTeamAndMetricTypeAndRepositoryAndDateBetween(
+            User user, Team team, MetricType metricType, GitRepositoryEntity repository,
+            LocalDate from, LocalDate to);
+
+    // -------------------------------------------------------------------------
+    // Team aggregate: all members of a team, for manager view
+    // -------------------------------------------------------------------------
+
+    @Query("""
+            SELECT s FROM MetricSnapshot s
+            WHERE s.user.id IN :userIds
+              AND s.team.id = :teamId
+              AND s.metricType = :metricType
+              AND s.date BETWEEN :from AND :to
+            """)
+    List<MetricSnapshot> findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(
+            @Param("userIds") List<Long> userIds,
+            @Param("teamId") Long teamId,
+            @Param("metricType") MetricType metricType,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
+
+    // -------------------------------------------------------------------------
+    // Upsert guard — includes team_id so personal and team snapshots never clash
+    // -------------------------------------------------------------------------
+
     @Query(nativeQuery = true, value = """
             SELECT * FROM metric_snapshots
-            WHERE user_id        = :userId
+            WHERE user_id       = :userId
+              AND team_id        IS NOT DISTINCT FROM :teamId
               AND repository_id  IS NOT DISTINCT FROM :repoId
               AND date           = :date
               AND metric_type    = :metricType
@@ -46,10 +72,10 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             """)
     Optional<MetricSnapshot> findExisting(
             @Param("userId") Long userId,
+            @Param("teamId") Long teamId,
             @Param("repoId") Long repoId,
             @Param("date") LocalDate date,
             @Param("metricType") String metricType,
             @Param("periodFrom") LocalDate periodFrom,
-            @Param("periodTo") LocalDate periodTo
-    );
+            @Param("periodTo") LocalDate periodTo);
 }

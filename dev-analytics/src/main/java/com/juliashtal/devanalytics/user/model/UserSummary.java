@@ -9,6 +9,7 @@ public class UserSummary {
     private String email;
     private Role role;
     private String timezone;
+    private String githubLogin;
 
     public static UserSummary from(User user) {
         UserSummary dto = new UserSummary();
@@ -17,6 +18,7 @@ public class UserSummary {
         dto.email = user.getEmail();
         dto.role = user.getRole();
         dto.timezone = user.getTimezone();
+        dto.githubLogin = user.getGithubLogin();
         return dto;
     }
 }
