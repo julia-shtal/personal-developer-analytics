@@ -7,6 +7,7 @@ import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
+import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
@@ -33,6 +34,7 @@ public class MetricsService {
     private final MetricSnapshotRepository repository;
     private final GitCommitEntityRepository commitRepository;
     private final GitHubPullRequestRepository pullRequestRepository;
+    private final GitHubPrReviewRepository prReviewRepository;
     private final IssueRepository issueRepository;
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
@@ -92,6 +94,7 @@ public class MetricsService {
         calcLeadTimePrs(user, team, repoIds, fromDate, toDate, from, to);
         calcLeadTimeIssues(user, team, repoIds, fromDate, toDate, from, to);
         calcLeadTimeFirstCommitToMerge(user, team, repoIds, fromDate, toDate, from, to);
+        calcReviewResponseTime(user, team, repoIds, fromDate, toDate, from, to);
         calcFocusRatio(user, team, repoIds, fromDate, toDate, from, to);
     }
 
@@ -288,6 +291,42 @@ public class MetricsService {
             Collections.sort(hours);
             saveMetric(user, team, fromDate, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
                     medianOfLongs(hours), gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
+        });
+    }
+
+    private void calcReviewResponseTime(User user, Team team, List<Long> repoIds,
+                                         LocalDate fromDate, LocalDate toDate, Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+
+        List<GitHubPullRequestEntity> prs;
+        if (team == null) {
+            prs = new ArrayList<>(pullRequestRepository.findMergedPrsByRepoIds(repoIds, from, to));
+        } else {
+            if (user.getGithubLogin() == null) return;
+            prs = new ArrayList<>(pullRequestRepository.findMergedPrsByRepoIdsAndAuthorLogin(
+                    repoIds, user.getGithubLogin(), from, to));
+        }
+        if (prs.isEmpty()) return;
+
+        List<Long> prIds = prs.stream().map(GitHubPullRequestEntity::getId).toList();
+        Map<Long, Instant> firstReviewByPrId = new HashMap<>();
+        for (Object[] row : prReviewRepository.findFirstReviewTimestampsByPrIds(prIds)) {
+            firstReviewByPrId.put(((Number) row[0]).longValue(), (Instant) row[1]);
+        }
+
+        Map<Long, List<Long>> perRepo = new HashMap<>();
+        for (GitHubPullRequestEntity pr : prs) {
+            Instant firstReview = firstReviewByPrId.get(pr.getId());
+            if (firstReview == null || pr.getCreatedAt() == null) continue;
+            long hours = Duration.between(pr.getCreatedAt(), firstReview).toHours();
+            if (hours < 0) continue;
+            perRepo.computeIfAbsent(pr.getRepository().getId(), id -> new ArrayList<>()).add(hours);
+        }
+
+        perRepo.forEach((repoId, values) -> {
+            Collections.sort(values);
+            saveMetric(user, team, fromDate, REVIEW_RESPONSE_TIME_HOURS_MEDIAN, medianOfLongs(values),
+                    gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
         });
     }
 
