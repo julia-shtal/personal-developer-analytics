@@ -4,9 +4,11 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
+import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.juliashtal.devanalytics.user.model.User;
@@ -29,6 +31,7 @@ public class GitRepositoryService {
     private final DataSourceConfigRepository dataSourceRepository;
     private final UserRepository userRepository;
     private final GitCommitEntityRepository commitRepository;
+    private final UserRepoRegistrationRepository userRepoRegRepository;
 
     @Transactional
     public GitRepositoryEntity registerLocalRepo(Long userId, RegisterLocalRepoRequest req) {
@@ -51,7 +54,14 @@ public class GitRepositoryService {
         repo.setLastFetchedCommitHash(null);
         repo.setLastScanAt(LocalDateTime.now());
 
-        return repoRepository.save(repo);
+        GitRepositoryEntity saved = repoRepository.save(repo);
+
+        UserRepoRegistration reg = new UserRepoRegistration();
+        reg.setUser(user);
+        reg.setRepository(saved);
+        userRepoRegRepository.save(reg);
+
+        return saved;
     }
 
     private static String getNormalizedPath(RegisterLocalRepoRequest req, DataSourceConfig dataSource, User user) {

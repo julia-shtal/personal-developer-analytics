@@ -1,16 +1,21 @@
 package com.juliashtal.devanalytics.metrics.service;
 
+import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
+import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.user.model.Role;
+import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
+import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,27 +35,81 @@ public class MetricsService {
     private final GitHubPullRequestRepository pullRequestRepository;
     private final IssueRepository issueRepository;
     private final UserRepository userRepository;
+    private final TeamRepository teamRepository;
     private final GitRepositoryEntityRepository gitRepoRepository;
+    private final UserRepoRegistrationRepository userRepoRegRepository;
 
+    // -------------------------------------------------------------------------
+    // Public API
+    // -------------------------------------------------------------------------
+
+    /** Personal metrics — uses only the user's own data sources, saved with team=null. */
     @Transactional
     public void calculateDailyMetrics(Long userId, LocalDate fromDate, LocalDate toDate) {
         User user = userRepository.getReferenceById(userId);
+        calculateDailyMetricsForUser(user, null, fromDate, toDate);
+    }
 
+    /**
+     * Team-scoped metrics — uses only repos belonging to this specific team,
+     * attributed by author identity. Saved with team=team so they are isolated
+     * from the user's personal metrics and from other teams.
+     */
+    @Transactional
+    public void calculateForTeam(Long teamId, Long requestingUserId, LocalDate fromDate, LocalDate toDate) {
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new NoSuchElementException("Team not found: " + teamId));
+
+        Role role = userRepository.getReferenceById(requestingUserId).getRole();
+        if (role != Role.ADMIN && !team.getManager().getId().equals(requestingUserId)) {
+            throw new ForbiddenException("Only the team manager or an admin can trigger team calculation");
+        }
+
+        for (User member : team.getMembers()) {
+            calculateDailyMetricsForUser(member, team, fromDate, toDate);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Core calculation — dispatches personal vs. team path
+    // -------------------------------------------------------------------------
+
+    private void calculateDailyMetricsForUser(User user, Team team, LocalDate fromDate, LocalDate toDate) {
         Instant from = fromDate.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant to = toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
 
-        calcDailyCommits(user, from, to);
-        calcDailyPrs(user, from, to);
-        calcDailyIssues(user, from, to);
-        calcDailyChurn(user, from, to);
-        calcLeadTimePrs(user, fromDate, toDate, from, to);
-        calcLeadTimeIssues(user, fromDate, toDate, from, to);
-        calcLeadTimeFirstCommitToMerge(user, fromDate, toDate, from, to);
+        // For personal metrics: repos the user explicitly registered (regardless of which
+        // data source owns the row — handles the case where a manager registered first).
+        // For team metrics: repos registered under this team's data sources.
+        List<Long> repoIds = team != null
+                ? gitRepoRepository.findIdsByTeamIds(List.of(team.getId()))
+                : userRepoRegRepository.findRepoIdsByUserId(user.getId());
+
+        calcDailyCommits(user, team, repoIds, from, to);
+//        calcDailyPrs(user, team, repoIds, from, to);
+//        calcDailyIssues(user, team, repoIds, from, to);
+//        calcDailyChurn(user, team, repoIds, from, to);
+//        calcLeadTimePrs(user, team, repoIds, fromDate, toDate, from, to);
+//        calcLeadTimeIssues(user, team, repoIds, fromDate, toDate, from, to);
+//        calcLeadTimeFirstCommitToMerge(user, team, repoIds, fromDate, toDate, from, to);
     }
 
-    private void calcDailyCommits(User user, Instant from, Instant to) {
-        List<Object[]> rows = commitRepository.aggregateCommitsDailyPerRepo(user.getId(), from, to);
-        Map<LocalDate, LongSummaryStatistics> perDayStats = new HashMap<>();
+    // -------------------------------------------------------------------------
+    // Metric calculations
+    // team=null  → personal: query by ds.user.id, save with team=null
+    // team≠null  → team-scoped: query by repoIds+authorEmail, save with team=team
+    // -------------------------------------------------------------------------
+
+    private void calcDailyCommits(User user, Team team, List<Long> repoIds,
+                                  Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+        List<Object[]> rows;
+        if (team == null) {
+            rows = new ArrayList<>(commitRepository.aggregateCommitsDailyByRepoIds(repoIds, from, to));
+        } else {
+            rows = new ArrayList<>(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(
+                    repoIds, user.getEmail(), from, to));
+        }
 
         for (Object[] row : rows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
@@ -59,245 +118,199 @@ public class MetricsService {
             double avgSize = row[3] != null ? ((Number) row[3]).doubleValue() : 0.0;
 
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-
-            saveMetric(user, day, DAILY_COMMITS_COUNT, count, repo, null, null);
-            saveMetric(user, day, DAILY_COMMITS_AVG_SIZE, avgSize, repo, null, null);
-
-            perDayStats
-                    .computeIfAbsent(day, d -> new LongSummaryStatistics())
-                    .accept(count);
-        }
-
-        for (var entry : perDayStats.entrySet()) {
-            LocalDate day = entry.getKey();
-            long total = entry.getValue().getSum();
-            saveMetric(user, day, DAILY_COMMITS_COUNT, total, null, null, null);
+            saveMetric(user, team, day, DAILY_COMMITS_COUNT, count, repo, null, null);
+            saveMetric(user, team, day, DAILY_COMMITS_AVG_SIZE, avgSize, repo, null, null);
         }
     }
 
-    private void calcDailyPrs(User user, Instant from, Instant to) {
-        Map<LocalDate, Long> createdAll = new HashMap<>();
-        Map<LocalDate, Long> mergedAll = new HashMap<>();
+    private void calcDailyPrs(User user, Team team, List<Long> repoIds,
+                              Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+        List<Object[]> createdRows;
+        List<Object[]> mergedRows;
 
-        var createdRows = pullRequestRepository.aggregatePrCreatedDailyPerRepo(user.getId(), from, to);
-        for (Object[] row : createdRows) {
-            LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
-            Long repoId = ((Number) row[1]).longValue();
-            long count = ((Number) row[2]).longValue();
-
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_PR_CREATED, count, repo, null, null);
-
-            createdAll.merge(day, count, Long::sum);
+        if (team == null) {
+            createdRows = new ArrayList<>(pullRequestRepository.aggregatePrCreatedDailyByRepoIds(repoIds, from, to));
+            mergedRows  = new ArrayList<>(pullRequestRepository.aggregatePrMergedDailyByRepoIds(repoIds, from, to));
+        } else {
+            if (user.getGithubLogin() == null) return;
+            createdRows = new ArrayList<>(pullRequestRepository.aggregatePrCreatedDailyByRepoIdsAndAuthorLogin(
+                    repoIds, user.getGithubLogin(), from, to));
+            mergedRows  = new ArrayList<>(pullRequestRepository.aggregatePrMergedDailyByRepoIdsAndAuthorLogin(
+                    repoIds, user.getGithubLogin(), from, to));
         }
 
-        var mergedRows = pullRequestRepository.aggregatePrMergedDailyPerRepo(user.getId(), from, to);
+        for (Object[] row : createdRows) {
+            LocalDate day   = ((java.sql.Date) row[0]).toLocalDate();
+            Long repoId     = ((Number) row[1]).longValue();
+            long count      = ((Number) row[2]).longValue();
+            saveMetric(user, team, day, DAILY_PR_CREATED, count,
+                    gitRepoRepository.getReferenceById(repoId), null, null);
+        }
+
         for (Object[] row : mergedRows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
-            Long repoId = ((Number) row[1]).longValue();
-            long count = ((Number) row[2]).longValue();
-
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_PR_MERGED, count, repo, null, null);
-
-            mergedAll.merge(day, count, Long::sum);
+            Long repoId   = ((Number) row[1]).longValue();
+            long count    = ((Number) row[2]).longValue();
+            saveMetric(user, team, day, DAILY_PR_MERGED, count,
+                    gitRepoRepository.getReferenceById(repoId), null, null);
         }
-
-        createdAll.forEach((day, total) ->
-                saveMetric(user, day, DAILY_PR_CREATED, total, null, null, null));
-        mergedAll.forEach((day, total) ->
-                saveMetric(user, day, DAILY_PR_MERGED, total, null, null, null));
     }
 
-    private void calcDailyIssues(User user, Instant from, Instant to) {
-        Map<LocalDate, Long> createdAll = new HashMap<>();
-        Map<LocalDate, Long> closedAll = new HashMap<>();
+    private void calcDailyIssues(User user, Team team, List<Long> repoIds,
+                                 Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+        // Issues are project-level — no author filter for either personal or team path
+        List<Object[]> createdRows = new ArrayList<>(issueRepository.aggregateIssuesCreatedDailyByRepoIds(repoIds, from, to));
+        List<Object[]> closedRows  = new ArrayList<>(issueRepository.aggregateIssuesClosedDailyByRepoIds(repoIds, from, to));
 
-        var createdRows = issueRepository.aggregateIssuesCreatedDailyPerRepo(user.getId(), from, to);
         for (Object[] row : createdRows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
-            Long repoId = ((Number) row[1]).longValue();
-            long count = ((Number) row[2]).longValue();
-
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_ISSUES_CREATED, count, repo, null, null);
-
-            createdAll.merge(day, count, Long::sum);
+            Long repoId   = ((Number) row[1]).longValue();
+            long count    = ((Number) row[2]).longValue();
+            saveMetric(user, team, day, DAILY_ISSUES_CREATED, count,
+                    gitRepoRepository.getReferenceById(repoId), null, null);
         }
 
-        var closedRows = issueRepository.aggregateIssuesClosedDailyPerRepo(user.getId(), from, to);
         for (Object[] row : closedRows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
-            Long repoId = ((Number) row[1]).longValue();
-            long count = ((Number) row[2]).longValue();
-
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_ISSUES_CLOSED, count, repo, null, null);
-
-            closedAll.merge(day, count, Long::sum);
+            Long repoId   = ((Number) row[1]).longValue();
+            long count    = ((Number) row[2]).longValue();
+            saveMetric(user, team, day, DAILY_ISSUES_CLOSED, count,
+                    gitRepoRepository.getReferenceById(repoId), null, null);
         }
-
-        createdAll.forEach((day, total) ->
-                saveMetric(user, day, DAILY_ISSUES_CREATED, total, null, null, null));
-        closedAll.forEach((day, total) ->
-                saveMetric(user, day, DAILY_ISSUES_CLOSED, total, null, null, null));
     }
 
-    private void calcDailyChurn(User user, Instant from, Instant to) {
-        Map<LocalDate, Long> totalAdditions = new HashMap<>();
-        Map<LocalDate, Long> totalDeletions = new HashMap<>();
+    private void calcDailyChurn(User user, Team team, List<Long> repoIds,
+                                Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+        List<Object[]> rows;
+        if (team == null) {
+            rows = new ArrayList<>(commitRepository.aggregateChurnDailyByRepoIds(repoIds, from, to));
+        } else {
+            rows = new ArrayList<>(commitRepository.aggregateChurnDailyByRepoIdsAndAuthorEmail(
+                    repoIds, user.getEmail(), from, to));
+        }
 
-        var rows = commitRepository.aggregateChurnDailyPerRepo(user.getId(), from, to);
         for (Object[] row : rows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
-            Long repoId = ((Number) row[1]).longValue();
-            long additions = ((Number) row[2]).longValue();
-            long deletions = ((Number) row[3]).longValue();
+            Long repoId   = ((Number) row[1]).longValue();
+            long add      = ((Number) row[2]).longValue();
+            long del      = ((Number) row[3]).longValue();
 
-            long total = additions + deletions;
-            double churn = total > 0 ? (double) deletions / total : 0.0;
-
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, day, DAILY_CHURN_RATIO, churn, repo, null, null);
-
-            totalAdditions.merge(day, additions, Long::sum);
-            totalDeletions.merge(day, deletions, Long::sum);
-        }
-
-        for (LocalDate day : totalAdditions.keySet()) {
-            long add = totalAdditions.getOrDefault(day, 0L);
-            long del = totalDeletions.getOrDefault(day, 0L);
             long total = add + del;
-            double churnAll = total > 0 ? (double) del / total : 0.0;
-            saveMetric(user, day, DAILY_CHURN_RATIO, churnAll, null, null, null);
+            double churn = total > 0 ? (double) del / total : 0.0;
+            saveMetric(user, team, day, DAILY_CHURN_RATIO, churn,
+                    gitRepoRepository.getReferenceById(repoId), null, null);
         }
     }
 
-    private void calcLeadTimePrs(User user, LocalDate fromDate, LocalDate toDate,
-                                 Instant from, Instant to) {
-        var rows = pullRequestRepository.findMergedLeadTimesPerRepo(user.getId(), from, to);
+    private void calcLeadTimePrs(User user, Team team, List<Long> repoIds,
+                                 LocalDate fromDate, LocalDate toDate, Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+        List<Object[]> rows;
+        if (team == null) {
+            rows = new ArrayList<>(pullRequestRepository.findMergedLeadTimesByRepoIds(repoIds, from, to));
+        } else {
+            if (user.getGithubLogin() == null) return;
+            rows = new ArrayList<>(pullRequestRepository.findMergedLeadTimesByRepoIdsAndAuthorLogin(
+                    repoIds, user.getGithubLogin(), from, to));
+        }
 
         Map<Long, List<Long>> perRepo = new HashMap<>();
-        List<Long> all = new ArrayList<>();
 
         for (Object[] row : rows) {
-            Long repoId = ((Number) row[0]).longValue();
+            Long repoId  = ((Number) row[0]).longValue();
             Instant created = (Instant) row[1];
-            Instant merged = (Instant) row[2];
+            Instant merged  = (Instant) row[2];
             long hours = Duration.between(created, merged).toHours();
-
             perRepo.computeIfAbsent(repoId, id -> new ArrayList<>()).add(hours);
-            all.add(hours);
         }
 
         perRepo.forEach((repoId, values) -> {
             Collections.sort(values);
-            double median = medianOfLongs(values);
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, fromDate, PR_LEAD_TIME_HOURS_MEDIAN, median, repo, fromDate, toDate);
+            saveMetric(user, team, fromDate, PR_LEAD_TIME_HOURS_MEDIAN, medianOfLongs(values),
+                    gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
         });
-
-        if (!all.isEmpty()) {
-            Collections.sort(all);
-            double medianAll = medianOfLongs(all);
-            saveMetric(user, fromDate, PR_LEAD_TIME_HOURS_MEDIAN, medianAll, null, fromDate, toDate);
-        }
     }
 
-    private void calcLeadTimeIssues(User user, LocalDate fromDate, LocalDate toDate,
-                                    Instant from, Instant to) {
-        var rows = issueRepository.findIssueLeadTimesPerRepo(user.getId(), from, to);
+    private void calcLeadTimeIssues(User user, Team team, List<Long> repoIds,
+                                    LocalDate fromDate, LocalDate toDate, Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+        // Issues are project-level — no author filter for either path
+        List<Object[]> rows = new ArrayList<>(issueRepository.findIssueLeadTimesByRepoIds(repoIds, from, to));
 
         Map<Long, List<Long>> perRepo = new HashMap<>();
-        List<Long> all = new ArrayList<>();
 
         for (Object[] row : rows) {
-            Long repoId = ((Number) row[0]).longValue();
+            Long repoId     = ((Number) row[0]).longValue();
             Instant created = (Instant) row[1];
-            Instant closed = (Instant) row[2];
+            Instant closed  = (Instant) row[2];
             long hours = Duration.between(created, closed).toHours();
-
             perRepo.computeIfAbsent(repoId, id -> new ArrayList<>()).add(hours);
-            all.add(hours);
         }
 
         perRepo.forEach((repoId, values) -> {
             Collections.sort(values);
-            double median = medianOfLongs(values);
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, fromDate, ISSUE_LEAD_TIME_HOURS_MEDIAN, median, repo, fromDate, toDate);
+            saveMetric(user, team, fromDate, ISSUE_LEAD_TIME_HOURS_MEDIAN, medianOfLongs(values),
+                    gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
         });
-
-        if (!all.isEmpty()) {
-            Collections.sort(all);
-            double medianAll = medianOfLongs(all);
-            saveMetric(user, fromDate, ISSUE_LEAD_TIME_HOURS_MEDIAN, medianAll, null, fromDate, toDate);
-        }
     }
 
-    private void calcLeadTimeFirstCommitToMerge(User user, LocalDate fromDate, LocalDate toDate,
+    private void calcLeadTimeFirstCommitToMerge(User user, Team team, List<Long> repoIds,
+                                                LocalDate fromDate, LocalDate toDate,
                                                 Instant from, Instant to) {
-        var prs = pullRequestRepository.findMergedPrsForLeadTime(user.getId(), from, to);
+        if (repoIds.isEmpty()) return;
+        List<GitHubPullRequestEntity> prs;
+        if (team == null) {
+            prs = new ArrayList<>(pullRequestRepository.findMergedPrsByRepoIds(repoIds, from, to));
+        } else {
+            if (user.getGithubLogin() == null) return;
+            prs = new ArrayList<>(pullRequestRepository.findMergedPrsByRepoIdsAndAuthorLogin(
+                    repoIds, user.getGithubLogin(), from, to));
+        }
+
         Map<Long, List<Long>> perRepo = new HashMap<>();
 
         for (GitHubPullRequestEntity pr : prs) {
             List<GitCommitEntity> commits =
                     commitRepository.findCommitsForPr(pr.getRepository(), pr.getNumber());
+            if (commits.isEmpty() || pr.getMergedAt() == null) continue;
 
-            if (commits.isEmpty() || pr.getMergedAt() == null)
-                continue;
-
-            Instant firstCommitTime = commits.get(0).getAuthorDate();
-            long hours = Duration.between(firstCommitTime, pr.getMergedAt()).toHours();
+            long hours = Duration.between(commits.get(0).getAuthorDate(), pr.getMergedAt()).toHours();
             pr.setLeadTimeHours(hours);
-
-            perRepo.computeIfAbsent(pr.getRepository().getId(), id -> new ArrayList<>())
-                    .add(hours);
+            perRepo.computeIfAbsent(pr.getRepository().getId(), id -> new ArrayList<>()).add(hours);
         }
         pullRequestRepository.saveAll(prs);
 
-        List<Long> allHours = new ArrayList<>();
-
-        for (var entry : perRepo.entrySet()) {
-            Long repoId = entry.getKey();
-            List<Long> hours = entry.getValue();
+        perRepo.forEach((repoId, hours) -> {
             Collections.sort(hours);
-            double median = medianOfLongs(hours);
-
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            saveMetric(user, fromDate, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
-                    median, repo, fromDate, toDate);
-
-            allHours.addAll(hours);
-        }
-
-        if (!allHours.isEmpty()) {
-            Collections.sort(allHours);
-            double medianAll = medianOfLongs(allHours);
-            saveMetric(user, fromDate, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
-                    medianAll, null, fromDate, toDate);
-        }
+            saveMetric(user, team, fromDate, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
+                    medianOfLongs(hours), gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
+        });
     }
 
-    /**
-     * Saves a metric snapshot. If an identical snapshot already exists
-     * (same user, repository, date, metricType, periodFrom, periodTo) its value
-     * is updated in place instead of inserting a duplicate row.
-     */
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
     private void saveMetric(User user,
+                            Team team,
                             LocalDate date,
                             MetricType metricType,
                             double value,
                             GitRepositoryEntity repo,
                             LocalDate periodFrom,
                             LocalDate periodTo) {
-        Long repoId = repo != null ? repo.getId() : null;
+        Long teamId = team != null ? team.getId() : null;
+        Long repoId = repo  != null ? repo.getId()  : null;
 
         MetricSnapshot snapshot = repository
-                .findExisting(user.getId(), repoId, date, metricType.name(), periodFrom, periodTo)
+                .findExisting(user.getId(), teamId, repoId, date, metricType.name(), periodFrom, periodTo)
                 .orElseGet(MetricSnapshot::new);
 
         snapshot.setUser(user);
+        snapshot.setTeam(team);
         snapshot.setRepository(repo);
         snapshot.setDate(date);
         snapshot.setMetricType(metricType);
