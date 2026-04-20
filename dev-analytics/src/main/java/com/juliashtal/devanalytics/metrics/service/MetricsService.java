@@ -86,12 +86,13 @@ public class MetricsService {
                 : userRepoRegRepository.findRepoIdsByUserId(user.getId());
 
         calcDailyCommits(user, team, repoIds, from, to);
-//        calcDailyPrs(user, team, repoIds, from, to);
-//        calcDailyIssues(user, team, repoIds, from, to);
-//        calcDailyChurn(user, team, repoIds, from, to);
-//        calcLeadTimePrs(user, team, repoIds, fromDate, toDate, from, to);
-//        calcLeadTimeIssues(user, team, repoIds, fromDate, toDate, from, to);
-//        calcLeadTimeFirstCommitToMerge(user, team, repoIds, fromDate, toDate, from, to);
+        calcDailyPrs(user, team, repoIds, from, to);
+        calcDailyIssues(user, team, repoIds, from, to);
+        calcDailyChurn(user, team, repoIds, from, to);
+        calcLeadTimePrs(user, team, repoIds, fromDate, toDate, from, to);
+        calcLeadTimeIssues(user, team, repoIds, fromDate, toDate, from, to);
+        calcLeadTimeFirstCommitToMerge(user, team, repoIds, fromDate, toDate, from, to);
+        calcFocusRatio(user, team, repoIds, fromDate, toDate, from, to);
     }
 
     // -------------------------------------------------------------------------
@@ -288,6 +289,29 @@ public class MetricsService {
             saveMetric(user, team, fromDate, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
                     medianOfLongs(hours), gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
         });
+    }
+
+    private void calcFocusRatio(User user, Team team, List<Long> repoIds,
+                                LocalDate fromDate, LocalDate toDate, Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+
+        List<Object[]> rows = team == null
+                ? new ArrayList<>(commitRepository.aggregateCommitsDailyByRepoIds(repoIds, from, to))
+                : new ArrayList<>(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(
+                        repoIds, user.getEmail(), from, to));
+
+        Set<LocalDate> daysWithCommits = new HashSet<>();
+        for (Object[] row : rows) {
+            long count = ((Number) row[2]).longValue();
+            if (count > 0) daysWithCommits.add(((java.sql.Date) row[0]).toLocalDate());
+        }
+
+        for (LocalDate day = fromDate; !day.isAfter(toDate); day = day.plusDays(1)) {
+            DayOfWeek dow = day.getDayOfWeek();
+            if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) continue;
+            double value = daysWithCommits.contains(day) ? 1.0 : 0.0;
+            saveMetric(user, team, day, FOCUS_RATIO_DAYS_TASKS, value, null, null, null);
+        }
     }
 
     // -------------------------------------------------------------------------
