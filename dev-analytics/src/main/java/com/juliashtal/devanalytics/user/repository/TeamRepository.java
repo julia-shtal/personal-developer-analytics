@@ -10,6 +10,12 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
     List<Team> findByManagerId(Long managerId);
 
+    List<Team> findByMembersId(Long userId);
+
+    boolean existsByIdAndManagerId(Long teamId, Long managerId);
+
+    boolean existsByIdAndMembersId(Long teamId, Long userId);
+
     @Query("SELECT tm.id FROM Team t JOIN t.members tm WHERE t.manager.id = :managerId")
     List<Long> findTeamMemberIdsByManagerId(Long managerId);
 }

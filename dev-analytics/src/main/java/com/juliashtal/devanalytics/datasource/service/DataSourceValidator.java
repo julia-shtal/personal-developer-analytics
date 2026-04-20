@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.datasource.service;
 
+import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +14,10 @@ public class DataSourceValidator {
     public void validateCreate(CreateDataSourceRequest req) {
         if (req.getType() == null) {
             throw new IllegalArgumentException("Data source type is required");
+        }
+
+        if (req.getTeamId() != null && req.getType() == DataSourceType.GIT_LOCAL) {
+            throw new IllegalArgumentException("GIT_LOCAL data sources cannot be team-scoped (local paths are personal)");
         }
 
         switch (req.getType()) {

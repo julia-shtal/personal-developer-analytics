@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.user.service;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.model.Team;
+import com.juliashtal.devanalytics.user.model.TeamDto;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,7 @@ public class TeamService {
     private final UserRepository userRepository;
 
     @Transactional
-    public Team createTeam(String name) {
+    public TeamDto createTeam(String name) {
         Long managerId = SecurityUtils.getCurrentUserId();
         User manager = userRepository.findById(managerId)
                 .orElseThrow(() -> new NoSuchElementException("User not found"));
@@ -28,16 +29,19 @@ public class TeamService {
         Team team = new Team();
         team.setName(name);
         team.setManager(manager);
-        return teamRepository.save(team);
+        return TeamDto.from(teamRepository.save(team));
     }
 
-    public List<Team> getMyTeams() {
+    @Transactional(readOnly = true)
+    public List<TeamDto> getMyTeams() {
         Long managerId = SecurityUtils.getCurrentUserId();
-        return teamRepository.findByManagerId(managerId);
+        return teamRepository.findByManagerId(managerId).stream()
+                .map(TeamDto::from)
+                .toList();
     }
 
     @Transactional
-    public Team addMember(Long teamId, Long userId) {
+    public TeamDto addMember(Long teamId, Long userId) {
         Long managerId = SecurityUtils.getCurrentUserId();
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new NoSuchElementException("Team not found"));
@@ -50,11 +54,11 @@ public class TeamService {
                 .orElseThrow(() -> new NoSuchElementException("User not found"));
 
         team.getMembers().add(member);
-        return teamRepository.save(team);
+        return TeamDto.from(teamRepository.save(team));
     }
 
     @Transactional
-    public Team removeMember(Long teamId, Long userId) {
+    public TeamDto removeMember(Long teamId, Long userId) {
         Long managerId = SecurityUtils.getCurrentUserId();
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new NoSuchElementException("Team not found"));
@@ -64,6 +68,6 @@ public class TeamService {
         }
 
         team.getMembers().removeIf(m -> m.getId().equals(userId));
-        return teamRepository.save(team);
+        return TeamDto.from(teamRepository.save(team));
     }
 }

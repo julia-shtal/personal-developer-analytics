@@ -42,6 +42,7 @@ public class AuthService {
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.DEVELOPER);
+        user.setGithubLogin(request.getGithubLogin());
 
         userRepository.save(user);
     }
