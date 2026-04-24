@@ -41,6 +41,25 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
     // Team aggregate: all members of a team, for manager view
     // -------------------------------------------------------------------------
 
+    /**
+     * Personal snapshots (team IS NULL) for a list of users — used by the
+     * manager team-view so it shows real member data regardless of whether
+     * a separate team-scoped calculation was ever triggered.
+     */
+    @Query("""
+            SELECT s FROM MetricSnapshot s
+            WHERE s.user.id IN :userIds
+              AND s.team IS NULL
+              AND s.metricType = :metricType
+              AND s.date BETWEEN :from AND :to
+            """)
+    List<MetricSnapshot> findPersonalByUserIdsAndMetricTypeAndDateBetween(
+            @Param("userIds") List<Long> userIds,
+            @Param("metricType") MetricType metricType,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
+
+    /** Legacy: team-scoped snapshots — kept for future team-datasource use. */
     @Query("""
             SELECT s FROM MetricSnapshot s
             WHERE s.user.id IN :userIds

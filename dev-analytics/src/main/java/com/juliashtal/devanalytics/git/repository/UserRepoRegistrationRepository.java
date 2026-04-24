@@ -11,6 +11,8 @@ public interface UserRepoRegistrationRepository extends JpaRepository<UserRepoRe
 
     boolean existsByUserIdAndRepositoryId(Long userId, Long repositoryId);
 
+    java.util.Optional<UserRepoRegistration> findByUserIdAndRepositoryId(Long userId, Long repositoryId);
+
     @Query("SELECT urr.repository.id FROM UserRepoRegistration urr WHERE urr.user.id = :userId")
     List<Long> findRepoIdsByUserId(@Param("userId") Long userId);
 }
