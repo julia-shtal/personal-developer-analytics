@@ -56,7 +56,20 @@ public class SecurityConfig {
                                 "/api/auth/forgot-password",
                                 "/api/auth/reset-password",
                                 "/reset-password.html",
-                                "/actuator/health"
+                                "/actuator/health",
+                                // SPA static assets and entry points
+                                "/",
+                                "/index.html",
+                                "/login",
+                                "/register",
+                                "/dashboard",
+                                "/team",
+                                "/datasources",
+                                "/settings",
+                                "/assets/**",
+                                "/*.svg",
+                                "/*.ico",
+                                "/*.png"
                         ).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/teams/**").hasAnyRole("MANAGER", "ADMIN")
@@ -72,7 +85,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:8080"));
+        config.setAllowedOrigins(List.of("http://localhost:8080", "http://localhost:5173"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
