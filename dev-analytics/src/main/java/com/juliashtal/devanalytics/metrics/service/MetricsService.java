@@ -80,12 +80,29 @@ public class MetricsService {
         Instant from = fromDate.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant to = toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
 
-        // For personal metrics: repos the user explicitly registered (regardless of which
-        // data source owns the row — handles the case where a manager registered first).
-        // For team metrics: repos registered under this team's data sources.
-        List<Long> repoIds = team != null
-                ? gitRepoRepository.findIdsByTeamIds(List.of(team.getId()))
-                : userRepoRegRepository.findRepoIdsByUserId(user.getId());
+        // For personal metrics: repos the user explicitly registered.
+        // For team metrics: repos registered under the team's data sources.
+        // Fall back to the user's own repos when the team has no team-scoped data
+        // sources yet — this is the common case when repos are user-scoped.
+        List<Long> repoIds;
+        if (team != null) {
+            repoIds = gitRepoRepository.findIdsByTeamIds(List.of(team.getId()));
+            if (repoIds.isEmpty()) {
+                repoIds = userRepoRegRepository.findRepoIdsByUserId(user.getId());
+            }
+        } else {
+            // Personal: use explicitly registered repos.
+            // Fall back to repos from the user's team memberships so that a developer
+            // who has never manually registered repos still sees their own commits.
+            repoIds = userRepoRegRepository.findRepoIdsByUserId(user.getId());
+            if (repoIds.isEmpty()) {
+                List<Long> memberTeamIds = teamRepository.findByMembersId(user.getId())
+                        .stream().map(Team::getId).toList();
+                if (!memberTeamIds.isEmpty()) {
+                    repoIds = gitRepoRepository.findIdsByTeamIds(memberTeamIds);
+                }
+            }
+        }
 
         calcDailyCommits(user, team, repoIds, from, to);
         calcDailyPrs(user, team, repoIds, from, to);
@@ -100,25 +117,24 @@ public class MetricsService {
 
     // -------------------------------------------------------------------------
     // Metric calculations
-    // team=null  → personal: query by ds.user.id, save with team=null
-    // team≠null  → team-scoped: query by repoIds+authorEmail, save with team=team
+    // Attribution is ALWAYS by author identity — team only controls where the
+    // snapshot is saved (personal=null vs team-scoped=team).
+    // This prevents a manager who registered a shared repo from seeing all
+    // developers' commits credited to their own personal dashboard.
     // -------------------------------------------------------------------------
 
     private void calcDailyCommits(User user, Team team, List<Long> repoIds,
                                   Instant from, Instant to) {
         if (repoIds.isEmpty()) return;
-        List<Object[]> rows;
-        if (team == null) {
-            rows = new ArrayList<>(commitRepository.aggregateCommitsDailyByRepoIds(repoIds, from, to));
-        } else {
-            rows = new ArrayList<>(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(
-                    repoIds, user.getEmail(), from, to));
-        }
+
+        // Always filter by author email so only the user's own commits are counted.
+        List<Object[]> rows = new ArrayList<>(commitRepository
+                .aggregateCommitsDailyByRepoIdsAndAuthorEmail(repoIds, user.getEmail(), from, to));
 
         for (Object[] row : rows) {
-            LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
-            Long repoId = ((Number) row[1]).longValue();
-            long count = ((Number) row[2]).longValue();
+            LocalDate day  = ((java.sql.Date) row[0]).toLocalDate();
+            Long repoId    = ((Number) row[1]).longValue();
+            long count     = ((Number) row[2]).longValue();
             double avgSize = row[3] != null ? ((Number) row[3]).doubleValue() : 0.0;
 
             GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
@@ -130,24 +146,20 @@ public class MetricsService {
     private void calcDailyPrs(User user, Team team, List<Long> repoIds,
                               Instant from, Instant to) {
         if (repoIds.isEmpty()) return;
-        List<Object[]> createdRows;
-        List<Object[]> mergedRows;
 
-        if (team == null) {
-            createdRows = new ArrayList<>(pullRequestRepository.aggregatePrCreatedDailyByRepoIds(repoIds, from, to));
-            mergedRows  = new ArrayList<>(pullRequestRepository.aggregatePrMergedDailyByRepoIds(repoIds, from, to));
-        } else {
-            if (user.getGithubLogin() == null) return;
-            createdRows = new ArrayList<>(pullRequestRepository.aggregatePrCreatedDailyByRepoIdsAndAuthorLogin(
-                    repoIds, user.getGithubLogin(), from, to));
-            mergedRows  = new ArrayList<>(pullRequestRepository.aggregatePrMergedDailyByRepoIdsAndAuthorLogin(
-                    repoIds, user.getGithubLogin(), from, to));
-        }
+        // GitHub PRs are attributed by login. Skip if not configured — the user
+        // can set their GitHub login in Settings to enable PR metrics.
+        if (user.getGithubLogin() == null) return;
+
+        List<Object[]> createdRows = new ArrayList<>(pullRequestRepository
+                .aggregatePrCreatedDailyByRepoIdsAndAuthorLogin(repoIds, user.getGithubLogin(), from, to));
+        List<Object[]> mergedRows  = new ArrayList<>(pullRequestRepository
+                .aggregatePrMergedDailyByRepoIdsAndAuthorLogin(repoIds, user.getGithubLogin(), from, to));
 
         for (Object[] row : createdRows) {
-            LocalDate day   = ((java.sql.Date) row[0]).toLocalDate();
-            Long repoId     = ((Number) row[1]).longValue();
-            long count      = ((Number) row[2]).longValue();
+            LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
+            Long repoId   = ((Number) row[1]).longValue();
+            long count    = ((Number) row[2]).longValue();
             saveMetric(user, team, day, DAILY_PR_CREATED, count,
                     gitRepoRepository.getReferenceById(repoId), null, null);
         }
@@ -188,13 +200,9 @@ public class MetricsService {
     private void calcDailyChurn(User user, Team team, List<Long> repoIds,
                                 Instant from, Instant to) {
         if (repoIds.isEmpty()) return;
-        List<Object[]> rows;
-        if (team == null) {
-            rows = new ArrayList<>(commitRepository.aggregateChurnDailyByRepoIds(repoIds, from, to));
-        } else {
-            rows = new ArrayList<>(commitRepository.aggregateChurnDailyByRepoIdsAndAuthorEmail(
-                    repoIds, user.getEmail(), from, to));
-        }
+        // Always filter by author email — churn should reflect the user's own code changes.
+        List<Object[]> rows = new ArrayList<>(commitRepository
+                .aggregateChurnDailyByRepoIdsAndAuthorEmail(repoIds, user.getEmail(), from, to));
 
         for (Object[] row : rows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
@@ -212,14 +220,9 @@ public class MetricsService {
     private void calcLeadTimePrs(User user, Team team, List<Long> repoIds,
                                  LocalDate fromDate, LocalDate toDate, Instant from, Instant to) {
         if (repoIds.isEmpty()) return;
-        List<Object[]> rows;
-        if (team == null) {
-            rows = new ArrayList<>(pullRequestRepository.findMergedLeadTimesByRepoIds(repoIds, from, to));
-        } else {
-            if (user.getGithubLogin() == null) return;
-            rows = new ArrayList<>(pullRequestRepository.findMergedLeadTimesByRepoIdsAndAuthorLogin(
-                    repoIds, user.getGithubLogin(), from, to));
-        }
+        if (user.getGithubLogin() == null) return;
+        List<Object[]> rows = new ArrayList<>(pullRequestRepository
+                .findMergedLeadTimesByRepoIdsAndAuthorLogin(repoIds, user.getGithubLogin(), from, to));
 
         Map<Long, List<Long>> perRepo = new HashMap<>();
 
@@ -265,14 +268,9 @@ public class MetricsService {
                                                 LocalDate fromDate, LocalDate toDate,
                                                 Instant from, Instant to) {
         if (repoIds.isEmpty()) return;
-        List<GitHubPullRequestEntity> prs;
-        if (team == null) {
-            prs = new ArrayList<>(pullRequestRepository.findMergedPrsByRepoIds(repoIds, from, to));
-        } else {
-            if (user.getGithubLogin() == null) return;
-            prs = new ArrayList<>(pullRequestRepository.findMergedPrsByRepoIdsAndAuthorLogin(
-                    repoIds, user.getGithubLogin(), from, to));
-        }
+        if (user.getGithubLogin() == null) return;
+        List<GitHubPullRequestEntity> prs = new ArrayList<>(pullRequestRepository
+                .findMergedPrsByRepoIdsAndAuthorLogin(repoIds, user.getGithubLogin(), from, to));
 
         Map<Long, List<Long>> perRepo = new HashMap<>();
 
@@ -297,15 +295,10 @@ public class MetricsService {
     private void calcReviewResponseTime(User user, Team team, List<Long> repoIds,
                                          LocalDate fromDate, LocalDate toDate, Instant from, Instant to) {
         if (repoIds.isEmpty()) return;
+        if (user.getGithubLogin() == null) return;
 
-        List<GitHubPullRequestEntity> prs;
-        if (team == null) {
-            prs = new ArrayList<>(pullRequestRepository.findMergedPrsByRepoIds(repoIds, from, to));
-        } else {
-            if (user.getGithubLogin() == null) return;
-            prs = new ArrayList<>(pullRequestRepository.findMergedPrsByRepoIdsAndAuthorLogin(
-                    repoIds, user.getGithubLogin(), from, to));
-        }
+        List<GitHubPullRequestEntity> prs = new ArrayList<>(pullRequestRepository
+                .findMergedPrsByRepoIdsAndAuthorLogin(repoIds, user.getGithubLogin(), from, to));
         if (prs.isEmpty()) return;
 
         List<Long> prIds = prs.stream().map(GitHubPullRequestEntity::getId).toList();
@@ -334,10 +327,9 @@ public class MetricsService {
                                 LocalDate fromDate, LocalDate toDate, Instant from, Instant to) {
         if (repoIds.isEmpty()) return;
 
-        List<Object[]> rows = team == null
-                ? new ArrayList<>(commitRepository.aggregateCommitsDailyByRepoIds(repoIds, from, to))
-                : new ArrayList<>(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(
-                        repoIds, user.getEmail(), from, to));
+        // Always filter by author email — focus ratio reflects the user's own active days.
+        List<Object[]> rows = new ArrayList<>(commitRepository
+                .aggregateCommitsDailyByRepoIdsAndAuthorEmail(repoIds, user.getEmail(), from, to));
 
         Set<LocalDate> daysWithCommits = new HashSet<>();
         for (Object[] row : rows) {
@@ -345,11 +337,16 @@ public class MetricsService {
             if (count > 0) daysWithCommits.add(((java.sql.Date) row[0]).toLocalDate());
         }
 
-        for (LocalDate day = fromDate; !day.isAfter(toDate); day = day.plusDays(1)) {
+        // Only persist days with commits (value = 1.0). Zero-commit weekdays are not
+        // stored, which avoids O(range_days) DB writes. The aggregate endpoint computes
+        // the ratio as saved_count / total_weekdays on the read side.
+        for (LocalDate day : daysWithCommits) {
             DayOfWeek dow = day.getDayOfWeek();
-            if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) continue;
-            double value = daysWithCommits.contains(day) ? 1.0 : 0.0;
-            saveMetric(user, team, day, FOCUS_RATIO_DAYS_TASKS, value, null, null, null);
+            boolean inRange = !day.isBefore(fromDate) && !day.isAfter(toDate);
+            boolean isWeekday = dow != DayOfWeek.SATURDAY && dow != DayOfWeek.SUNDAY;
+            if (inRange && isWeekday) {
+                saveMetric(user, team, day, FOCUS_RATIO_DAYS_TASKS, 1.0, null, null, null);
+            }
         }
     }
 

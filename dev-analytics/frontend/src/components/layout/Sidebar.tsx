@@ -2,12 +2,14 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
+  UserCog,
   Database,
   Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
   Activity,
+  ShieldAlert,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
@@ -53,9 +55,16 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </NavLink>
 
         {(isManager || isAdmin) && (
-          <NavLink to="/team" className={navItemClass} title="Team">
+          <NavLink to="/team" className={navItemClass} title="Team metrics">
             <Users className="h-4 w-4 flex-shrink-0" />
-            {!collapsed && <span>Team</span>}
+            {!collapsed && <span>Team metrics</span>}
+          </NavLink>
+        )}
+
+        {(isManager || isAdmin) && (
+          <NavLink to="/team-manage" className={navItemClass} title="Manage teams">
+            <UserCog className="h-4 w-4 flex-shrink-0" />
+            {!collapsed && <span>Manage teams</span>}
           </NavLink>
         )}
 
@@ -68,6 +77,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <Settings className="h-4 w-4 flex-shrink-0" />
           {!collapsed && <span>Settings</span>}
         </NavLink>
+
+        {isAdmin && (
+          <NavLink to="/admin" className={navItemClass} title="Admin">
+            <ShieldAlert className="h-4 w-4 flex-shrink-0" />
+            {!collapsed && <span>Admin</span>}
+          </NavLink>
+        )}
       </nav>
 
       {/* User + logout */}
