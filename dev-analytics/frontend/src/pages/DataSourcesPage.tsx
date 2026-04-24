@@ -1,14 +1,20 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Database, GitBranch, Layers, AlertCircle } from 'lucide-react';
+import {
+  Plus, Trash2, Database, GitBranch, Layers, AlertCircle,
+  ChevronDown, ChevronRight, BookOpen, Link, Unlink,
+} from 'lucide-react';
 import { datasourcesApi } from '@/api/datasources';
+import { reposApi } from '@/api/repos';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { PageSpinner } from '@/components/ui/Spinner';
-import type { DataSourceType, CreateDataSourceRequest } from '@/types';
+import type { DataSourceType, CreateDataSourceRequest, RepoDto } from '@/types';
+
+// ─── Type helpers ─────────────────────────────────────────────────────────────
 
 const TYPE_LABELS: Record<DataSourceType, string> = {
   GIT_LOCAL: 'Local Git',
@@ -31,25 +37,112 @@ function TypeIcon({ type }: { type: DataSourceType }) {
 }
 
 const TYPE_OPTIONS = [
-  { value: 'GIT_LOCAL', label: 'Local Git repository' },
-  { value: 'GITHUB', label: 'GitHub' },
-  { value: 'JIRA', label: 'Jira' },
-  { value: 'GITHUB_ISSUES', label: 'GitHub Issues' },
+  { value: 'GIT_LOCAL',       label: 'Local Git repository' },
+  { value: 'GITHUB',          label: 'GitHub' },
+  { value: 'JIRA',            label: 'Jira' },
+  { value: 'GITHUB_ISSUES',   label: 'GitHub Issues' },
 ];
 
-const NEEDS_URL: DataSourceType[] = ['GIT_LOCAL', 'JIRA'];
+// Types that need a base URL (the remote API address)
+const NEEDS_BASEURL: DataSourceType[] = ['GITHUB', 'JIRA', 'GITHUB_ISSUES'];
+// Types that need a local filesystem path
+const NEEDS_PATH: DataSourceType[] = ['GIT_LOCAL'];
+// Types that need an API token
 const NEEDS_TOKEN: DataSourceType[] = ['GITHUB', 'JIRA', 'GITHUB_ISSUES'];
+
+// ─── Repos sub-panel ──────────────────────────────────────────────────────────
+
+function ReposPanel({ dataSourceId }: { dataSourceId: number }) {
+  const qc = useQueryClient();
+
+  const { data: repos, isLoading } = useQuery({
+    queryKey: ['repos', dataSourceId],
+    queryFn: () => reposApi.list(dataSourceId).then((r) => r.data),
+  });
+
+  const subscribeMutation = useMutation({
+    mutationFn: (repoId: number) => reposApi.subscribe(repoId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['repos', dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['repos'] });
+    },
+  });
+
+  const unsubscribeMutation = useMutation({
+    mutationFn: (repoId: number) => reposApi.unsubscribe(repoId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['repos', dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['repos'] });
+    },
+  });
+
+  if (isLoading) return <p className="text-xs text-gray-400 py-2">Loading repos…</p>;
+  if (!repos?.length) return <p className="text-xs text-gray-400 py-2">No repositories registered under this data source.</p>;
+
+  return (
+    <ul className="space-y-1.5">
+      {repos.map((repo: RepoDto) => (
+        <li key={repo.id} className="flex items-center justify-between gap-2 rounded-md bg-gray-50 px-3 py-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <BookOpen className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+            <span className="text-xs font-medium text-gray-800 truncate">
+              {repo.repoFullName ?? repo.name}
+            </span>
+            {repo.subscribed && (
+              <Badge color="violet" className="text-[10px] px-1.5 py-0">subscribed</Badge>
+            )}
+          </div>
+          {repo.subscribed ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => unsubscribeMutation.mutate(repo.id)}
+              loading={unsubscribeMutation.isPending}
+              className="flex-shrink-0 text-gray-400 hover:text-red-600 text-xs"
+              title="Unsubscribe"
+            >
+              <Unlink className="h-3.5 w-3.5" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => subscribeMutation.mutate(repo.id)}
+              loading={subscribeMutation.isPending}
+              className="flex-shrink-0 text-gray-500 hover:text-violet-600 text-xs"
+              title="Subscribe"
+            >
+              <Link className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+type FormState = {
+  type: DataSourceType;
+  name: string;
+  baseUrl: string;
+  path: string;
+  apiToken: string;
+};
 
 export function DataSourcesPage() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CreateDataSourceRequest>({
+  const [form, setForm] = useState<FormState>({
     type: 'GITHUB',
     name: '',
-    url: '',
+    baseUrl: '',
+    path: '',
     apiToken: '',
   });
   const [formError, setFormError] = useState('');
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
   const { data: sources, isLoading } = useQuery({
     queryKey: ['datasources'],
@@ -61,7 +154,7 @@ export function DataSourcesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['datasources'] });
       setShowForm(false);
-      setForm({ type: 'GITHUB', name: '', url: '', apiToken: '' });
+      setForm({ type: 'GITHUB', name: '', baseUrl: '', path: '', apiToken: '' });
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -78,9 +171,18 @@ export function DataSourcesPage() {
     e.preventDefault();
     setFormError('');
     const req: CreateDataSourceRequest = { type: form.type, name: form.name };
-    if (NEEDS_URL.includes(form.type) && form.url) req.url = form.url;
+    if (NEEDS_BASEURL.includes(form.type) && form.baseUrl) req.baseUrl = form.baseUrl;
+    if (NEEDS_PATH.includes(form.type) && form.path) req.path = form.path;
     if (NEEDS_TOKEN.includes(form.type) && form.apiToken) req.apiToken = form.apiToken;
     createMutation.mutate(req);
+  }
+
+  function toggleExpanded(id: number) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   }
 
   if (isLoading) return <PageSpinner />;
@@ -111,7 +213,9 @@ export function DataSourcesPage() {
                   label="Type"
                   value={form.type}
                   options={TYPE_OPTIONS}
-                  onChange={(e) => setForm({ ...form, type: e.target.value as DataSourceType })}
+                  onChange={(e) =>
+                    setForm({ ...form, type: e.target.value as DataSourceType, baseUrl: '', path: '' })
+                  }
                 />
                 <Input
                   label="Name"
@@ -122,12 +226,27 @@ export function DataSourcesPage() {
                 />
               </div>
 
-              {NEEDS_URL.includes(form.type) && (
+              {NEEDS_BASEURL.includes(form.type) && (
                 <Input
-                  label={form.type === 'GIT_LOCAL' ? 'Repository path' : 'URL'}
-                  value={form.url}
-                  onChange={(e) => setForm({ ...form, url: e.target.value })}
-                  placeholder={form.type === 'GIT_LOCAL' ? '/home/user/my-project' : 'https://yourcompany.atlassian.net'}
+                  label="Base URL"
+                  value={form.baseUrl}
+                  onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+                  placeholder={
+                    form.type === 'JIRA'
+                      ? 'https://yourcompany.atlassian.net'
+                      : 'https://github.com'
+                  }
+                  required
+                />
+              )}
+
+              {NEEDS_PATH.includes(form.type) && (
+                <Input
+                  label="Repository path"
+                  value={form.path}
+                  onChange={(e) => setForm({ ...form, path: e.target.value })}
+                  placeholder="C:\Projects\my-repo or /home/user/my-project"
+                  required
                 />
               )}
 
@@ -166,31 +285,73 @@ export function DataSourcesPage() {
       )}
 
       <div className="space-y-3">
-        {sources?.map((src) => (
-          <Card key={src.id} className="hover:shadow-sm transition-shadow">
-            <div className="flex items-center gap-4 px-5 py-4">
-              <div className="flex-shrink-0 p-2.5 rounded-lg bg-gray-50 text-gray-500">
-                <TypeIcon type={src.type} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold text-gray-900">{src.name}</p>
-                  <Badge color={TYPE_COLORS[src.type]}>{TYPE_LABELS[src.type]}</Badge>
+        {sources?.map((src) => {
+          const expanded = expandedIds.has(src.id);
+          const displayUrl = src.baseUrl ?? src.path;
+          return (
+            <Card key={src.id} className="hover:shadow-sm transition-shadow">
+              {/* Header row */}
+              <div className="flex items-center gap-4 px-5 py-4">
+                <div className="flex-shrink-0 p-2.5 rounded-lg bg-gray-50 text-gray-500">
+                  <TypeIcon type={src.type} />
                 </div>
-                {src.url && <p className="text-xs text-gray-400 mt-0.5 truncate">{src.url}</p>}
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-gray-900">{src.name}</p>
+                    <Badge color={TYPE_COLORS[src.type]}>{TYPE_LABELS[src.type]}</Badge>
+                    {src.teamId && (
+                      <Badge color="blue">Team</Badge>
+                    )}
+                  </div>
+                  {displayUrl && (
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">{displayUrl}</p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* Expand/collapse repos */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleExpanded(src.id)}
+                    className="text-gray-400 hover:text-gray-700"
+                    title={expanded ? 'Hide repositories' : 'Show repositories'}
+                  >
+                    {expanded
+                      ? <ChevronDown className="h-4 w-4" />
+                      : <ChevronRight className="h-4 w-4" />
+                    }
+                  </Button>
+
+                  {/* Delete — only shown when the user is allowed to delete this config */}
+                  {src.canDelete && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteMutation.mutate(src.id)}
+                      loading={deleteMutation.isPending}
+                      className="text-gray-400 hover:text-red-600"
+                      title="Delete data source"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => deleteMutation.mutate(src.id)}
-                loading={deleteMutation.isPending}
-                className="flex-shrink-0 text-gray-400 hover:text-red-600"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </Card>
-        ))}
+
+              {/* Repos panel */}
+              {expanded && (
+                <div className="border-t border-gray-100 px-5 py-3">
+                  <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
+                    Repositories
+                  </p>
+                  <ReposPanel dataSourceId={src.id} />
+                </div>
+              )}
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

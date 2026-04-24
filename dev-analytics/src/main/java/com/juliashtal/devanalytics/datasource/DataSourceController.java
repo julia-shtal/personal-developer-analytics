@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.datasource;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.model.dto.DataSourceResponseDto;
 import com.juliashtal.devanalytics.datasource.model.dto.UpdateDataSourceRequest;
 import com.juliashtal.devanalytics.datasource.service.DataSourceService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
@@ -32,7 +33,7 @@ public class DataSourceController {
     }
 
     @GetMapping
-    public List<DataSourceConfig> list() {
+    public List<DataSourceResponseDto> list() {
         Long userId = SecurityUtils.getCurrentUserId();
         return dataSourceService.listForUser(userId);
     }

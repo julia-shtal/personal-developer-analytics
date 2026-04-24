@@ -10,6 +10,7 @@ import java.util.Optional;
 
 public interface DataSourceConfigRepository extends JpaRepository<DataSourceConfig, Long> {
     List<DataSourceConfig> findAllByUser(User user);
+    List<DataSourceConfig> findAllByUserAndTeamIsNull(User user);
     Optional<DataSourceConfig> findByIdAndUser(Long id, User user);
 
     List<DataSourceConfig> findAllByTeam(Team team);

@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.datasource.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
+import com.juliashtal.devanalytics.datasource.model.dto.DataSourceResponseDto;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.user.model.Role;
@@ -18,8 +19,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -64,20 +67,50 @@ public class DataSourceService {
     }
 
     @Transactional(readOnly = true)
-    public List<DataSourceConfig> listForUser(Long userId) {
+    public List<DataSourceResponseDto> listForUser(Long userId) {
+        Role role = SecurityUtils.getCurrentUserRole();
         User user = userRepository.getReferenceById(userId);
-        List<DataSourceConfig> result = new ArrayList<>(repository.findAllByUser(user));
+        List<DataSourceResponseDto> result = new ArrayList<>();
 
-        // Include team-scoped configs for teams where user is a member
-        for (Team team : teamRepository.findByMembersId(userId)) {
-            result.addAll(repository.findAllByTeam(team));
+        // Personal (non-team) data sources — creator can always delete.
+        // Team-scoped configs are handled below, even if the manager is also the creator,
+        // to avoid showing the same config twice.
+        for (DataSourceConfig cfg : repository.findAllByUserAndTeamIsNull(user)) {
+            result.add(toDto(cfg, true));
         }
-        // Include team-scoped configs for teams where user is the manager
+
+        // Team-scoped configs — deduplicate across member + manager queries
+        Set<Long> addedTeamIds = new HashSet<>();
+        for (Team team : teamRepository.findByMembersId(userId)) {
+            if (!addedTeamIds.add(team.getId())) continue;
+            boolean canDel = role == Role.ADMIN || team.getManager().getId().equals(userId);
+            for (DataSourceConfig cfg : repository.findAllByTeam(team)) {
+                result.add(toDto(cfg, canDel));
+            }
+        }
         for (Team team : teamRepository.findByManagerId(userId)) {
-            result.addAll(repository.findAllByTeam(team));
+            if (!addedTeamIds.add(team.getId())) continue;
+            for (DataSourceConfig cfg : repository.findAllByTeam(team)) {
+                result.add(toDto(cfg, true));
+            }
         }
 
         return result;
+    }
+
+    private static DataSourceResponseDto toDto(DataSourceConfig cfg, boolean canDelete) {
+        return new DataSourceResponseDto(
+                cfg.getId(),
+                cfg.getType(),
+                cfg.getName(),
+                cfg.getBaseUrl(),
+                cfg.getPath(),
+                cfg.isEnabled(),
+                cfg.getLastSuccessSync(),
+                cfg.getCreatedAt(),
+                cfg.getTeam() != null ? cfg.getTeam().getId() : null,
+                canDelete
+        );
     }
 
     @Transactional(readOnly = true)

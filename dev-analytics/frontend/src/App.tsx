@@ -4,10 +4,13 @@ import { AuthProvider } from '@/context/AuthContext';
 import { AppShell } from '@/components/layout/AppShell';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { DataSourcesPage } from '@/pages/DataSourcesPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { TeamDashboardPage } from '@/pages/TeamDashboardPage';
+import { TeamManagePage } from '@/pages/TeamManagePage';
+import { AdminPage } from '@/pages/AdminPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,12 +29,15 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
             <Route element={<AppShell />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/team" element={<TeamDashboardPage />} />
+              <Route path="/team-manage" element={<TeamManagePage />} />
               <Route path="/datasources" element={<DataSourcesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/admin" element={<AdminPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
