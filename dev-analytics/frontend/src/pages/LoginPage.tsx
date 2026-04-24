@@ -73,10 +73,18 @@ export function LoginPage() {
               </p>
             )}
 
-            <Button type="submit" className="w-full" loading={loading}>
-              Sign in
-            </Button>
+            <div className="flex items-center justify-between">
+              <Button type="submit" className="w-full" loading={loading}>
+                Sign in
+              </Button>
+            </div>
           </form>
+
+          <div className="mt-4 text-center">
+            <Link to="/forgot-password" className="text-sm text-gray-400 hover:text-violet-600 transition-colors">
+              Forgot your password?
+            </Link>
+          </div>
         </div>
 
         <p className="mt-4 text-center text-sm text-gray-500">

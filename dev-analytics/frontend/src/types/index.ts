@@ -38,18 +38,31 @@ export interface DataSourceConfig {
   id: number;
   type: DataSourceType;
   name: string;
-  url?: string;
-  apiToken?: string;
-  teamId?: number;
+  baseUrl?: string;
+  path?: string;
+  enabled: boolean;
+  lastSuccessSync?: string;
   createdAt?: string;
+  teamId?: number;
+  canDelete: boolean;
 }
 
 export interface CreateDataSourceRequest {
   type: DataSourceType;
   name: string;
-  url?: string;
+  baseUrl?: string;
+  path?: string;
   apiToken?: string;
   teamId?: number;
+}
+
+export interface RepoDto {
+  id: number;
+  name: string;
+  repoFullName?: string;
+  localPath?: string;
+  dataSourceId: number;
+  subscribed: boolean;
 }
 
 // ─── Metrics ──────────────────────────────────────────────────────────────────

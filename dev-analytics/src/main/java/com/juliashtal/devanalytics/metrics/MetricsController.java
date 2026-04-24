@@ -14,6 +14,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -155,14 +156,18 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         User user = checkHelper.currentUser();
-        var list = metricSnapshotRepository
-                .findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, FOCUS_RATIO_DAYS_TASKS, from, to);
+        long activeDays = metricSnapshotRepository
+                .findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, FOCUS_RATIO_DAYS_TASKS, from, to)
+                .size();
 
-        if (list.isEmpty())
-            return new MetricAggregateDto(FOCUS_RATIO_DAYS_TASKS, 0.0, null, null);
+        // Count total weekdays in the requested window (Mon–Fri only)
+        long totalWeekdays = from.datesUntil(to.plusDays(1))
+                .filter(d -> d.getDayOfWeek() != DayOfWeek.SATURDAY
+                          && d.getDayOfWeek() != DayOfWeek.SUNDAY)
+                .count();
 
-        double avg = list.stream().mapToDouble(MetricSnapshot::getValue).average().orElse(0.0);
-        return new MetricAggregateDto(FOCUS_RATIO_DAYS_TASKS, avg, null, null);
+        double ratio = totalWeekdays > 0 ? (double) activeDays / totalWeekdays : 0.0;
+        return new MetricAggregateDto(FOCUS_RATIO_DAYS_TASKS, ratio, null, null);
     }
 
     // =========================================================================
@@ -208,6 +213,9 @@ public class MetricsController {
         for (User m : members) byUser.put(m.getId(), new EnumMap<>(MetricType.class));
 
         for (MetricType type : MetricType.values()) {
+            // Team-scoped snapshots: saved with team=teamId by calculateForTeam,
+            // which filters every metric by the member's authorEmail / githubLogin.
+            // This gives correct per-member attribution even on shared repos.
             metricSnapshotRepository
                     .findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(memberIds, teamId, type, from, to)
                     .forEach(s -> byUser.get(s.getUser().getId()).merge(type, s.getValue(), Double::sum));
@@ -220,8 +228,7 @@ public class MetricsController {
 
     /**
      * Manager view of a specific team member's metrics within this team's scope.
-     * Useful when a user belongs to multiple teams — this shows only their
-     * contribution to teamId, not other teams.
+     * Uses team-scoped snapshots so attribution is filtered by author identity.
      */
     @GetMapping("/teams/{teamId}/members/{memberId}/summary")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
@@ -329,6 +336,8 @@ public class MetricsController {
         List<Long> memberIds = team.getMembers().stream().map(User::getId).toList();
         if (memberIds.isEmpty()) return List.of();
 
+        // Team-scoped snapshots: each member's commits are attributed by authorEmail,
+        // so data from shared repos is correctly split per developer.
         List<MetricSnapshot> snapshots = metricSnapshotRepository
                 .findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(memberIds, teamId, type, from, to);
 
