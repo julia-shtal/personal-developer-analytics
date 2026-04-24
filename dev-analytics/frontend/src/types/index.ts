@@ -1,0 +1,120 @@
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  password: string;
+}
+
+export interface LoginRequest {
+  usernameOrEmail: string;
+  password: string;
+}
+
+// ─── User ────────────────────────────────────────────────────────────────────
+
+export type Role = 'DEVELOPER' | 'MANAGER' | 'ADMIN';
+
+export interface UserProfile {
+  id: number;
+  username: string;
+  email: string;
+  role: Role;
+  timezone?: string;
+  githubLogin?: string;
+}
+
+// ─── Data Sources ─────────────────────────────────────────────────────────────
+
+export type DataSourceType = 'GIT_LOCAL' | 'GITHUB' | 'JIRA' | 'GITHUB_ISSUES';
+
+export interface DataSourceConfig {
+  id: number;
+  type: DataSourceType;
+  name: string;
+  url?: string;
+  apiToken?: string;
+  teamId?: number;
+  createdAt?: string;
+}
+
+export interface CreateDataSourceRequest {
+  type: DataSourceType;
+  name: string;
+  url?: string;
+  apiToken?: string;
+  teamId?: number;
+}
+
+// ─── Metrics ──────────────────────────────────────────────────────────────────
+
+export type MetricType =
+  | 'DAILY_COMMITS_COUNT'
+  | 'DAILY_PR_CREATED'
+  | 'DAILY_PR_MERGED'
+  | 'DAILY_ISSUES_CLOSED'
+  | 'DAILY_ISSUES_CREATED'
+  | 'DAILY_CHURN_RATIO'
+  | 'PR_LEAD_TIME_HOURS_MEDIAN'
+  | 'PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN'
+  | 'REVIEW_RESPONSE_TIME_HOURS_MEDIAN'
+  | 'ISSUE_LEAD_TIME_HOURS_MEDIAN'
+  | 'FOCUS_RATIO_DAYS_TASKS'
+  | 'AFTER_HOURS_COMMIT_RATIO'
+  | 'DEEP_WORK_STREAK_DAYS'
+  | 'KNOWLEDGE_SILO_SCORE'
+  | 'REFACTOR_RATIO'
+  | 'PR_SIZE_COMPLEXITY_SCORE'
+  | 'MERGE_WITHOUT_REVIEW_RATIO'
+  | 'MERGE_TO_MAIN_FREQUENCY_PER_WEEK';
+
+export interface MetricPointDto {
+  date: string;
+  value: number;
+  metricType: string;
+  repositoryId?: number;
+  repositoryName?: string;
+}
+
+export interface MetricAggregateDto {
+  metricType: string;
+  value: number;
+  periodFrom?: string;
+  periodTo?: string;
+}
+
+export interface TeamMetricPointDto {
+  date: string;
+  value: number;
+  metricType: string;
+  userId?: number;
+  username?: string;
+}
+
+export interface MemberSummaryDto {
+  userId: number;
+  username: string;
+  metrics: Partial<Record<MetricType, number>>;
+}
+
+// ─── Teams ───────────────────────────────────────────────────────────────────
+
+export interface Team {
+  id: number;
+  name: string;
+  managerId?: number;
+  members?: UserProfile[];
+}
+
+// ─── Date range ──────────────────────────────────────────────────────────────
+
+export interface DateRange {
+  from: string; // ISO date
+  to: string;
+}
