@@ -30,6 +30,13 @@ export interface UserProfile {
   githubLogin?: string;
 }
 
+export interface UpdateProfileRequest {
+  username?: string;
+  email?: string;
+  timezone?: string;
+  githubLogin?: string;
+}
+
 // ─── Data Sources ─────────────────────────────────────────────────────────────
 
 export type DataSourceType = 'GIT_LOCAL' | 'GITHUB' | 'JIRA' | 'GITHUB_ISSUES';
@@ -54,6 +61,7 @@ export interface CreateDataSourceRequest {
   path?: string;
   apiToken?: string;
   teamId?: number;
+  repoFullName?: string;
 }
 
 export interface RepoDto {
@@ -63,6 +71,7 @@ export interface RepoDto {
   localPath?: string;
   dataSourceId: number;
   subscribed: boolean;
+  repoUrl?: string;
 }
 
 // ─── Metrics ──────────────────────────────────────────────────────────────────

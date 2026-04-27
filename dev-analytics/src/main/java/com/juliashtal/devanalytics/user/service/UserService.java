@@ -26,6 +26,9 @@ public class UserService {
         User user = repository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found"));
         if (req.getUsername() != null) user.setUsername(req.getUsername());
+        if (req.getEmail() != null && !req.getEmail().isBlank()) {
+            user.setEmail(req.getEmail());
+        }
         if (req.getTimezone() != null) user.setTimezone(req.getTimezone());
         if (req.getGithubLogin() != null) user.setGithubLogin(req.getGithubLogin());
         return repository.save(user);

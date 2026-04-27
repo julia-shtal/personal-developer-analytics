@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.user.service;
 
 import com.juliashtal.devanalytics.security.SecurityUtils;
+import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.TeamDto;
@@ -68,6 +69,20 @@ public class TeamService {
         }
 
         team.getMembers().removeIf(m -> m.getId().equals(userId));
+        return TeamDto.from(teamRepository.save(team));
+    }
+
+    @Transactional
+    public TeamDto renameTeam(Long teamId, String name) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new NoSuchElementException("Team not found"));
+
+        Role role = userRepository.getReferenceById(currentUserId).getRole();
+        if (role != Role.ADMIN && !team.getManager().getId().equals(currentUserId)) {
+            throw new IllegalArgumentException("Only the team manager or an admin can rename this team");
+        }
+        team.setName(name);
         return TeamDto.from(teamRepository.save(team));
     }
 }

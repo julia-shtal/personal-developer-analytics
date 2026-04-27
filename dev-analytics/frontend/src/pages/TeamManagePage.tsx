@@ -9,6 +9,9 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  Pencil,
+  Check,
+  X as XIcon,
 } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
@@ -138,11 +141,22 @@ function TeamCard({ team, allUsers }: TeamCardProps) {
   const [expanded, setExpanded] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [removeError, setRemoveError] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(team.name);
 
   const removeMutation = useMutation({
     mutationFn: (userId: number) => teamsApi.removeMember(team.id, userId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['teams'] }),
     onError: (err) => setRemoveError(errMsg(err, 'Failed to remove member.')),
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: (name: string) => teamsApi.rename(team.id, name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['teams'] });
+      setEditingName(false);
+    },
+    onError: (err) => setRemoveError(errMsg(err, 'Failed to rename team.')),
   });
 
   const currentMemberIds = (team.members ?? []).map((m) => m.id);
@@ -160,7 +174,39 @@ function TeamCard({ team, allUsers }: TeamCardProps) {
               <Users className="h-4 w-4 text-violet-600" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-gray-900">{team.name}</p>
+              {editingName ? (
+                <form
+                  className="flex items-center gap-1"
+                  onSubmit={(e) => { e.preventDefault(); renameMutation.mutate(nameValue.trim()); }}
+                >
+                  <input
+                    autoFocus
+                    value={nameValue}
+                    onChange={(e) => setNameValue(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-sm font-semibold text-gray-900 border-b border-violet-400 bg-transparent outline-none px-0.5 w-36"
+                  />
+                  <button type="submit" onClick={(e) => e.stopPropagation()}
+                    className="p-0.5 rounded hover:bg-violet-100 text-violet-600">
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setEditingName(false); setNameValue(team.name); }}
+                    className="p-0.5 rounded hover:bg-gray-100 text-gray-400">
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
+                </form>
+              ) : (
+                <div className="flex items-center gap-1 group/name">
+                  <p className="text-sm font-semibold text-gray-900">{team.name}</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setEditingName(true); setNameValue(team.name); }}
+                    className="opacity-0 group-hover/name:opacity-100 p-0.5 rounded hover:bg-gray-100 text-gray-400 transition-opacity"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
               <p className="text-xs text-gray-400">
                 {team.members?.length ?? 0} member{(team.members?.length ?? 0) !== 1 ? 's' : ''}
               </p>
