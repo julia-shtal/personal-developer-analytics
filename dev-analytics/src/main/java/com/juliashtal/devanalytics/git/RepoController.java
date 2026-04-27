@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.git;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
@@ -72,14 +73,25 @@ public class RepoController {
         }
 
         return repos.stream()
-                .map(r -> new RepoDto(
-                        r.getId(),
-                        r.getName(),
-                        r.getRepoFullName(),
-                        r.getLocalPath(),
-                        r.getDataSourceConfig() != null ? r.getDataSourceConfig().getId() : null,
-                        subscribedIds.contains(r.getId())
-                ))
+                .map(r -> {
+                    String repoUrl = null;
+                    var dsCfg = r.getDataSourceConfig();
+                    if (dsCfg != null && dsCfg.getBaseUrl() != null && r.getRepoFullName() != null
+                            && (dsCfg.getType() == DataSourceType.GITHUB
+                                || dsCfg.getType() == DataSourceType.GITHUB_ISSUES)) {
+                        repoUrl = dsCfg.getBaseUrl().stripTrailing().replaceAll("/$", "")
+                                  + "/" + r.getRepoFullName();
+                    }
+                    return new RepoDto(
+                            r.getId(),
+                            r.getName(),
+                            r.getRepoFullName(),
+                            r.getLocalPath(),
+                            dsCfg != null ? dsCfg.getId() : null,
+                            subscribedIds.contains(r.getId()),
+                            repoUrl
+                    );
+                })
                 .toList();
     }
 
