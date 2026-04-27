@@ -5,6 +5,8 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.model.dto.DataSourceResponseDto;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
+import com.juliashtal.devanalytics.git.service.GitRepositoryService;
+import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
@@ -33,6 +35,8 @@ public class DataSourceService {
     private final TeamRepository teamRepository;
     private final SimpleTokenEncryptor tokenEncryptor;
     private final DataSourceValidator validator;
+    private final GitRepositoryService gitRepositoryService;
+    private final GitHubRepositoryService gitHubRepositoryService;
 
     public DataSourceConfig getDataSource(Long dataSourceId) {
         return repository.findById(dataSourceId)
@@ -63,7 +67,35 @@ public class DataSourceService {
             cfg.setTeam(team);
         }
 
-        return repository.save(cfg);
+        DataSourceConfig saved = repository.save(cfg);
+
+        // Auto-register a GitRepositoryEntity immediately so the user doesn't need
+        // a separate step to link the data source to a repository.
+        if (saved.getType() == DataSourceType.GIT_LOCAL) {
+            // For local repos the path is the repo directory — register it automatically.
+            var localReq = new com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest();
+            localReq.setDataSourceId(saved.getId());
+            localReq.setName(saved.getName());
+            localReq.setLocalPath(saved.getPath());
+            try {
+                gitRepositoryService.registerLocalRepo(userId, localReq);
+            } catch (Exception e) {
+                // Non-fatal: DS is saved, repo registration failed (e.g. path issue)
+                org.slf4j.LoggerFactory.getLogger(DataSourceService.class)
+                        .warn("Auto-registration of local repo failed: {}", e.getMessage());
+            }
+        } else if ((saved.getType() == DataSourceType.GITHUB
+                || saved.getType() == DataSourceType.GITHUB_ISSUES)
+                && req.getRepoFullName() != null && !req.getRepoFullName().isBlank()) {
+            try {
+                gitHubRepositoryService.registerGitHubRepo(userId, saved.getId(), req.getRepoFullName());
+            } catch (Exception e) {
+                org.slf4j.LoggerFactory.getLogger(DataSourceService.class)
+                        .warn("Auto-registration of GitHub repo failed: {}", e.getMessage());
+            }
+        }
+
+        return saved;
     }
 
     @Transactional(readOnly = true)

@@ -25,5 +25,8 @@ public class CreateDataSourceRequest {
 
     // optional: if set, the data source is team-scoped (GITHUB/JIRA/GITHUB_ISSUES only)
     private Long teamId;
+
+    // repo to auto-register after DS creation (GITHUB / GITHUB_ISSUES types)
+    private String repoFullName;
 }
 
