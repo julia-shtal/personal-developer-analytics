@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.user.model.TeamDto;
 import com.juliashtal.devanalytics.user.service.TeamService;
 import com.juliashtal.devanalytics.user.model.request.AddTeamMemberRequest;
 import com.juliashtal.devanalytics.user.model.request.CreateTeamRequest;
+import com.juliashtal.devanalytics.user.model.request.RenameTeamRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -41,5 +42,12 @@ public class TeamController {
             @PathVariable Long teamId,
             @PathVariable Long userId) {
         return ResponseEntity.ok(teamService.removeMember(teamId, userId));
+    }
+
+    @PutMapping("/{teamId}")
+    public ResponseEntity<TeamDto> renameTeam(
+            @PathVariable Long teamId,
+            @RequestBody RenameTeamRequest request) {
+        return ResponseEntity.ok(teamService.renameTeam(teamId, request.getName()));
     }
 }

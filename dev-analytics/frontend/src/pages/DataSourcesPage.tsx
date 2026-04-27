@@ -2,17 +2,19 @@ import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Trash2, Database, GitBranch, Layers, AlertCircle,
-  ChevronDown, ChevronRight, BookOpen, Link, Unlink,
+  ChevronDown, ChevronRight, BookOpen, ExternalLink, UserCheck, UserMinus, Play,
 } from 'lucide-react';
 import { datasourcesApi } from '@/api/datasources';
 import { reposApi } from '@/api/repos';
+import { teamsApi } from '@/api/teams';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { PageSpinner } from '@/components/ui/Spinner';
-import type { DataSourceType, CreateDataSourceRequest, RepoDto } from '@/types';
+import { useAuth } from '@/context/AuthContext';
+import type { DataSourceType, CreateDataSourceRequest, RepoDto, Team } from '@/types';
 
 // ─── Type helpers ─────────────────────────────────────────────────────────────
 
@@ -49,6 +51,22 @@ const NEEDS_BASEURL: DataSourceType[] = ['GITHUB', 'JIRA', 'GITHUB_ISSUES'];
 const NEEDS_PATH: DataSourceType[] = ['GIT_LOCAL'];
 // Types that need an API token
 const NEEDS_TOKEN: DataSourceType[] = ['GITHUB', 'JIRA', 'GITHUB_ISSUES'];
+// Types that support repoFullName auto-registration
+const NEEDS_REPO_FULLNAME: DataSourceType[] = ['GITHUB', 'GITHUB_ISSUES'];
+
+// ─── Sync age formatter ───────────────────────────────────────────────────────
+
+function formatSyncAge(dateStr?: string): string {
+  if (!dateStr) return 'Never synced';
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  return `${Math.floor(diffH / 24)}d ago`;
+}
 
 // ─── Repos sub-panel ──────────────────────────────────────────────────────────
 
@@ -92,29 +110,42 @@ function ReposPanel({ dataSourceId }: { dataSourceId: number }) {
               <Badge color="violet" className="text-[10px] px-1.5 py-0">subscribed</Badge>
             )}
           </div>
-          {repo.subscribed ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => unsubscribeMutation.mutate(repo.id)}
-              loading={unsubscribeMutation.isPending}
-              className="flex-shrink-0 text-gray-400 hover:text-red-600 text-xs"
-              title="Unsubscribe"
-            >
-              <Unlink className="h-3.5 w-3.5" />
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => subscribeMutation.mutate(repo.id)}
-              loading={subscribeMutation.isPending}
-              className="flex-shrink-0 text-gray-500 hover:text-violet-600 text-xs"
-              title="Subscribe"
-            >
-              <Link className="h-3.5 w-3.5" />
-            </Button>
-          )}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {repo.repoUrl && (
+              <a
+                href={repo.repoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 rounded text-gray-400 hover:text-violet-600 transition-colors"
+                title="Open in browser"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
+            {repo.subscribed ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => unsubscribeMutation.mutate(repo.id)}
+                loading={unsubscribeMutation.isPending}
+                className="flex-shrink-0 text-violet-500 hover:text-red-600 text-xs"
+                title="Unsubscribe"
+              >
+                <UserMinus className="h-3.5 w-3.5" />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => subscribeMutation.mutate(repo.id)}
+                loading={subscribeMutation.isPending}
+                className="flex-shrink-0 text-gray-400 hover:text-violet-600 text-xs"
+                title="Subscribe"
+              >
+                <UserCheck className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </li>
       ))}
     </ul>
@@ -129,10 +160,13 @@ type FormState = {
   baseUrl: string;
   path: string;
   apiToken: string;
+  teamId: string;
+  repoFullName: string;
 };
 
 export function DataSourcesPage() {
   const qc = useQueryClient();
+  const { isManager, isAdmin } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>({
     type: 'GITHUB',
@@ -140,6 +174,8 @@ export function DataSourcesPage() {
     baseUrl: '',
     path: '',
     apiToken: '',
+    teamId: '',
+    repoFullName: '',
   });
   const [formError, setFormError] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
@@ -149,12 +185,18 @@ export function DataSourcesPage() {
     queryFn: () => datasourcesApi.list().then((r) => r.data),
   });
 
+  const { data: availableTeams } = useQuery<Team[]>({
+    queryKey: ['teams'],
+    queryFn: () => teamsApi.list().then((r) => r.data),
+    enabled: isManager || isAdmin,
+  });
+
   const createMutation = useMutation({
     mutationFn: (req: CreateDataSourceRequest) => datasourcesApi.create(req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['datasources'] });
       setShowForm(false);
-      setForm({ type: 'GITHUB', name: '', baseUrl: '', path: '', apiToken: '' });
+      setForm({ type: 'GITHUB', name: '', baseUrl: '', path: '', apiToken: '', teamId: '', repoFullName: '' });
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -167,6 +209,11 @@ export function DataSourcesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['datasources'] }),
   });
 
+  const collectMutation = useMutation({
+    mutationFn: (id: number) => datasourcesApi.collect(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['datasources'] }),
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError('');
@@ -174,6 +221,8 @@ export function DataSourcesPage() {
     if (NEEDS_BASEURL.includes(form.type) && form.baseUrl) req.baseUrl = form.baseUrl;
     if (NEEDS_PATH.includes(form.type) && form.path) req.path = form.path;
     if (NEEDS_TOKEN.includes(form.type) && form.apiToken) req.apiToken = form.apiToken;
+    if (form.teamId) req.teamId = Number(form.teamId);
+    if (NEEDS_REPO_FULLNAME.includes(form.type) && form.repoFullName) req.repoFullName = form.repoFullName;
     createMutation.mutate(req);
   }
 
@@ -214,14 +263,14 @@ export function DataSourcesPage() {
                   value={form.type}
                   options={TYPE_OPTIONS}
                   onChange={(e) =>
-                    setForm({ ...form, type: e.target.value as DataSourceType, baseUrl: '', path: '' })
+                    setForm({ ...form, type: e.target.value as DataSourceType, baseUrl: '', path: '', repoFullName: '' })
                   }
                 />
                 <Input
                   label="Name"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. My GitHub account"
+                  placeholder="e.g. Work GitHub, Personal Jira"
                   required
                 />
               </div>
@@ -258,6 +307,33 @@ export function DataSourcesPage() {
                   onChange={(e) => setForm({ ...form, apiToken: e.target.value })}
                   placeholder="••••••••••••"
                 />
+              )}
+
+              {NEEDS_REPO_FULLNAME.includes(form.type) && (
+                <Input
+                  label="GitHub repository (owner/repo)"
+                  value={form.repoFullName}
+                  onChange={(e) => setForm({ ...form, repoFullName: e.target.value })}
+                  placeholder="e.g. acme/backend-api"
+                />
+              )}
+
+              {(isManager || isAdmin) && availableTeams && availableTeams.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Assign to team <span className="text-xs text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <select
+                    value={form.teamId}
+                    onChange={(e) => setForm({ ...form, teamId: e.target.value })}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                  >
+                    <option value="">Personal (no team)</option>
+                    {availableTeams.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
               )}
 
               {formError && (
@@ -307,9 +383,26 @@ export function DataSourcesPage() {
                   {displayUrl && (
                     <p className="text-xs text-gray-400 mt-0.5 truncate">{displayUrl}</p>
                   )}
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {src.lastSuccessSync
+                      ? `Synced ${formatSyncAge(src.lastSuccessSync)}`
+                      : 'Never synced'}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* Collect button */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => collectMutation.mutate(src.id)}
+                    loading={collectMutation.isPending}
+                    className="text-gray-400 hover:text-violet-600"
+                    title="Collect data"
+                  >
+                    <Play className="h-4 w-4" />
+                  </Button>
+
                   {/* Expand/collapse repos */}
                   <Button
                     variant="ghost"

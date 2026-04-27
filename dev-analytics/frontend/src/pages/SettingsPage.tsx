@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo, type FormEvent } from 'react';
+import { useState, useEffect, useRef, useMemo, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { User, Shield, AlertCircle, CheckCircle } from 'lucide-react';
+import { User, Shield, AlertCircle, CheckCircle, ChevronDown } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
 
@@ -66,9 +66,14 @@ export function SettingsPage() {
   const { user } = useAuth();
   const [timezone, setTimezone] = useState(user?.timezone ?? 'UTC');
   const [githubLogin, setGithubLogin] = useState(user?.githubLogin ?? '');
+  const [username, setUsername] = useState(user?.username ?? '');
+  const [email, setEmail] = useState(user?.email ?? '');
   const [tzSearch, setTzSearch] = useState('');
+  const [tzOpen, setTzOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveError, setSaveError] = useState('');
+
+  const tzRef = useRef<HTMLDivElement>(null);
 
   const tzOptions = useMemo(buildTimezoneOptions, []);
 
@@ -83,10 +88,22 @@ export function SettingsPage() {
   useEffect(() => {
     setTimezone(user?.timezone ?? 'UTC');
     setGithubLogin(user?.githubLogin ?? '');
+    setUsername(user?.username ?? '');
+    setEmail(user?.email ?? '');
   }, [user]);
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (tzRef.current && !tzRef.current.contains(e.target as Node)) {
+        setTzOpen(false);
+      }
+    }
+    if (tzOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [tzOpen]);
+
   const updateMutation = useMutation({
-    mutationFn: (body: { timezone?: string; githubLogin?: string }) =>
+    mutationFn: (body: { username?: string; email?: string; timezone?: string; githubLogin?: string }) =>
       api.put<UserProfile>('/users/me', body),
     onSuccess: () => {
       setSaveStatus('success');
@@ -103,10 +120,14 @@ export function SettingsPage() {
   function handleSave(e: FormEvent) {
     e.preventDefault();
     setSaveStatus('idle');
-    updateMutation.mutate({ timezone: timezone || undefined, githubLogin: githubLogin || undefined });
+    updateMutation.mutate({
+      username: username || undefined,
+      email: email || undefined,
+      timezone: timezone || undefined,
+      githubLogin: githubLogin || undefined,
+    });
   }
 
-  // Find current option label for the selected timezone
   const selectedOption = tzOptions.find((o) => o.iana === timezone);
 
   return (
@@ -126,8 +147,19 @@ export function SettingsPage() {
         </CardHeader>
         <CardBody>
           <form onSubmit={handleSave} className="space-y-4">
-            <Input label="Username" value={user?.username ?? ''} readOnly className="bg-gray-50" />
-            <Input label="Email" value={user?.email ?? ''} readOnly className="bg-gray-50" />
+            <Input
+              label="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Your username"
+            />
+            <Input
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+            />
             <div>
               <p className="text-sm font-medium text-gray-700 mb-1.5">Role</p>
               <div className="flex flex-wrap gap-2">
@@ -137,45 +169,54 @@ export function SettingsPage() {
               </div>
             </div>
 
-            {/* Timezone picker with search */}
-            <div>
+            {/* Timezone picker — collapsed dropdown */}
+            <div ref={tzRef} className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Timezone
                 <span className="ml-1 text-xs text-gray-400 font-normal">
                   — used for after-hours commit metrics
                 </span>
               </label>
-
-              {selectedOption && (
-                <p className="text-xs text-violet-700 bg-violet-50 rounded-lg px-3 py-1.5 mb-2 font-medium">
-                  Current: {selectedOption.label}
-                </p>
-              )}
-
-              <Input
-                placeholder="Search by city or offset, e.g. Berlin or UTC+3"
-                value={tzSearch}
-                onChange={(e) => setTzSearch(e.target.value)}
-              />
-
-              <select
-                value={timezone}
-                onChange={(e) => {
-                  setTimezone(e.target.value);
-                  setTzSearch('');
-                }}
-                size={6}
-                className="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+              <button
+                type="button"
+                onClick={() => setTzOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 hover:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-colors"
               >
-                {filteredTz.map((o) => (
-                  <option key={o.iana} value={o.iana}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-400">
-                {filteredTz.length} timezone{filteredTz.length !== 1 ? 's' : ''} shown
-              </p>
+                <span>{selectedOption?.label ?? timezone}</span>
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${tzOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {tzOpen && (
+                <div className="absolute z-20 mt-1 w-full bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden">
+                  <div className="p-2 border-b border-gray-100">
+                    <Input
+                      placeholder="Search by city or offset…"
+                      value={tzSearch}
+                      onChange={(e) => setTzSearch(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="max-h-56 overflow-y-auto">
+                    {filteredTz.map((o) => (
+                      <button
+                        key={o.iana}
+                        type="button"
+                        onClick={() => { setTimezone(o.iana); setTzSearch(''); setTzOpen(false); }}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                          o.iana === timezone
+                            ? 'bg-violet-50 text-violet-700 font-medium'
+                            : 'text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                    {filteredTz.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-4">No matches</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <Input

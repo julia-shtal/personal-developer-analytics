@@ -15,4 +15,5 @@ export const datasourcesApi = {
   update: (id: number, req: UpdateDataSourceRequest) =>
     api.put<DataSourceConfig>(`/datasources/${id}`, req),
   delete: (id: number) => api.delete(`/datasources/${id}`),
+  collect: (id: number) => api.post<string>(`/datasources/${id}/collect`),
 };

@@ -6,5 +6,6 @@ public record RepoDto(
         String repoFullName,
         String localPath,
         Long dataSourceId,
-        boolean subscribed
+        boolean subscribed,
+        String repoUrl
 ) {}
