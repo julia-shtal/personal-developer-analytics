@@ -11,8 +11,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
+
+import static com.juliashtal.devanalytics.helper.ParsingHelper.resolveApiBase;
 
 /**
  * Background scheduler for both commit and PR stats enrichment (Phase C).
@@ -46,7 +47,7 @@ public class CommitStatsEnrichmentScheduler {
         Set<Long> repoIds = collectRepoIds();
         if (repoIds.isEmpty()) return;
 
-        log.debug("Background enrichment: {} repos have PENDING commits or PRs", repoIds.size());
+        log.info("Background enrichment: {} repos have PENDING commits or PRs", repoIds.size());
 
         for (Long repoId : repoIds) {
             GitRepositoryEntity repo = repoRepository.findByIdWithDataSourceConfig(repoId).orElse(null);
@@ -80,13 +81,5 @@ public class CommitStatsEnrichmentScheduler {
         ids.addAll(commitRepository.findRepositoryIdsWithStatsStatus(StatsStatus.PENDING));
         ids.addAll(prRepository.findRepositoryIdsWithStatsStatus(StatsStatus.PENDING));
         return ids;
-    }
-
-    private static String resolveApiBase(String configuredBaseUrl) {
-        if (configuredBaseUrl == null || configuredBaseUrl.isBlank()
-                || configuredBaseUrl.equalsIgnoreCase("https://github.com")) {
-            return "https://api.github.com";
-        }
-        return configuredBaseUrl.stripTrailing().replaceAll("/$", "");
     }
 }

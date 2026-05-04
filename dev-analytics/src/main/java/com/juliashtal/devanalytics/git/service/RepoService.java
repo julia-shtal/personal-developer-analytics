@@ -28,6 +28,11 @@ public class RepoService {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
 
+    public GitRepositoryEntity getById(Long repoId) {
+        return gitRepoRepository.findById(repoId)
+                .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
+    }
+
     public List<RepoDto> listAccessible(Long dataSourceId) {
         Long userId = SecurityUtils.getCurrentUserId();
 

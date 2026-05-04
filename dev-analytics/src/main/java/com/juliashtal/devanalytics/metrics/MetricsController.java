@@ -1,14 +1,15 @@
 package com.juliashtal.devanalytics.metrics;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
-import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
+import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.model.*;
+import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
-import com.juliashtal.devanalytics.user.repository.TeamRepository;
-import com.juliashtal.devanalytics.user.repository.UserRepository;
+import com.juliashtal.devanalytics.user.service.TeamService;
+import com.juliashtal.devanalytics.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,11 +27,11 @@ import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 @RequiredArgsConstructor
 public class MetricsController {
 
-    private final MetricSnapshotRepository metricSnapshotRepository;
+    private final MetricSnapshotService metricSnapshotService;
     private final MetricsService metricsService;
-    private final GitRepositoryEntityRepository gitRepoRepository;
-    private final TeamRepository teamRepository;
-    private final UserRepository userRepository;
+    private final RepoService repoService;
+    private final TeamService teamService;
+    private final UserService userService;
     private final CheckHelper checkHelper;
 
     // =========================================================================
@@ -142,8 +143,8 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         User user = checkHelper.currentUser();
-        return metricSnapshotRepository
-                .findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, FOCUS_RATIO_DAYS_TASKS, from, to)
+        return metricSnapshotService
+                .getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, FOCUS_RATIO_DAYS_TASKS, from, to)
                 .stream()
                 .sorted(Comparator.comparing(MetricSnapshot::getDate))
                 .map(MetricPointDto::fromEntity)
@@ -156,8 +157,8 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         User user = checkHelper.currentUser();
-        long activeDays = metricSnapshotRepository
-                .findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, FOCUS_RATIO_DAYS_TASKS, from, to)
+        long activeDays = metricSnapshotService
+                .getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, FOCUS_RATIO_DAYS_TASKS, from, to)
                 .size();
 
         // Count total weekdays in the requested window (Mon–Fri only)
@@ -168,6 +169,69 @@ public class MetricsController {
 
         double ratio = totalWeekdays > 0 ? (double) activeDays / totalWeekdays : 0.0;
         return new MetricAggregateDto(FOCUS_RATIO_DAYS_TASKS, ratio, null, null);
+    }
+
+    // =========================================================================
+    // Ticket 5 — Wellness + Quality metric endpoints (personal, aggregate)
+    // =========================================================================
+
+    @GetMapping("/after-hours-ratio")
+    public MetricAggregateDto getAfterHoursRatio(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return getPersonalLeadTimeAggregate(AFTER_HOURS_COMMIT_RATIO, from, to, null);
+    }
+
+    @GetMapping("/refactor-ratio")
+    public MetricAggregateDto getRefactorRatio(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return getPersonalLeadTimeAggregate(REFACTOR_RATIO, from, to, null);
+    }
+
+    @GetMapping("/deep-work-streak")
+    public MetricAggregateDto getDeepWorkStreak(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return getPersonalLeadTimeAggregate(DEEP_WORK_STREAK_DAYS, from, to, null);
+    }
+
+    @GetMapping("/merge-frequency")
+    public MetricAggregateDto getMergeFrequency(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return getPersonalLeadTimeAggregate(MERGE_TO_MAIN_FREQUENCY_PER_WEEK, from, to, null);
+    }
+
+    @GetMapping("/knowledge-silo")
+    public MetricAggregateDto getKnowledgeSilo(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getPersonalLeadTimeAggregate(KNOWLEDGE_SILO_SCORE, from, to, repoId);
+    }
+
+    @GetMapping("/pr-size-complexity")
+    public MetricAggregateDto getPrSizeComplexity(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getPersonalLeadTimeAggregate(PR_SIZE_COMPLEXITY_SCORE, from, to, repoId);
+    }
+
+    @GetMapping("/merge-without-review")
+    public MetricAggregateDto getMergeWithoutReview(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getPersonalLeadTimeAggregate(MERGE_WITHOUT_REVIEW_RATIO, from, to, repoId);
     }
 
     // =========================================================================
@@ -216,8 +280,8 @@ public class MetricsController {
             // Team-scoped snapshots: saved with team=teamId by calculateForTeam,
             // which filters every metric by the member's authorEmail / githubLogin.
             // This gives correct per-member attribution even on shared repos.
-            metricSnapshotRepository
-                    .findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(memberIds, teamId, type, from, to)
+            metricSnapshotService
+                    .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(memberIds, teamId, type, from, to)
                     .forEach(s -> byUser.get(s.getUser().getId()).merge(type, s.getValue(), Double::sum));
         }
 
@@ -239,13 +303,12 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Team team = requireTeam(teamId);
-        User member = userRepository.findById(memberId)
-                .orElseThrow(() -> new NoSuchElementException("User not found: " + memberId));
+        User member = userService.getById(memberId);
 
         Map<MetricType, Double> metrics = new EnumMap<>(MetricType.class);
         for (MetricType type : MetricType.values()) {
-            metricSnapshotRepository
-                    .findByUserAndTeamAndMetricTypeAndDateBetween(member, team, type, from, to)
+            metricSnapshotService
+                    .getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(member, team, type, from, to)
                     .forEach(s -> metrics.merge(type, s.getValue(), Double::sum));
         }
 
@@ -294,17 +357,17 @@ public class MetricsController {
 
         if (repoId == null) {
             Map<LocalDate, Double> sumByDate = new TreeMap<>();
-            metricSnapshotRepository
-                    .findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, type, from, to)
+            metricSnapshotService
+                    .getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to)
                     .forEach(s -> sumByDate.merge(s.getDate(), s.getValue(), Double::sum));
             return sumByDate.entrySet().stream()
                     .map(e -> new MetricPointDto(e.getKey(), e.getValue(), type.name(), null, null))
                     .toList();
         }
 
-        GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-        return metricSnapshotRepository
-                .findByUserAndTeamIsNullAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to)
+        GitRepositoryEntity repo = repoService.getById(repoId);
+        return metricSnapshotService
+                .getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to)
                 .stream()
                 .sorted(Comparator.comparing(MetricSnapshot::getDate))
                 .map(MetricPointDto::fromEntity)
@@ -316,12 +379,12 @@ public class MetricsController {
         List<MetricSnapshot> list;
 
         if (repoId == null) {
-            list = metricSnapshotRepository
-                    .findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, type, from, to);
+            list = metricSnapshotService
+                    .getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to);
         } else {
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
-            list = metricSnapshotRepository
-                    .findByUserAndTeamIsNullAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to);
+            GitRepositoryEntity repo = repoService.getById(repoId);
+            list = metricSnapshotService
+                    .getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to);
         }
 
         if (list.isEmpty()) return new MetricAggregateDto(type, 0.0, null, null);
@@ -338,8 +401,8 @@ public class MetricsController {
 
         // Team-scoped snapshots: each member's commits are attributed by authorEmail,
         // so data from shared repos is correctly split per developer.
-        List<MetricSnapshot> snapshots = metricSnapshotRepository
-                .findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(memberIds, teamId, type, from, to);
+        List<MetricSnapshot> snapshots = metricSnapshotService
+                .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(memberIds, teamId, type, from, to);
 
         // Group by (userId, date) to collapse per-repo rows into per-member daily totals
         Map<Long, Map<LocalDate, Double>> perUserPerDay = new HashMap<>();
@@ -370,12 +433,11 @@ public class MetricsController {
     private List<MetricPointDto> getMemberDailySeries(Long teamId, Long memberId, MetricType type,
                                                       LocalDate from, LocalDate to) {
         Team team = requireTeam(teamId);
-        User member = userRepository.findById(memberId)
-                .orElseThrow(() -> new NoSuchElementException("User not found: " + memberId));
+        User member = userService.getById(memberId);
 
         Map<LocalDate, Double> sumByDate = new TreeMap<>();
-        metricSnapshotRepository
-                .findByUserAndTeamAndMetricTypeAndDateBetween(member, team, type, from, to)
+        metricSnapshotService
+                .getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(member, team, type, from, to)
                 .forEach(s -> sumByDate.merge(s.getDate(), s.getValue(), Double::sum));
         return sumByDate.entrySet().stream()
                 .map(e -> new MetricPointDto(e.getKey(), e.getValue(), type.name(), null, null))
@@ -383,7 +445,6 @@ public class MetricsController {
     }
 
     private Team requireTeam(Long teamId) {
-        return teamRepository.findById(teamId)
-                .orElseThrow(() -> new NoSuchElementException("Team not found: " + teamId));
+        return teamService.getById(teamId);
     }
 }

@@ -11,6 +11,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { TeamDashboardPage } from '@/pages/TeamDashboardPage';
 import { TeamManagePage } from '@/pages/TeamManagePage';
 import { AdminPage } from '@/pages/AdminPage';
+import { WelcomePage } from '@/pages/WelcomePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/welcome" element={<WelcomePage />} />
 
             <Route element={<AppShell />}>
               <Route path="/dashboard" element={<DashboardPage />} />

@@ -23,7 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
+import java.time.temporal.WeekFields;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 
@@ -113,6 +115,12 @@ public class MetricsService {
         calcLeadTimeFirstCommitToMerge(user, team, repoIds, fromDate, toDate, from, to);
         calcReviewResponseTime(user, team, repoIds, fromDate, toDate, from, to);
         calcFocusRatio(user, team, repoIds, fromDate, toDate, from, to);
+        calcAfterHoursRatioAndRefactorRatio(user, team, repoIds, fromDate, toDate, from, to);
+        calcDeepWorkStreak(user, team, repoIds, fromDate, toDate, from, to);
+        calcMergeToMainFrequency(user, team, repoIds, fromDate, toDate, from, to);
+        calcKnowledgeSilo(user, team, repoIds, fromDate, toDate, from, to);
+        calcPrSizeComplexity(user, team, repoIds, fromDate, toDate, from, to);
+        calcMergeWithoutReview(user, team, repoIds, fromDate, toDate, from, to);
     }
 
     // -------------------------------------------------------------------------
@@ -355,6 +363,233 @@ public class MetricsService {
                 saveMetric(user, team, day, FOCUS_RATIO_DAYS_TASKS, 1.0, null, null, null);
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Ticket 5 — Wellness + Quality metric calculations
+    // -------------------------------------------------------------------------
+
+    /**
+     * AFTER_HOURS_COMMIT_RATIO — fraction of commits outside 09:00–18:00 Mon–Fri
+     * in the user's configured timezone.
+     *
+     * REFACTOR_RATIO — fraction of commits where deletions > additions, a proxy
+     * for refactoring / code-reduction work.
+     *
+     * Both are computed from the same query to avoid a duplicate DB round-trip.
+     */
+    private void calcAfterHoursRatioAndRefactorRatio(User user, Team team, List<Long> repoIds,
+                                                      LocalDate fromDate, LocalDate toDate,
+                                                      Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+
+        List<Object[]> rows = commitRepository
+                .findCommitDetailsByRepoIdsAndAuthorEmail(repoIds, user.getEmail(), from, to);
+        if (rows.isEmpty()) return;
+
+        ZoneId zone;
+        try {
+            zone = ZoneId.of(user.getTimezone() != null ? user.getTimezone() : "UTC");
+        } catch (Exception e) {
+            zone = ZoneOffset.UTC;
+        }
+
+        long total = rows.size();
+        long outOfHours = 0;
+        long refactorCount = 0;
+
+        for (Object[] row : rows) {
+            Instant authorDate = (Instant) row[0];
+            int additions = ((Number) row[1]).intValue();
+            int deletions = ((Number) row[2]).intValue();
+
+            ZonedDateTime zdt = authorDate.atZone(zone);
+            DayOfWeek dow = zdt.getDayOfWeek();
+            int hour = zdt.getHour();
+            boolean isWeekend = dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY;
+            boolean isWorkHours = hour >= 9 && hour < 18;
+            if (isWeekend || !isWorkHours) outOfHours++;
+
+            if (deletions > additions) refactorCount++;
+        }
+
+        saveMetric(user, team, fromDate, AFTER_HOURS_COMMIT_RATIO,
+                (double) outOfHours / total, null, fromDate, toDate);
+        saveMetric(user, team, fromDate, REFACTOR_RATIO,
+                (double) refactorCount / total, null, fromDate, toDate);
+    }
+
+    /**
+     * DEEP_WORK_STREAK_DAYS — longest consecutive-day run where the user had ≥1 commit.
+     * Saved as a single aggregate value for the window.
+     */
+    private void calcDeepWorkStreak(User user, Team team, List<Long> repoIds,
+                                    LocalDate fromDate, LocalDate toDate,
+                                    Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+
+        List<Object[]> rows = commitRepository
+                .aggregateCommitsDailyByRepoIdsAndAuthorEmail(repoIds, user.getEmail(), from, to);
+
+        // Collect unique days that have at least one commit, sorted ascending.
+        TreeSet<LocalDate> daysWithCommits = new TreeSet<>();
+        for (Object[] row : rows) {
+            if (((Number) row[2]).longValue() > 0) {
+                daysWithCommits.add(((java.sql.Date) row[0]).toLocalDate());
+            }
+        }
+        if (daysWithCommits.isEmpty()) return;
+
+        int maxStreak = 0;
+        int streak = 0;
+        LocalDate prev = null;
+        for (LocalDate day : daysWithCommits) {
+            if (prev != null && day.equals(prev.plusDays(1))) {
+                streak++;
+            } else {
+                streak = 1;
+            }
+            if (streak > maxStreak) maxStreak = streak;
+            prev = day;
+        }
+
+        saveMetric(user, team, fromDate, DEEP_WORK_STREAK_DAYS, maxStreak, null, fromDate, toDate);
+    }
+
+    /**
+     * MERGE_TO_MAIN_FREQUENCY_PER_WEEK — average commit count per ISO calendar week.
+     * This is a DORA deployment-frequency proxy when no CI/CD pipeline data is available.
+     * All commits are counted (branch detection is not available in the current data model).
+     */
+    private void calcMergeToMainFrequency(User user, Team team, List<Long> repoIds,
+                                          LocalDate fromDate, LocalDate toDate,
+                                          Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+
+        List<Object[]> rows = commitRepository
+                .aggregateCommitsDailyByRepoIdsAndAuthorEmail(repoIds, user.getEmail(), from, to);
+        if (rows.isEmpty()) return;
+
+        // Group daily totals by ISO week key so partial weeks are still counted.
+        Map<String, Long> byWeek = new TreeMap<>();
+        for (Object[] row : rows) {
+            LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
+            long count = ((Number) row[2]).longValue();
+            if (count == 0) continue;
+            int weekYear = day.get(WeekFields.ISO.weekBasedYear());
+            int weekNum  = day.get(WeekFields.ISO.weekOfWeekBasedYear());
+            String key = weekYear + "-W" + String.format("%02d", weekNum);
+            byWeek.merge(key, count, Long::sum);
+        }
+        if (byWeek.isEmpty()) return;
+
+        double avgPerWeek = byWeek.values().stream().mapToLong(Long::longValue).average().orElse(0.0);
+        saveMetric(user, team, fromDate, MERGE_TO_MAIN_FREQUENCY_PER_WEEK,
+                avgPerWeek, null, fromDate, toDate);
+    }
+
+    /**
+     * KNOWLEDGE_SILO_SCORE — the maximum fraction of commits belonging to this user
+     * across all their repos in the window. A score of 0.9 means they authored 90%
+     * of commits to at least one repo — a strong bus-factor signal.
+     */
+    private void calcKnowledgeSilo(User user, Team team, List<Long> repoIds,
+                                   LocalDate fromDate, LocalDate toDate,
+                                   Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+
+        Map<Long, Long> totalByRepo = new HashMap<>();
+        for (Object[] row : commitRepository.countTotalCommitsByRepoIds(repoIds, from, to)) {
+            totalByRepo.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+        if (totalByRepo.isEmpty()) return;
+
+        Map<Long, Long> userByRepo = new HashMap<>();
+        for (Object[] row : commitRepository
+                .countCommitsByRepoIdsAndAuthorEmail(repoIds, user.getEmail(), from, to)) {
+            userByRepo.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+
+        double maxShare = 0.0;
+        for (Map.Entry<Long, Long> entry : totalByRepo.entrySet()) {
+            long total = entry.getValue();
+            if (total == 0) continue;
+            long userCount = userByRepo.getOrDefault(entry.getKey(), 0L);
+            double share = (double) userCount / total;
+            if (share > maxShare) maxShare = share;
+        }
+
+        saveMetric(user, team, fromDate, KNOWLEDGE_SILO_SCORE, maxShare, null, fromDate, toDate);
+    }
+
+    /**
+     * PR_SIZE_COMPLEXITY_SCORE — median of (additions + deletions) / commitsCount
+     * across merged PRs authored by this user. Guards against commitsCount = 0
+     * (treats those PRs as "squash merged" — total size counts as 1-commit diff).
+     * Requires githubLogin to be set.
+     */
+    private void calcPrSizeComplexity(User user, Team team, List<Long> repoIds,
+                                      LocalDate fromDate, LocalDate toDate,
+                                      Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+        if (user.getGithubLogin() == null) return;
+
+        List<GitHubPullRequestEntity> prs = pullRequestRepository
+                .findMergedPrsByRepoIdsAndAuthorLogin(repoIds, user.getGithubLogin(), from, to);
+        if (prs.isEmpty()) return;
+
+        Map<Long, List<Double>> perRepo = new HashMap<>();
+        for (GitHubPullRequestEntity pr : prs) {
+            int size = pr.getAdditions() + pr.getDeletions();
+            int commits = pr.getCommitsCount() > 0 ? pr.getCommitsCount() : 1;
+            double complexity = (double) size / commits;
+            perRepo.computeIfAbsent(pr.getRepository().getId(), id -> new ArrayList<>()).add(complexity);
+        }
+
+        perRepo.forEach((repoId, values) -> {
+            Collections.sort(values);
+            int n = values.size();
+            double median = n % 2 == 1
+                    ? values.get(n / 2)
+                    : (values.get(n / 2 - 1) + values.get(n / 2)) / 2.0;
+            saveMetric(user, team, fromDate, PR_SIZE_COMPLEXITY_SCORE, median,
+                    gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
+        });
+    }
+
+    /**
+     * MERGE_WITHOUT_REVIEW_RATIO — fraction of merged PRs authored by this user
+     * that had zero reviews recorded in github_pr_reviews.
+     * Requires githubLogin to be set and PR review data to have been collected (Ticket 4).
+     */
+    private void calcMergeWithoutReview(User user, Team team, List<Long> repoIds,
+                                        LocalDate fromDate, LocalDate toDate,
+                                        Instant from, Instant to) {
+        if (repoIds.isEmpty()) return;
+        if (user.getGithubLogin() == null) return;
+
+        List<GitHubPullRequestEntity> prs = pullRequestRepository
+                .findMergedPrsByRepoIdsAndAuthorLogin(repoIds, user.getGithubLogin(), from, to);
+        if (prs.isEmpty()) return;
+
+        List<Long> prIds = prs.stream().map(GitHubPullRequestEntity::getId).toList();
+        Set<Long> prsWithReviews = prReviewRepository.findFirstReviewTimestampsByPrIds(prIds)
+                .stream()
+                .map(row -> ((Number) row[0]).longValue())
+                .collect(Collectors.toSet());
+
+        Map<Long, long[]> perRepo = new HashMap<>(); // repoId -> [noReviewCount, totalCount]
+        for (GitHubPullRequestEntity pr : prs) {
+            long[] counts = perRepo.computeIfAbsent(pr.getRepository().getId(), id -> new long[]{0, 0});
+            counts[1]++;
+            if (!prsWithReviews.contains(pr.getId())) counts[0]++;
+        }
+
+        perRepo.forEach((repoId, counts) -> {
+            double ratio = counts[1] > 0 ? (double) counts[0] / counts[1] : 0.0;
+            saveMetric(user, team, fromDate, MERGE_WITHOUT_REVIEW_RATIO, ratio,
+                    gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
+        });
     }
 
     // -------------------------------------------------------------------------

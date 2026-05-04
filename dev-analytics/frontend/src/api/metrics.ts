@@ -64,6 +64,9 @@ export const metricsApi = {
 
   prSizeComplexity: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/pr-size-complexity', { params: { from, to } }),
+
+  knowledgeSilo: (from: string, to: string) =>
+    api.get<MetricAggregateDto>('/metrics/knowledge-silo', { params: { from, to } }),
 };
 
 // ─── Team ─────────────────────────────────────────────────────────────────────
