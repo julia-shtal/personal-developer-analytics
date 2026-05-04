@@ -4,7 +4,6 @@ import com.juliashtal.devanalytics.github.model.dto.GitHubPullRequestDto;
 
 import com.juliashtal.devanalytics.github.service.GitHubPrCollector;
 import com.juliashtal.devanalytics.github.service.GitHubPullRequestCollector;
-import com.juliashtal.devanalytics.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;

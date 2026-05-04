@@ -32,6 +32,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.juliashtal.devanalytics.helper.ParsingHelper.resolveApiBase;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -235,14 +237,6 @@ public class GitHubPullRequestCollector {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    private String resolveApiBase(String configuredBaseUrl) {
-        if (configuredBaseUrl == null || configuredBaseUrl.isBlank()
-                || configuredBaseUrl.equalsIgnoreCase("https://github.com")) {
-            return "https://api.github.com";
-        }
-        return configuredBaseUrl.stripTrailing().replaceAll("/$", "");
     }
 
     private int fetchTotalPrCount(String apiBase, String token, String repoFullName) {

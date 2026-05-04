@@ -120,6 +120,57 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
             @Param("prNumber") int prNumber);
 
     /**
+     * Returns (authorDate, additions, deletions) for all commits by one author in a window.
+     * Used by after-hours ratio and refactor ratio calculations.
+     */
+    @Query("""
+    select c.authorDate, c.additions, c.deletions
+    from GitCommitEntity c
+    where c.repository.id IN :repoIds
+      and c.authorEmail = :authorEmail
+      and c.authorDate between :from and :to
+    """)
+    List<Object[]> findCommitDetailsByRepoIdsAndAuthorEmail(
+            @Param("repoIds") List<Long> repoIds,
+            @Param("authorEmail") String authorEmail,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    /**
+     * Total commit count per repo (all authors) in a window.
+     * Used as the denominator for knowledge silo score.
+     */
+    @Query("""
+    select c.repository.id, count(c.id)
+    from GitCommitEntity c
+    where c.repository.id IN :repoIds
+      and c.authorDate between :from and :to
+    group by c.repository.id
+    """)
+    List<Object[]> countTotalCommitsByRepoIds(
+            @Param("repoIds") List<Long> repoIds,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    /**
+     * Commit count per repo for one specific author in a window.
+     * Used as the numerator for knowledge silo score.
+     */
+    @Query("""
+    select c.repository.id, count(c.id)
+    from GitCommitEntity c
+    where c.repository.id IN :repoIds
+      and c.authorEmail = :authorEmail
+      and c.authorDate between :from and :to
+    group by c.repository.id
+    """)
+    List<Object[]> countCommitsByRepoIdsAndAuthorEmail(
+            @Param("repoIds") List<Long> repoIds,
+            @Param("authorEmail") String authorEmail,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    /**
      * Returns the next batch of commits whose stats have not yet been enriched,
      * ordered newest-first so that recent commits are always prioritised.
      * Used by the background enrichment scheduler.
