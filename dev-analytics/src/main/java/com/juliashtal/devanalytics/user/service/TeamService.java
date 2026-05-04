@@ -72,6 +72,12 @@ public class TeamService {
         return TeamDto.from(teamRepository.save(team));
     }
 
+    @Transactional(readOnly = true)
+    public Team getById(Long teamId) {
+        return teamRepository.findById(teamId)
+                .orElseThrow(() -> new NoSuchElementException("Team not found: " + teamId));
+    }
+
     @Transactional
     public TeamDto renameTeam(Long teamId, String name) {
         Long currentUserId = SecurityUtils.getCurrentUserId();

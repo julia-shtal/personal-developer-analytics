@@ -19,7 +19,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await login({ usernameOrEmail, password });
-      navigate('/dashboard');
+      navigate('/welcome');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       console.error('[Login] error:', err);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   GitCommit,
@@ -160,10 +160,34 @@ export function DashboardPage() {
     queryFn: () => metricsApi.prSizeComplexity(from, to).then((r) => r.data),
   });
 
+  const knowledgeSilo = useQuery({
+    queryKey: ['knowledge-silo', from, to],
+    queryFn: () => metricsApi.knowledgeSilo(from, to).then((r) => r.data),
+  });
+
   const calculateMutation = useMutation({
     mutationFn: () => metricsApi.calculate(from, to),
     onSuccess: () => qc.invalidateQueries({ queryKey: [] }),
   });
+
+  // The backend only stores a value=1 snapshot for days with commits; zero-commit
+  // weekdays have no row. Fill in the gaps so the chart shows true on/off activity
+  // rather than a flat line at 1.0 connecting only the active days.
+  const focusRatioFilled = useMemo(() => {
+    const activeDates = new Set((focusRatioSeries.data ?? []).map((p) => p.date));
+    const result: { date: string; value: number; metricType: string }[] = [];
+    const end = new Date(to + 'T00:00:00');
+    const cur = new Date(from + 'T00:00:00');
+    while (cur <= end) {
+      const dow = cur.getDay(); // 0 = Sun, 6 = Sat
+      if (dow !== 0 && dow !== 6) {
+        const dateStr = cur.toISOString().slice(0, 10);
+        result.push({ date: dateStr, value: activeDates.has(dateStr) ? 1 : 0, metricType: 'FOCUS_RATIO_DAYS_TASKS' });
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return result;
+  }, [focusRatioSeries.data, from, to]);
 
   const isLoading = commits.isLoading && prCreated.isLoading;
   if (isLoading) return <PageSpinner />;
@@ -215,24 +239,28 @@ export function DashboardPage() {
           value={totalCommits}
           subtitle="in period"
           icon={<GitCommit className="h-4 w-4" />}
+          tooltip="Number of Git commits authored in the selected period."
         />
         <KpiCard
           label="PRs Merged"
           value={totalPrsMerged}
           subtitle="in period"
           icon={<GitMerge className="h-4 w-4" />}
+          tooltip="Pull requests merged to a target branch in the selected period."
         />
         <KpiCard
           label="PR Lead Time"
           value={fmtHours(leadTimeHrs)}
           subtitle="open → merge, median"
           icon={<Clock className="h-4 w-4" />}
+          tooltip="Median time from when a PR is opened to when it is merged."
         />
         <KpiCard
           label="Focus Ratio"
           value={focusRatio.data?.value != null ? fmtPct(focusRatio.data.value) : '—'}
           subtitle="coding days / working days"
           icon={<Target className="h-4 w-4" />}
+          tooltip="Fraction of working days (Mon–Fri) on which you made at least one commit."
         />
       </div>
 
@@ -242,11 +270,13 @@ export function DashboardPage() {
           label="PRs Created"
           value={sum(prCreated.data ?? [])}
           icon={<GitPullRequest className="h-4 w-4" />}
+          tooltip="Pull requests opened by you in the selected period."
         />
         <KpiCard
           label="Issues Closed"
           value={sum(issuesClosed.data ?? [])}
           icon={<Target className="h-4 w-4" />}
+          tooltip="Issues resolved or closed by you in the selected period."
         />
         <KpiCard
           label="Review Response"
@@ -255,12 +285,14 @@ export function DashboardPage() {
             : '—'}
           subtitle="first review, median"
           icon={<Clock className="h-4 w-4" />}
+          tooltip="Median time from PR open to receiving the first review comment or approval."
         />
         <KpiCard
           label="1st Commit → Merge"
           value={fmtHours(firstCommitLeadTimeHrs)}
           subtitle="lead time from first commit"
           icon={<GitCommit className="h-4 w-4" />}
+          tooltip="Median time from the first commit on a PR branch to the PR being merged."
         />
       </div>
 
@@ -270,18 +302,21 @@ export function DashboardPage() {
           label="Issues Created"
           value={sum(issuesCreated.data ?? [])}
           icon={<GitBranch className="h-4 w-4" />}
+          tooltip="Issues opened in the selected period across all connected trackers."
         />
         <KpiCard
           label="Issue Lead Time"
           value={fmtHours(issueLeadTimeHrs)}
           subtitle="open → close, median"
           icon={<Clock className="h-4 w-4" />}
+          tooltip="Median time from issue creation to it being marked as closed or resolved."
         />
         <KpiCard
           label="Avg Churn"
           value={avgChurn > 0 ? `${(avgChurn * 100).toFixed(1)}%` : '—'}
           subtitle="deleted / total lines"
           icon={<Scissors className="h-4 w-4" />}
+          tooltip="Average daily ratio of deleted lines to total changed lines. High churn may indicate rework or rewrites."
         />
         <KpiCard
           label="Deep Work Streak"
@@ -290,6 +325,7 @@ export function DashboardPage() {
             : '—'}
           subtitle="longest active run"
           icon={<Zap className="h-4 w-4" />}
+          tooltip="Longest consecutive run of days on which you authored at least one commit."
         />
       </div>
 
@@ -304,6 +340,7 @@ export function DashboardPage() {
               : '—'}
             subtitle="commits outside 09–18 Mon–Fri"
             icon={<Moon className="h-4 w-4" />}
+            tooltip="Share of commits made outside 09:00–18:00 Mon–Fri in your local timezone. High values may indicate unsustainable working patterns."
           />
           <KpiCard
             label="Refactor Ratio"
@@ -312,6 +349,7 @@ export function DashboardPage() {
               : '—'}
             subtitle="commits: deletions > additions"
             icon={<Scissors className="h-4 w-4" />}
+            tooltip="Share of commits where deleted lines outnumber added lines — a proxy for cleanup and refactoring activity."
           />
           <KpiCard
             label="Merge Without Review"
@@ -320,6 +358,7 @@ export function DashboardPage() {
               : '—'}
             subtitle="PRs merged with 0 reviews"
             icon={<Eye className="h-4 w-4" />}
+            tooltip="Share of merged PRs that had zero reviewer approvals or comments before merge."
           />
           <KpiCard
             label="Merge Frequency"
@@ -328,6 +367,27 @@ export function DashboardPage() {
               : '—'}
             subtitle="merges to main (DORA proxy)"
             icon={<Flame className="h-4 w-4" />}
+            tooltip="Average number of merges to the main branch per week. Used as a proxy for DORA deployment frequency."
+          />
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+          <KpiCard
+            label="Knowledge Silo"
+            value={knowledgeSilo.data?.value != null && knowledgeSilo.data.value > 0
+              ? fmtPct(knowledgeSilo.data.value)
+              : '—'}
+            subtitle="max repo ownership share"
+            icon={<GitBranch className="h-4 w-4" />}
+            tooltip="Your highest commit share across all repos. A high value means you are the sole owner of that repo's knowledge — a bus-factor risk."
+          />
+          <KpiCard
+            label="PR Size Complexity"
+            value={prSizeComplexity.data?.value != null && prSizeComplexity.data.value > 0
+              ? `${prSizeComplexity.data.value.toFixed(0)} ln`
+              : '—'}
+            subtitle="lines/commit, median"
+            icon={<GitPullRequest className="h-4 w-4" />}
+            tooltip="Median (additions + deletions) per commit across your PRs. Lower values mean smaller, more focused changes that are easier to review."
           />
         </div>
       </div>
@@ -382,16 +442,15 @@ export function DashboardPage() {
           </div>
         </ChartSection>
 
-        {(focusRatioSeries.data?.length ?? 0) > 0 && (
-          <ChartSection title="Focus ratio over time" subtitle="Coding days vs working days">
-            <MetricLineChart
-              data={focusRatioSeries.data ?? []}
-              label="Focus ratio"
+        {focusRatioFilled.some((p) => p.value > 0) && (
+          <ChartSection title="Focus ratio over time" subtitle="Weekdays with at least one commit">
+            <MetricBarChart
+              data={focusRatioFilled}
+              label="Active day"
               color="#7c3aed"
-              unit=""
             />
             <p className="mt-2 text-xs text-gray-400">
-              1.0 = all working days had commits; 0.0 = no coding.
+              1 = had commits that day; 0 = no commits. The card percentage is active days / total weekdays in the period.
             </p>
           </ChartSection>
         )}

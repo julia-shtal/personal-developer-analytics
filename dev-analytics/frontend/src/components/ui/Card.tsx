@@ -47,9 +47,10 @@ interface KpiCardProps {
   icon?: ReactNode;
   trend?: 'up' | 'down' | 'neutral';
   trendValue?: string;
+  tooltip?: string;
 }
 
-export function KpiCard({ label, value, subtitle, icon, trend, trendValue }: KpiCardProps) {
+export function KpiCard({ label, value, subtitle, icon, trend, trendValue, tooltip }: KpiCardProps) {
   const trendColor = trend === 'up' ? 'text-emerald-600' : trend === 'down' ? 'text-red-500' : 'text-gray-500';
 
   return (
@@ -62,8 +63,16 @@ export function KpiCard({ label, value, subtitle, icon, trend, trendValue }: Kpi
             {subtitle && <p className="mt-0.5 text-xs text-gray-400">{subtitle}</p>}
           </div>
           {icon && (
-            <div className="ml-3 flex-shrink-0 p-2.5 rounded-lg bg-violet-50 text-violet-600">
-              {icon}
+            <div className="ml-3 flex-shrink-0 relative group">
+              <div className="p-2.5 rounded-lg bg-violet-50 text-violet-600 cursor-default">
+                {icon}
+              </div>
+              {tooltip && (
+                <div className="absolute right-0 top-full mt-2 z-50 w-56 rounded-lg bg-gray-900 text-white text-xs px-3 py-2 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none">
+                  <div className="absolute right-3 -top-1.5 w-3 h-3 bg-gray-900 rotate-45 rounded-sm" />
+                  {tooltip}
+                </div>
+              )}
             </div>
           )}
         </div>
