@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
@@ -20,7 +22,7 @@ public class GitHubIssuesCollector {
 
     private final GitHubClientFactory clientFactory;
     private final IssueRepository issueRepository;
-    private final GitRepositoryEntityRepository  gitRepositoryEntityRepository;
+    private final GitRepositoryEntityRepository gitRepositoryEntityRepository;
 
     /**
      * Collects issues for a specific repository (name = "owner/repo").
@@ -32,30 +34,31 @@ public class GitHubIssuesCollector {
         try {
             GHRepository ghRepo = github.getRepository(fullName);
 
-            int saved = 0;
-            for (GHIssue gi : ghRepo.queryIssues().state(GHIssueState.ALL).list()) {
-                if (gi.getPullRequest() == null) {  // Skip PRs
-                    upsertGitHubIssue(config, ghRepo, gi);
-                    saved++;
-                }
+            // Fetch the repo entity once — not on every issue iteration.
+            GitRepositoryEntity repo = gitRepositoryEntityRepository
+                    .findByDataSourceConfigAndName(config, fullName)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "GitRepositoryEntity not found for " + fullName));
+
+            List<IssueEntity> batch = new ArrayList<>();
+            for (GHIssue gi : ghRepo.queryIssues().state(GHIssueState.ALL).list().withPageSize(100)) {
+                if (gi.getPullRequest() != null) continue; // skip PRs
+
+                IssueEntity issue = buildIssueEntity(config, repo, gi);
+                batch.add(issue);
             }
-            return saved;
+
+            issueRepository.saveAll(batch);
+            return batch.size();
         } catch (IOException e) {
             throw new GitHubException("Failed to collect GitHub issues for " + fullName, e);
         }
     }
 
-    private void upsertGitHubIssue(DataSourceConfig config,
-                                   GHRepository ghRepo,
-                                   GHIssue gi) throws IOException {
-
-        String fullName = ghRepo.getFullName(); // "owner/repo"
-        String externalId = fullName + "#" + gi.getNumber();
-
-        GitRepositoryEntity repo = gitRepositoryEntityRepository
-                .findByDataSourceConfigAndName(config, fullName)
-                .orElseThrow(() -> new IllegalStateException(
-                        "GitRepositoryEntity not found for " + fullName));
+    private IssueEntity buildIssueEntity(DataSourceConfig config,
+                                         GitRepositoryEntity repo,
+                                         GHIssue gi) throws IOException {
+        String externalId = repo.getName() + "#" + gi.getNumber();
 
         IssueEntity issue = issueRepository
                 .findByDataSourceAndExternalId(config, externalId)
@@ -81,8 +84,6 @@ public class GitHubIssuesCollector {
             issue.setLabels(labels);
         }
 
-        issueRepository.save(issue);
+        return issue;
     }
-
 }
-

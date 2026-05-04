@@ -1,122 +1,91 @@
 package com.juliashtal.devanalytics.github.service;
 
-import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
-import com.juliashtal.devanalytics.exception.GitHubException;
+import com.juliashtal.devanalytics.datasource.service.SyncJobTracker;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
-import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
-import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
-import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
+import com.juliashtal.devanalytics.git.model.StatsStatus;
 import lombok.RequiredArgsConstructor;
-import org.kohsuke.github.GHCommit;
-import org.kohsuke.github.GHRepository;
-import org.kohsuke.github.GitHub;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.util.NoSuchElementException;
+import java.util.Comparator;
+import java.util.List;
 
+/**
+ * Orchestrates two-phase GitHub commit ingestion for a single repository.
+ *
+ * <h3>Pipeline</h3>
+ * <ol>
+ *   <li><b>Phase A — ingest:</b> {@link GitHubCommitIngestService} walks the
+ *       {@code /commits} list endpoint and saves new commits with
+ *       {@code statsStatus=PENDING}. No per-commit detail calls are made.
+ *       The watermark ({@code lastFetchedCommitHash}) is updated here.</li>
+ *   <li><b>Phase B — immediate enrichment:</b> the newest
+ *       {@value GitHubCommitStatsEnrichmentService#IMMEDIATE_ENRICH_LIMIT} commits
+ *       are enriched synchronously using the detail endpoint so that current
+ *       dashboards reflect fresh stats right away.</li>
+ *   <li><b>Phase C — background backfill:</b> the remaining PENDING commits are
+ *       handled by {@link CommitStatsEnrichmentScheduler} which runs every 2 minutes
+ *       in the background.</li>
+ * </ol>
+ *
+ * <p>This design removes the bottleneck where all per-commit detail requests had to
+ * complete before the sync job could return, and keeps total request volume per run
+ * proportional only to the priority window, not the full history.</p>
+ */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GitHubCollector {
 
-    private final GitRepositoryEntityRepository repoRepository;
-    private final GitCommitEntityRepository commitRepository;
-    private final GitHubClientFactory clientFactory;
+    private final GitHubCommitIngestService ingestService;
+    private final GitHubCommitStatsEnrichmentService enrichmentService;
 
-    @Transactional
-    public int collectForRepository(Long gitRepoId) {
-        GitRepositoryEntity repo = repoRepository.findById(gitRepoId)
-                .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + gitRepoId));
+    /**
+     * Runs the full two-phase collection for one repository.
+     *
+     * @return total number of commits newly saved (all phases, including PENDING ones)
+     */
+    public int collectForRepository(Long gitRepoId, SyncJobTracker.JobState jobState) {
+        // Phase A: fast ingest — saves all new commits as PENDING.
+        GitHubCommitIngestService.IngestResult ingest =
+                ingestService.ingestForRepository(gitRepoId, jobState);
 
-        DataSourceConfig cfg = repo.getDataSourceConfig();
-        GitHub github = clientFactory.createClient(cfg);
-
-        try {
-            GHRepository ghRepo = github.getRepository(repo.getName()); // "owner/repo"
-            Iterable<GHCommit> commits = ghRepo.listCommits();
-
-            String lastFetched = repo.getLastFetchedCommitHash();
-            int saved = 0;
-            String newestHash = lastFetched;
-
-            for (GHCommit ghCommit : commits) {
-                String hash = ghCommit.getSHA1();
-
-                if (lastFetched != null && lastFetched.equals(hash)) {
-                    break;
-                }
-
-                if (commitRepository.findByHash(hash).isPresent()) {
-                    continue;
-                }
-
-                GitCommitEntity entity = mapCommit(ghCommit, repo);
-                commitRepository.save(entity);
-                saved++;
-
-                if (newestHash == null) {
-                    newestHash = hash;
-                }
-            }
-
-            if (newestHash != null && !newestHash.equals(lastFetched)) {
-                repo.setLastFetchedCommitHash(newestHash);
-            }
-            repo.setLastScanAt(LocalDateTime.now());
-            cfg.setLastSuccessSync(LocalDateTime.now());
-            repoRepository.save(repo);
-
-            return saved;
-        } catch (IOException e) {
-            throw new GitHubException("Failed to collect GitHub commits for " + repo.getName(), e);
+        List<GitCommitEntity> saved = ingest.savedEntities();
+        if (saved.isEmpty()) {
+            log.debug("No new commits for repo id={}", gitRepoId);
+            return 0;
         }
+
+        log.info("Ingested {} new commits for repo id={}, starting immediate enrichment of top {}",
+                saved.size(), gitRepoId, GitHubCommitStatsEnrichmentService.IMMEDIATE_ENRICH_LIMIT);
+
+        // Phase B: immediate enrichment of the priority window — newest commits first.
+        // Sort explicitly so the limit always picks the most recent ones regardless of
+        // the order JPA returns from saveAll.
+        saved.sort(Comparator.comparing(GitCommitEntity::getAuthorDate,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+
+        enrichmentService.enrichImmediate(
+                saved,
+                ingest.apiBase(),
+                ingest.token(),
+                extractRepoFullName(saved));
+
+        // Phase C (background) is handled by CommitStatsEnrichmentScheduler — no action needed here.
+        int pending = (int) saved.stream()
+                .filter(c -> c.getStatsStatus() == StatsStatus.PENDING)
+                .count();
+        if (pending > 0) {
+            log.info("{} commits queued for background enrichment (repo id={})", pending, gitRepoId);
+        }
+
+        return saved.size();
     }
 
-    private GitCommitEntity mapCommit(GHCommit ghCommit, GitRepositoryEntity repo) throws IOException {
-        GitCommitEntity entity = new GitCommitEntity();
-        entity.setRepository(repo);
-        entity.setHash(ghCommit.getSHA1());
-
-        GHCommit.ShortInfo info = ghCommit.getCommitShortInfo();
-        if (info != null) {
-            entity.setAuthorName(info.getAuthor().getName());
-            entity.setAuthorEmail(info.getAuthor().getEmail());
-            entity.setAuthorDate(info.getAuthoredDate());
-            entity.setMessage(info.getMessage());
-        } else {
-            entity.setAuthorName(
-                    ghCommit.getAuthor() != null ? ghCommit.getAuthor().getName() : "unknown"
-            );
-            entity.setAuthorEmail(
-                    ghCommit.getAuthor() != null ? ghCommit.getAuthor().getEmail() : "unknown"
-            );
-            entity.setAuthorDate(Instant.now());
-            entity.setMessage(null);
-        }
-
-        try {
-            int additions = ghCommit.getLinesAdded();
-            int deletions = ghCommit.getLinesDeleted();
-            int total = ghCommit.getLinesChanged();
-
-            entity.setAdditions(additions);
-            entity.setDeletions(deletions);
-            entity.setFilesChanged(total);
-        } catch (IOException e) {
-            entity.setAdditions(0);
-            entity.setDeletions(0);
-            entity.setFilesChanged(0);
-        }
-
-        var parents = ghCommit.getParents();
-        if (parents != null && !parents.isEmpty()) {
-            entity.setParentHash(parents.get(0).getSHA1());
-        }
-
-        return entity;
+    private static String extractRepoFullName(List<GitCommitEntity> commits) {
+        if (commits.isEmpty()) return "unknown";
+        GitCommitEntity first = commits.get(0);
+        String fullName = first.getRepository().getRepoFullName();
+        return fullName != null ? fullName : first.getRepository().getName();
     }
-
 }

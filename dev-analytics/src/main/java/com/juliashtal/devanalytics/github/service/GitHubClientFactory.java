@@ -16,6 +16,11 @@ public class GitHubClientFactory {
         this.tokenEncryptor = tokenEncryptor;
     }
 
+    /** Returns the plain-text token for the data source (needed for raw HTTP calls). */
+    public String getDecryptedToken(DataSourceConfig cfg) {
+        return tokenEncryptor.decrypt(cfg.getApiTokenEncrypted());
+    }
+
     public GitHub createClient(DataSourceConfig cfg) {
         String token = tokenEncryptor.decrypt(cfg.getApiTokenEncrypted());
         if (token == null || token.isBlank()) {

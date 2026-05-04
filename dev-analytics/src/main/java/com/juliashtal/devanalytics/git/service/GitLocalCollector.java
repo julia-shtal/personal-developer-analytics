@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.git.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.datasource.service.SyncJobTracker;
 import com.juliashtal.devanalytics.exception.GitException;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
@@ -21,18 +22,29 @@ import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class GitLocalCollector {
+
+    private static final int BATCH_SIZE = 500;
+    private static final int DIFF_THREADS = Math.min(Runtime.getRuntime().availableProcessors(), 4);
 
     private final GitCommitEntityRepository commitRepository;
     private final GitRepositoryEntityRepository repoRepository;
@@ -41,10 +53,13 @@ public class GitLocalCollector {
      * Collects commits for the specified local repository.
      * If lastFetchedCommitHash == null, we take the entire history.
      * Otherwise, only new commits on top of the saved ones.
+     *
+     * Not @Transactional — each commitRepository.saveAll() call is its own short transaction,
+     * so we never hold a single DB connection open for the entire (potentially long) job.
      */
-    @Transactional
-    public int collectForRepository(Long repoId) {
-        GitRepositoryEntity dbRepo = repoRepository.findById(repoId)
+    public int collectForRepository(Long repoId, SyncJobTracker.JobState jobState) {
+        // JOIN FETCH loads dataSourceConfig eagerly so it is available after the session closes.
+        GitRepositoryEntity dbRepo = repoRepository.findByIdWithDataSourceConfig(repoId)
                 .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
 
         File repoDir = new File(dbRepo.getLocalPath());
@@ -55,30 +70,87 @@ public class GitLocalCollector {
         try (Git git = Git.open(repoDir)) {
             Repository repository = git.getRepository();
 
-            Iterable<RevCommit> log = git.log().call();
-            int saved = 0;
+            // Load all existing hashes in one query to avoid per-commit DB lookups.
+            Set<String> existingHashes = new HashSet<>(
+                    commitRepository.findHashesByRepositoryId(dbRepo.getId()));
+
+            // -----------------------------------------------------------------
+            // Phase 1: fast single-threaded pass — collect metadata only.
+            // No diff computation here; that is the expensive part.
+            // -----------------------------------------------------------------
+            List<CommitMeta> pending = new ArrayList<>();
             String newestHash = dbRepo.getLastFetchedCommitHash();
 
-            for (RevCommit commit : log) {
+            for (RevCommit commit : git.log().call()) {
                 String hash = commit.getName();
 
-                // if we have already saved this commit — then all the old ones; we can interrupt
-                if (hash.equals(dbRepo.getLastFetchedCommitHash())) {
-                    break;
-                }
+                // Stop at the last commit we already fetched.
+                if (hash.equals(dbRepo.getLastFetchedCommitHash())) break;
+                if (existingHashes.contains(hash)) continue;
 
-                // if it already exists in the database (just in case)
-                if (commitRepository.findByHash(hash).isPresent()) {
-                    continue;
-                }
+                // First commit in log order is the newest.
+                if (newestHash == null) newestHash = hash;
 
-                GitCommitEntity entity = mapCommit(repository, commit, dbRepo);
-                commitRepository.save(entity);
-                saved++;
+                pending.add(new CommitMeta(
+                        commit.getId(),
+                        hash,
+                        commit.getAuthorIdent().getName(),
+                        commit.getAuthorIdent().getEmailAddress(),
+                        commit.getAuthorIdent().getWhenAsInstant(),
+                        commit.getFullMessage(),
+                        commit.getParentCount() > 0 ? commit.getParent(0).getName() : null
+                ));
+            }
 
-                if (newestHash == null) {
-                    newestHash = hash;
+            if (pending.isEmpty()) {
+                dbRepo.setLastScanAt(LocalDateTime.now());
+                repoRepository.save(dbRepo);
+                return 0;
+            }
+
+            // Now that we know exactly how many commits are pending, tell the tracker
+            // so it can calculate an accurate ETA for the diff-computation phase.
+            if (jobState != null) {
+                jobState.phaseTotal = pending.size();
+            }
+
+            // -----------------------------------------------------------------
+            // Phase 2: parallel diff computation.
+            // Each thread owns its ObjectReader / RevWalk / DiffFormatter —
+            // those JGit objects are not thread-safe and must not be shared.
+            // -----------------------------------------------------------------
+            ExecutorService diffPool = Executors.newFixedThreadPool(
+                    DIFF_THREADS,
+                    r -> {
+                        Thread t = new Thread(r, "git-diff");
+                        t.setDaemon(true);
+                        return t;
+                    });
+
+            try {
+                List<Future<GitCommitEntity>> futures = pending.stream()
+                        .map(meta -> diffPool.submit(() -> buildEntity(repository, meta, dbRepo)))
+                        .collect(Collectors.toList());
+
+                List<GitCommitEntity> batch = new ArrayList<>(BATCH_SIZE);
+                for (Future<GitCommitEntity> future : futures) {
+                    batch.add(future.get());
+                    // Increment per-commit so the ETA calculation has a smooth rate signal.
+                    if (jobState != null) {
+                        jobState.phaseProcessed.incrementAndGet();
+                        jobState.totalProcessed.incrementAndGet();
+                    }
+                    if (batch.size() >= BATCH_SIZE) {
+                        // Each saveAll runs in its own short transaction (SimpleJpaRepository is @Transactional).
+                        commitRepository.saveAll(batch);
+                        batch.clear();
+                    }
                 }
+                if (!batch.isEmpty()) {
+                    commitRepository.saveAll(batch);
+                }
+            } finally {
+                diffPool.shutdown();
             }
 
             if (newestHash != null && !newestHash.equals(dbRepo.getLastFetchedCommitHash())) {
@@ -91,40 +163,61 @@ public class GitLocalCollector {
 
             repoRepository.save(dbRepo);
 
-            return saved;
+            return pending.size();
 
         } catch (IOException | GitAPIException e) {
             throw new GitException("Failed to collect git commits from " + dbRepo.getLocalPath(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new GitException("Diff computation interrupted", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException ioe) {
+                throw new GitException("Diff computation failed", ioe);
+            }
+            throw new GitException("Diff computation failed: " + cause.getMessage(), cause);
         }
-    }
-
-    private GitCommitEntity mapCommit(Repository repository, RevCommit commit, GitRepositoryEntity dbRepo) throws IOException {
-        GitCommitEntity entity = new GitCommitEntity();
-        entity.setRepository(dbRepo);
-        entity.setHash(commit.getName());
-        entity.setAuthorName(commit.getAuthorIdent().getName());
-        entity.setAuthorEmail(commit.getAuthorIdent().getEmailAddress());
-        entity.setAuthorDate(commit.getAuthorIdent().getWhenAsInstant());
-        entity.setMessage(commit.getFullMessage());
-
-        // parent
-        if (commit.getParentCount() > 0) {
-            entity.setParentHash(commit.getParent(0).getName());
-        }
-
-        // diff metrics (additions, deletions, filesChanged)
-        DiffStats stats = calculateDiffStats(repository, commit);
-        entity.setAdditions(stats.additions());
-        entity.setDeletions(stats.deletions());
-        entity.setFilesChanged(stats.filesChanged());
-
-        return entity;
     }
 
     /**
-     * Simple calculation of additions/deletions/filesChanged via DiffFormatter.
+     * Builds a GitCommitEntity from pre-extracted metadata and computes diff stats.
+     * Creates its own JGit reader/walker/formatter since those objects are not thread-safe.
      */
-    private DiffStats calculateDiffStats(Repository repository, RevCommit commit) throws IOException {
+    private GitCommitEntity buildEntity(Repository repository, CommitMeta meta,
+                                        GitRepositoryEntity dbRepo) throws IOException {
+        try (ObjectReader reader = repository.newObjectReader();
+             RevWalk revWalk = new RevWalk(repository);
+             DiffFormatter diffFormatter = new DiffFormatter(OutputStream.nullOutputStream())) {
+
+            diffFormatter.setRepository(repository);
+            diffFormatter.setDiffComparator(RawTextComparator.DEFAULT);
+            diffFormatter.setDetectRenames(true);
+
+            RevCommit commit = revWalk.parseCommit(meta.commitId());
+            DiffStats stats = calculateDiffStats(commit, reader, revWalk, diffFormatter);
+
+            GitCommitEntity entity = new GitCommitEntity();
+            entity.setRepository(dbRepo);
+            entity.setHash(meta.hash());
+            entity.setAuthorName(meta.authorName());
+            entity.setAuthorEmail(meta.authorEmail());
+            entity.setAuthorDate(meta.authorDate());
+            entity.setMessage(meta.message());
+            entity.setParentHash(meta.parentHash());
+            entity.setAdditions(stats.additions());
+            entity.setDeletions(stats.deletions());
+            entity.setFilesChanged(stats.filesChanged());
+            return entity;
+        }
+    }
+
+    /**
+     * Calculates additions/deletions/filesChanged for a commit.
+     * The reader, revWalk, and diffFormatter must all be owned by the calling thread.
+     */
+    private DiffStats calculateDiffStats(RevCommit commit,
+                                         ObjectReader reader, RevWalk revWalk,
+                                         DiffFormatter diffFormatter) throws IOException {
         ObjectId oldTreeId;
         ObjectId newTreeId = commit.getTree().getId();
 
@@ -132,43 +225,34 @@ public class GitLocalCollector {
             oldTreeId = ObjectId.zeroId();
         } else {
             RevCommit parent = commit.getParent(0);
-            try (RevWalk walk = new RevWalk(repository)) {
-                oldTreeId = walk.parseCommit(parent.getId()).getTree().getId();
-            }
+            oldTreeId = revWalk.parseCommit(parent.getId()).getTree().getId();
         }
 
-        try (ObjectReader reader = repository.newObjectReader();
-             ByteArrayOutputStream out = new ByteArrayOutputStream();
-             DiffFormatter diffFormatter = new DiffFormatter(out)) {
+        CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
+        oldTreeIter.reset(reader, oldTreeId);
 
-            CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
-            oldTreeIter.reset(reader, oldTreeId);
+        CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
+        newTreeIter.reset(reader, newTreeId);
 
-            CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
-            newTreeIter.reset(reader, newTreeId);
+        List<DiffEntry> diffs = diffFormatter.scan(oldTreeIter, newTreeIter);
 
-            diffFormatter.setRepository(repository);
-            diffFormatter.setDiffComparator(RawTextComparator.DEFAULT);
-            diffFormatter.setDetectRenames(true);
+        int filesChanged = diffs.size();
+        int additions = 0;
+        int deletions = 0;
 
-            List<DiffEntry> diffs = diffFormatter.scan(oldTreeIter, newTreeIter);
-
-            int filesChanged = diffs.size();
-            int additions = 0;
-            int deletions = 0;
-
-            for (DiffEntry diff : diffs) {
-                diffFormatter.format(diff);
-                EditList edits = diffFormatter.toFileHeader(diff).toEditList();
-                for (Edit edit : edits) {
-                    additions += edit.getEndB() - edit.getBeginB();
-                    deletions += edit.getEndA() - edit.getBeginA();
-                }
+        for (DiffEntry diff : diffs) {
+            diffFormatter.format(diff);
+            EditList edits = diffFormatter.toFileHeader(diff).toEditList();
+            for (Edit edit : edits) {
+                additions += edit.getEndB() - edit.getBeginB();
+                deletions += edit.getEndA() - edit.getBeginA();
             }
-            return new DiffStats(additions, deletions, filesChanged);
         }
+        return new DiffStats(additions, deletions, filesChanged);
     }
+
+    private record CommitMeta(ObjectId commitId, String hash, String authorName, String authorEmail,
+                               Instant authorDate, String message, String parentHash) {}
 
     private record DiffStats(int additions, int deletions, int filesChanged) {}
 }
-

@@ -31,8 +31,8 @@ public class GitRepositoryEntity {
     @Column(nullable = false)
     private String name;
 
-    // for local repo: path to .git
-    @Column(nullable = false)
+    // for local repo: path to .git; null for GitHub/remote repos
+    @Column(nullable = true)
     private String localPath;
 
     // for GitHub repos: "owner/repo" — globally unique, used for idempotent registration
