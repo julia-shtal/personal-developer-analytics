@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.github.model;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.StatsStatus;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -52,4 +53,20 @@ public class GitHubPullRequestEntity {
     private int commentsCount;
     private int reviewCommentsCount;
     private int commitsCount;
+
+    /**
+     * Enrichment state for size stats (additions/deletions/changedFiles/commitsCount).
+     * GitHub's PR list endpoint omits these fields; they require a separate detail call.
+     * New PRs start as PENDING and are enriched asynchronously.
+     * Merged PRs with COMPLETE stats are never re-fetched (their diff is immutable).
+     * Open PRs are reset to PENDING whenever updated_at changes (their diff can grow).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private StatsStatus statsStatus = StatsStatus.COMPLETE;
+
+    private Instant statsFetchedAt;
+
+    @Column(nullable = false)
+    private int statsAttempts = 0;
 }

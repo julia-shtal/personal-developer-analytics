@@ -11,6 +11,7 @@ import java.util.List;
 public interface GitHubPrReviewRepository extends JpaRepository<GitHubPrReviewEntity, Long> {
 
     void deleteAllByPullRequest(GitHubPullRequestEntity pullRequest);
+    void deleteAllByPullRequestIn(List<GitHubPullRequestEntity> pullRequests);
 
     /**
      * Returns [prId, firstReviewSubmittedAt] for each PR that has at least one review.

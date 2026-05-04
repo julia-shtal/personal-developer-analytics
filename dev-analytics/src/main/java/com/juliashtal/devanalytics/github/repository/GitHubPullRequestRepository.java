@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.github.repository;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,7 @@ import java.util.Optional;
 
 public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullRequestEntity, Long> {
     Optional<GitHubPullRequestEntity> findByRepositoryAndNumber(GitRepositoryEntity repository, int number);
+    List<GitHubPullRequestEntity> findByRepository(GitRepositoryEntity repository);
     Page<GitHubPullRequestEntity> findByRepositoryOrderByCreatedAtDesc(GitRepositoryEntity repository, Pageable pageable);
 
     @Query("""
@@ -141,5 +143,30 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
             @Param("authorLogin") String authorLogin,
             @Param("from") Instant from,
             @Param("to") Instant to);
+
+    /**
+     * Returns the next batch of PRs needing stats enrichment for a specific repository,
+     * newest-first so that recent PRs are always prioritised.
+     */
+    @Query("""
+    select p from GitHubPullRequestEntity p
+    where p.statsStatus = :status
+      and p.repository.id = :repositoryId
+    order by p.createdAt desc
+    """)
+    List<GitHubPullRequestEntity> findPendingPrsForRepository(
+            @Param("status") StatsStatus status,
+            @Param("repositoryId") Long repositoryId,
+            Pageable pageable);
+
+    /**
+     * Returns distinct repository IDs that still have PRs in the given stats state.
+     * Used by the background scheduler.
+     */
+    @Query("""
+    select distinct p.repository.id from GitHubPullRequestEntity p
+    where p.statsStatus = :status
+    """)
+    List<Long> findRepositoryIdsWithStatsStatus(@Param("status") StatsStatus status);
 }
 

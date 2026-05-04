@@ -5,6 +5,8 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.model.dto.DataSourceResponseDto;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
+import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
+import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.git.service.GitRepositoryService;
 import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
 import com.juliashtal.devanalytics.user.model.Role;
@@ -37,6 +39,8 @@ public class DataSourceService {
     private final DataSourceValidator validator;
     private final GitRepositoryService gitRepositoryService;
     private final GitHubRepositoryService gitHubRepositoryService;
+    private final GitRepositoryEntityRepository gitRepoRepository;
+    private final UserRepoRegistrationRepository userRepoRegRepository;
 
     public DataSourceConfig getDataSource(Long dataSourceId) {
         return repository.findById(dataSourceId)
@@ -48,6 +52,19 @@ public class DataSourceService {
         validator.validateCreate(req);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
+
+        // If the GitHub repo is already registered in the system, do not create a new DS.
+        // Instead, subscribe the user to the existing repo under its original DS so it appears
+        // in their Data Sources list without a zombie duplicate.
+        if ((req.getType() == DataSourceType.GITHUB || req.getType() == DataSourceType.GITHUB_ISSUES)
+                && req.getRepoFullName() != null && !req.getRepoFullName().isBlank()) {
+            var existingRepo = gitRepoRepository.findByRepoFullName(req.getRepoFullName());
+            if (existingRepo.isPresent()) {
+                Long existingDsId = existingRepo.get().getDataSourceConfig().getId();
+                gitHubRepositoryService.registerGitHubRepo(userId, existingDsId, req.getRepoFullName());
+                return null; // No new DS created; controller returns 200 instead of 201
+            }
+        }
 
         DataSourceConfig cfg = new DataSourceConfig();
         cfg.setUser(user);
@@ -127,6 +144,16 @@ public class DataSourceService {
             }
         }
 
+        // DSs the user subscribed to via an existing repo (not owned by them, not team-scoped).
+        // These appear as read-only entries: user can sync but cannot delete.
+        Set<Long> addedDsIds = new HashSet<>();
+        result.forEach(dto -> addedDsIds.add(dto.id()));
+        for (DataSourceConfig cfg : userRepoRegRepository.findDataSourceConfigsByUserId(userId)) {
+            if (addedDsIds.add(cfg.getId())) {
+                result.add(toDto(cfg, false));
+            }
+        }
+
         return result;
     }
 
@@ -158,6 +185,11 @@ public class DataSourceService {
                 .orElseThrow(() -> new NoSuchElementException("DataSource not found: " + id));
 
         if (teamCfg.getTeam() != null && canAccessTeam(userId, teamCfg.getTeam())) {
+            return teamCfg;
+        }
+
+        // Allow read access (e.g. for sync) if the user subscribed to a repo in this DS
+        if (userRepoRegRepository.existsByUserIdAndDataSourceConfig_Id(userId, id)) {
             return teamCfg;
         }
 

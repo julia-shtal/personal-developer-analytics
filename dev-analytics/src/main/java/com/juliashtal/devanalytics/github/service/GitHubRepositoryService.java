@@ -35,11 +35,22 @@ public class GitHubRepositoryService {
         Optional<GitRepositoryEntity> existing = repoRepository.findByRepoFullName(fullName);
         if (existing.isPresent()) {
             GitRepositoryEntity repo = existing.get();
-            if (!userRepoRegRepository.existsByUserIdAndRepositoryId(userId, repo.getId())) {
+            DataSourceConfig cfg = dataSourceId == null ? null
+                    : dataSourceRepository.findById(dataSourceId).orElse(null);
+            Optional<UserRepoRegistration> existingReg =
+                    userRepoRegRepository.findByUserIdAndRepositoryId(userId, repo.getId());
+            if (existingReg.isEmpty()) {
                 UserRepoRegistration reg = new UserRepoRegistration();
                 reg.setUser(user);
                 reg.setRepository(repo);
+                reg.setDataSourceConfig(cfg);
                 userRepoRegRepository.save(reg);
+            } else if (cfg != null && existingReg.get().getDataSourceConfig() == null) {
+                // Registration exists but has no DS link (e.g. created via the manual subscribe
+                // button, or the previous DS was deleted and ON DELETE SET NULL fired).
+                // Re-link it to the current DS so the repo appears under the dev's DS panel.
+                existingReg.get().setDataSourceConfig(cfg);
+                userRepoRegRepository.save(existingReg.get());
             }
             return repo;
         }
@@ -71,6 +82,7 @@ public class GitHubRepositoryService {
         UserRepoRegistration reg = new UserRepoRegistration();
         reg.setUser(user);
         reg.setRepository(repo);
+        reg.setDataSourceConfig(cfg);
         userRepoRegRepository.save(reg);
 
         return repo;

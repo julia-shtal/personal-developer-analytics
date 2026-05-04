@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { clearTokens } from '@/lib/api';
 import api from '@/lib/api';
 import type { UserProfile, LoginRequest, RegisterRequest, AuthResponse } from '@/types';
@@ -16,6 +17,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const qc = useQueryClient();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -36,6 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!data.accessToken) {
       throw new Error('No access token in response');
     }
+    // Clear any cached data from a previous user before setting the new tokens.
+    qc.clear();
     localStorage.setItem('access_token', data.accessToken);
     localStorage.setItem('refresh_token', data.refreshToken);
     try {
@@ -58,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.post('/auth/logout', { refreshToken }).catch(() => {});
     }
     clearTokens();
+    qc.clear();
     setUser(null);
   }
 
