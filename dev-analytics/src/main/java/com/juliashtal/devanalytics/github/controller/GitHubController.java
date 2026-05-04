@@ -33,7 +33,7 @@ public class GitHubController {
 
     @PostMapping("/repos/{repoId}/collect")
     public ResponseEntity<String> collect(@PathVariable Long repoId) {
-        int saved = gitHubCollector.collectForRepository(repoId);
+        int saved = gitHubCollector.collectForRepository(repoId, null);
         return ResponseEntity.ok("Collected " + saved + " commits from GitHub");
     }
 }

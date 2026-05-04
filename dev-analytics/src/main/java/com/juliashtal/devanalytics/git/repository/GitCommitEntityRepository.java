@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.git.repository;
 
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.StatsStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +16,9 @@ import java.util.Optional;
 public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity, Long> {
     Optional<GitCommitEntity> findByHash(String hash);
     long countByRepositoryId(Long repositoryId);
+
+    @Query("select c.hash from GitCommitEntity c where c.repository.id = :repositoryId")
+    List<String> findHashesByRepositoryId(@Param("repositoryId") Long repositoryId);
     Page<GitCommitEntity> findByRepositoryIdOrderByAuthorDateDesc(Long repositoryId, Pageable pageable);
 
     @Query("""
@@ -114,5 +118,44 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     List<GitCommitEntity> findCommitsForPrByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("prNumber") int prNumber);
+
+    /**
+     * Returns the next batch of commits whose stats have not yet been enriched,
+     * ordered newest-first so that recent commits are always prioritised.
+     * Used by the background enrichment scheduler.
+     */
+    @Query("""
+    select c from GitCommitEntity c
+    where c.statsStatus = :status
+    order by c.authorDate desc
+    """)
+    List<GitCommitEntity> findPendingCommitsForEnrichment(
+            @Param("status") StatsStatus status,
+            Pageable pageable);
+
+    /**
+     * Returns distinct repository IDs that still have commits in the given stats state.
+     * Used by the background scheduler to find which repos need enrichment.
+     */
+    @Query("""
+    select distinct c.repository.id from GitCommitEntity c
+    where c.statsStatus = :status
+    """)
+    List<Long> findRepositoryIdsWithStatsStatus(@Param("status") StatsStatus status);
+
+    /**
+     * Returns the next batch of PENDING commits for a specific repository,
+     * ordered newest-first.
+     */
+    @Query("""
+    select c from GitCommitEntity c
+    where c.statsStatus = :status
+      and c.repository.id = :repositoryId
+    order by c.authorDate desc
+    """)
+    List<GitCommitEntity> findPendingCommitsForRepository(
+            @Param("status") StatsStatus status,
+            @Param("repositoryId") Long repositoryId,
+            Pageable pageable);
 }
 

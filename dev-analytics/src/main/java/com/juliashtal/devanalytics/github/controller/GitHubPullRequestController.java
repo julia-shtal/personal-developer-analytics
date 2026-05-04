@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.github.controller;
 
 import com.juliashtal.devanalytics.github.model.dto.GitHubPullRequestDto;
 
+import com.juliashtal.devanalytics.github.service.GitHubPrCollector;
 import com.juliashtal.devanalytics.github.service.GitHubPullRequestCollector;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -17,12 +18,12 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class GitHubPullRequestController {
 
-    private final GitHubPullRequestCollector prCollector;
+    private final GitHubPrCollector prCollector;
+    private final GitHubPullRequestCollector prQueryService;
 
     @PostMapping("/repos/{repoId}/pull-requests/collect")
     public ResponseEntity<String> collectPrs(@PathVariable Long repoId) {
-        Long userId = SecurityUtils.getCurrentUserId();
-        int processed = prCollector.collectPullRequests(userId, repoId);
+        int processed = prCollector.collectForRepository(repoId, null);
         return ResponseEntity.ok("Processed " + processed + " pull requests");
     }
 
@@ -32,7 +33,7 @@ public class GitHubPullRequestController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        var prs = prCollector.listPullRequests(repoId, PageRequest.of(page, size));
+        var prs = prQueryService.listPullRequests(repoId, PageRequest.of(page, size));
         return prs.map(GitHubPullRequestDto::fromEntity);
     }
 }

@@ -7,16 +7,13 @@ import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.service.GitLocalCollector;
 import com.juliashtal.devanalytics.github.service.GitHubCollector;
 import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
-import com.juliashtal.devanalytics.github.service.GitHubPullRequestCollector;
+import com.juliashtal.devanalytics.github.service.GitHubPrCollector;
 import com.juliashtal.devanalytics.jira.JiraCollector;
-import com.juliashtal.devanalytics.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -27,28 +24,39 @@ public class DataSourceCollectService {
     private final GitRepositoryEntityRepository gitRepoRepository;
     private final GitLocalCollector gitLocalCollector;
     private final GitHubCollector gitHubCollector;
-    private final GitHubPullRequestCollector prCollector;
+    private final GitHubPrCollector prCollector;
     private final GitHubIssuesCollector issuesCollector;
     private final JiraCollector jiraCollector;
     private final DataSourceService dataSourceService;
+    private final SyncJobTracker tracker;
 
     /**
      * Triggers collection for all repositories under the given data source.
-     * Returns a human-readable summary of what was collected.
+     * Each collector runs in its own transaction; no outer transaction is held
+     * so we don't keep a DB connection open for the entire (potentially long) job.
+     *
+     * @param jobState live-progress handle — updated throughout; may be null in tests.
      */
-    @Transactional
-    public String collectForDataSource(Long dataSourceId) {
-        Long userId = SecurityUtils.getCurrentUserId();
+    public String collectForDataSource(Long userId, Long dataSourceId, SyncJobTracker.JobState jobState) {
         DataSourceConfig cfg = dataSourceService.getForUser(userId, dataSourceId);
 
         int total = 0;
         StringBuilder summary = new StringBuilder();
 
+        // Inform the tracker how many phases this job has so the UI can show "phase N of M".
+        if (jobState != null) {
+            jobState.totalPhases = switch (cfg.getType()) {
+                case GITHUB -> 2;    // commits → pull requests
+                default -> 1;
+            };
+        }
+
         switch (cfg.getType()) {
             case GIT_LOCAL -> {
                 for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
                     try {
-                        int n = gitLocalCollector.collectForRepository(repo.getId());
+                        if (jobState != null) tracker.setPhase(jobState, "commits", -1);
+                        int n = gitLocalCollector.collectForRepository(repo.getId(), jobState);
                         total += n;
                         summary.append("Local ").append(repo.getName()).append(": ").append(n).append(" commits. ");
                     } catch (Exception e) {
@@ -59,8 +67,12 @@ public class DataSourceCollectService {
             case GITHUB -> {
                 for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
                     try {
-                        int commits = gitHubCollector.collectForRepository(repo.getId());
-                        int prs = prCollector.collectPullRequests(userId, repo.getId());
+                        if (jobState != null) tracker.setPhase(jobState, "commits", -1);
+                        int commits = gitHubCollector.collectForRepository(repo.getId(), jobState);
+
+                        if (jobState != null) tracker.setPhase(jobState, "pull requests", -1);
+                        int prs = prCollector.collectForRepository(repo.getId(), jobState);
+
                         total += commits + prs;
                         summary.append(repo.getName()).append(": ").append(commits)
                                .append(" commits, ").append(prs).append(" PRs. ");
@@ -72,6 +84,7 @@ public class DataSourceCollectService {
             case GITHUB_ISSUES -> {
                 for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
                     try {
+                        if (jobState != null) tracker.setPhase(jobState, "issues", -1);
                         int n = issuesCollector.collectIssuesForRepo(cfg, repo.getRepoFullName());
                         total += n;
                         summary.append(repo.getName()).append(": ").append(n).append(" issues. ");
@@ -82,6 +95,7 @@ public class DataSourceCollectService {
             }
             case JIRA -> {
                 try {
+                    if (jobState != null) tracker.setPhase(jobState, "jira issues", -1);
                     int n = jiraCollector.collectIssues(cfg);
                     total += n;
                     summary.append("Jira: ").append(n).append(" issues. ");

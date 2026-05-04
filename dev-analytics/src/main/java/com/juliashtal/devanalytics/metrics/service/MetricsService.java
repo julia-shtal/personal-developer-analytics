@@ -131,13 +131,14 @@ public class MetricsService {
         List<Object[]> rows = new ArrayList<>(commitRepository
                 .aggregateCommitsDailyByRepoIdsAndAuthorEmail(repoIds, user.getEmail(), from, to));
 
+        Map<Long, GitRepositoryEntity> repoCache = new HashMap<>();
         for (Object[] row : rows) {
             LocalDate day  = ((java.sql.Date) row[0]).toLocalDate();
             Long repoId    = ((Number) row[1]).longValue();
             long count     = ((Number) row[2]).longValue();
             double avgSize = row[3] != null ? ((Number) row[3]).doubleValue() : 0.0;
 
-            GitRepositoryEntity repo = gitRepoRepository.getReferenceById(repoId);
+            GitRepositoryEntity repo = repoCache.computeIfAbsent(repoId, gitRepoRepository::getReferenceById);
             saveMetric(user, team, day, DAILY_COMMITS_COUNT, count, repo, null, null);
             saveMetric(user, team, day, DAILY_COMMITS_AVG_SIZE, avgSize, repo, null, null);
         }
@@ -156,12 +157,13 @@ public class MetricsService {
         List<Object[]> mergedRows  = new ArrayList<>(pullRequestRepository
                 .aggregatePrMergedDailyByRepoIdsAndAuthorLogin(repoIds, user.getGithubLogin(), from, to));
 
+        Map<Long, GitRepositoryEntity> repoCache = new HashMap<>();
         for (Object[] row : createdRows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
             Long repoId   = ((Number) row[1]).longValue();
             long count    = ((Number) row[2]).longValue();
             saveMetric(user, team, day, DAILY_PR_CREATED, count,
-                    gitRepoRepository.getReferenceById(repoId), null, null);
+                    repoCache.computeIfAbsent(repoId, gitRepoRepository::getReferenceById), null, null);
         }
 
         for (Object[] row : mergedRows) {
@@ -169,7 +171,7 @@ public class MetricsService {
             Long repoId   = ((Number) row[1]).longValue();
             long count    = ((Number) row[2]).longValue();
             saveMetric(user, team, day, DAILY_PR_MERGED, count,
-                    gitRepoRepository.getReferenceById(repoId), null, null);
+                    repoCache.computeIfAbsent(repoId, gitRepoRepository::getReferenceById), null, null);
         }
     }
 
@@ -180,12 +182,13 @@ public class MetricsService {
         List<Object[]> createdRows = new ArrayList<>(issueRepository.aggregateIssuesCreatedDailyByRepoIds(repoIds, from, to));
         List<Object[]> closedRows  = new ArrayList<>(issueRepository.aggregateIssuesClosedDailyByRepoIds(repoIds, from, to));
 
+        Map<Long, GitRepositoryEntity> repoCache = new HashMap<>();
         for (Object[] row : createdRows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
             Long repoId   = ((Number) row[1]).longValue();
             long count    = ((Number) row[2]).longValue();
             saveMetric(user, team, day, DAILY_ISSUES_CREATED, count,
-                    gitRepoRepository.getReferenceById(repoId), null, null);
+                    repoCache.computeIfAbsent(repoId, gitRepoRepository::getReferenceById), null, null);
         }
 
         for (Object[] row : closedRows) {
@@ -193,7 +196,7 @@ public class MetricsService {
             Long repoId   = ((Number) row[1]).longValue();
             long count    = ((Number) row[2]).longValue();
             saveMetric(user, team, day, DAILY_ISSUES_CLOSED, count,
-                    gitRepoRepository.getReferenceById(repoId), null, null);
+                    repoCache.computeIfAbsent(repoId, gitRepoRepository::getReferenceById), null, null);
         }
     }
 
@@ -204,6 +207,7 @@ public class MetricsService {
         List<Object[]> rows = new ArrayList<>(commitRepository
                 .aggregateChurnDailyByRepoIdsAndAuthorEmail(repoIds, user.getEmail(), from, to));
 
+        Map<Long, GitRepositoryEntity> repoCache = new HashMap<>();
         for (Object[] row : rows) {
             LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
             Long repoId   = ((Number) row[1]).longValue();
@@ -213,7 +217,7 @@ public class MetricsService {
             long total = add + del;
             double churn = total > 0 ? (double) del / total : 0.0;
             saveMetric(user, team, day, DAILY_CHURN_RATIO, churn,
-                    gitRepoRepository.getReferenceById(repoId), null, null);
+                    repoCache.computeIfAbsent(repoId, gitRepoRepository::getReferenceById), null, null);
         }
     }
 
@@ -257,10 +261,11 @@ public class MetricsService {
             perRepo.computeIfAbsent(repoId, id -> new ArrayList<>()).add(hours);
         }
 
+        Map<Long, GitRepositoryEntity> repoCache = new HashMap<>();
         perRepo.forEach((repoId, values) -> {
             Collections.sort(values);
             saveMetric(user, team, fromDate, ISSUE_LEAD_TIME_HOURS_MEDIAN, medianOfLongs(values),
-                    gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
+                    repoCache.computeIfAbsent(repoId, gitRepoRepository::getReferenceById), fromDate, toDate);
         });
     }
 
@@ -285,10 +290,11 @@ public class MetricsService {
         }
         pullRequestRepository.saveAll(prs);
 
+        Map<Long, GitRepositoryEntity> repoCache = new HashMap<>();
         perRepo.forEach((repoId, hours) -> {
             Collections.sort(hours);
             saveMetric(user, team, fromDate, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
-                    medianOfLongs(hours), gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
+                    medianOfLongs(hours), repoCache.computeIfAbsent(repoId, gitRepoRepository::getReferenceById), fromDate, toDate);
         });
     }
 
@@ -316,10 +322,11 @@ public class MetricsService {
             perRepo.computeIfAbsent(pr.getRepository().getId(), id -> new ArrayList<>()).add(hours);
         }
 
+        Map<Long, GitRepositoryEntity> repoCache = new HashMap<>();
         perRepo.forEach((repoId, values) -> {
             Collections.sort(values);
             saveMetric(user, team, fromDate, REVIEW_RESPONSE_TIME_HOURS_MEDIAN, medianOfLongs(values),
-                    gitRepoRepository.getReferenceById(repoId), fromDate, toDate);
+                    repoCache.computeIfAbsent(repoId, gitRepoRepository::getReferenceById), fromDate, toDate);
         });
     }
 
