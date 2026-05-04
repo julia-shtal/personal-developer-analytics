@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.git;
+package com.juliashtal.devanalytics.git.controller;
 
 import com.juliashtal.devanalytics.git.model.dto.GitCommitDto;
 import com.juliashtal.devanalytics.git.model.dto.GitRepositoryDto;

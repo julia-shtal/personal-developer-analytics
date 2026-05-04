@@ -117,7 +117,7 @@ public class GitHubPrStatsEnrichmentService {
         for (Future<?> f : futures) {
             if (f.isDone()) {
                 try { f.get(); }
-                catch (ExecutionException e) { log.debug("PR enrichment worker error: {}", e.getCause().getMessage()); }
+                catch (ExecutionException e) { log.warn("PR enrichment worker error: {}", e.getCause().getMessage()); }
                 catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             }
         }
@@ -138,7 +138,7 @@ public class GitHubPrStatsEnrichmentService {
                 StatsStatus.PENDING, repositoryId, PageRequest.of(0, BATCH_SIZE));
         if (batch.isEmpty()) return 0;
 
-        log.debug("Background PR enrichment for {}: processing {} PENDING PRs",
+        log.info("Background PR enrichment for {}: processing {} PENDING PRs",
                 repoFullName, batch.size());
 
         for (GitHubPullRequestEntity pr : batch) {
@@ -158,7 +158,7 @@ public class GitHubPrStatsEnrichmentService {
         pr.setStatsAttempts(pr.getStatsAttempts() + 1);
 
         if (pr.getStatsAttempts() > MAX_ATTEMPTS) {
-            log.debug("Giving up on PR #{} in {}: too many failed attempts", pr.getNumber(), repoFullName);
+            log.warn("Giving up on PR #{} in {}: too many failed attempts", pr.getNumber(), repoFullName);
             pr.setStatsStatus(StatsStatus.FAILED);
             pr.setStatsFetchedAt(Instant.now());
             return;
@@ -275,17 +275,17 @@ public class GitHubPrStatsEnrichmentService {
         if (status == 403) {
             String body = response.body() != null ? response.body().toLowerCase() : "";
             if (body.contains("too large") || body.contains("maximum")) {
-                log.debug("Diff too large for PR #{} in {}, marking SKIPPED", pr.getNumber(), repoFullName);
+                log.warn("Diff too large for PR #{} in {}, marking SKIPPED", pr.getNumber(), repoFullName);
                 pr.setStatsStatus(StatsStatus.SKIPPED);
                 pr.setStatsFetchedAt(Instant.now());
             } else {
-                log.info("Secondary rate limit for PR #{} in {}, will retry", pr.getNumber(), repoFullName);
+                log.warn("Secondary rate limit for PR #{} in {}, will retry", pr.getNumber(), repoFullName);
             }
             return;
         }
 
         if (status == 404 || status == 422) {
-            log.debug("PR #{} not found/unprocessable in {} ({}), marking SKIPPED",
+            log.warn("PR #{} not found/unprocessable in {} ({}), marking SKIPPED",
                     pr.getNumber(), repoFullName, status);
             pr.setStatsStatus(StatsStatus.SKIPPED);
             pr.setStatsFetchedAt(Instant.now());
@@ -322,7 +322,7 @@ public class GitHubPrStatsEnrichmentService {
         if (remaining != null && Integer.parseInt(remaining) < 100 && resetAt != null) {
             long waitMs = Math.max(0, Long.parseLong(resetAt) * 1_000L - System.currentTimeMillis());
             if (waitMs > 0) {
-                log.info("Rate limit nearly exhausted ({} remaining), pausing {}s",
+                log.warn("Rate limit nearly exhausted ({} remaining), pausing {}s",
                         remaining, waitMs / 1000);
                 Thread.sleep(Math.min(waitMs, MAX_BACKOFF_MS));
                 response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
@@ -334,7 +334,7 @@ public class GitHubPrStatsEnrichmentService {
         if (status == 429 || status == 500 || status == 502 || status == 503) {
             String retryAfter = response.headers().firstValue("Retry-After").orElse(null);
             long waitMs = retryAfter != null ? Long.parseLong(retryAfter) * 1_000L : INITIAL_BACKOFF_MS;
-            log.info("GitHub {} for PR #{} in {}, backing off {}ms", status, prNumber, repoFullName, waitMs);
+            log.warn("GitHub {} for PR #{} in {}, backing off {}ms", status, prNumber, repoFullName, waitMs);
             Thread.sleep(Math.min(waitMs, MAX_BACKOFF_MS));
             response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
         }

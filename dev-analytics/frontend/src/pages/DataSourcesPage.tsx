@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Trash2, Database, GitBranch, Layers, AlertCircle,
   ChevronDown, ChevronRight, BookOpen, ExternalLink, UserCheck, UserMinus, Play,
+  Eye, EyeOff,
 } from 'lucide-react';
 import { datasourcesApi, type SyncStatus } from '@/api/datasources';
 import { reposApi } from '@/api/repos';
@@ -230,13 +231,14 @@ export function DataSourcesPage() {
   const [form, setForm] = useState<FormState>({
     type: 'GITHUB',
     name: '',
-    baseUrl: '',
+    baseUrl: 'https://api.github.com',
     path: '',
     apiToken: '',
     teamId: '',
     repoFullName: '',
   });
   const [formError, setFormError] = useState('');
+  const [showToken, setShowToken] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   // Live sync status per data-source ID, populated by the polling loop.
   const [syncStatuses, setSyncStatuses] = useState<Record<number, SyncStatus>>({});
@@ -257,7 +259,8 @@ export function DataSourcesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['datasources'] });
       setShowForm(false);
-      setForm({ type: 'GITHUB', name: '', baseUrl: '', path: '', apiToken: '', teamId: '', repoFullName: '' });
+      setShowToken(false);
+      setForm({ type: 'GITHUB', name: '', baseUrl: 'https://api.github.com', path: '', apiToken: '', teamId: '', repoFullName: '' });
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -381,9 +384,12 @@ export function DataSourcesPage() {
                   label="Type"
                   value={form.type}
                   options={TYPE_OPTIONS}
-                  onChange={(e) =>
-                    setForm({ ...form, type: e.target.value as DataSourceType, baseUrl: '', path: '', repoFullName: '' })
-                  }
+                  onChange={(e) => {
+                    const t = e.target.value as DataSourceType;
+                    const defaultBaseUrl = (t === 'GITHUB' || t === 'GITHUB_ISSUES') ? 'https://api.github.com' : '';
+                    setShowToken(false);
+                    setForm({ ...form, type: t, baseUrl: defaultBaseUrl, path: '', repoFullName: '' });
+                  }}
                 />
                 <Input
                   label="Name"
@@ -402,7 +408,7 @@ export function DataSourcesPage() {
                   placeholder={
                     form.type === 'JIRA'
                       ? 'https://yourcompany.atlassian.net'
-                      : 'https://github.com'
+                      : 'https://api.github.com'
                   }
                   required
                 />
@@ -419,13 +425,27 @@ export function DataSourcesPage() {
               )}
 
               {NEEDS_TOKEN.includes(form.type) && (
-                <Input
-                  label="API token"
-                  type="password"
-                  value={form.apiToken}
-                  onChange={(e) => setForm({ ...form, apiToken: e.target.value })}
-                  placeholder="••••••••••••"
-                />
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">API token</label>
+                  <div className="relative">
+                    <input
+                      type={showToken ? 'text' : 'password'}
+                      value={form.apiToken}
+                      onChange={(e) => setForm({ ...form, apiToken: e.target.value })}
+                      placeholder="••••••••••••"
+                      className="block w-full px-3 py-2 pr-10 text-sm rounded-lg border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors duration-150"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowToken((v) => !v)}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 transition-colors"
+                      tabIndex={-1}
+                      aria-label={showToken ? 'Hide token' : 'Show token'}
+                    >
+                      {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
               )}
 
               {NEEDS_REPO_FULLNAME.includes(form.type) && (

@@ -32,7 +32,7 @@ import java.util.concurrent.*;
  *       most recent commits (priority window, e.g. last 150). Uses a small thread
  *       pool (2 workers) with rate limiting so the initial sync completes quickly
  *       without hammering GitHub.</li>
- *   <li>{@link #processPendingBatch} — called by {@link CommitStatsEnrichmentScheduler}
+ *   <li>{@link #processPendingBatchForRepo} — called by {@link CommitStatsEnrichmentScheduler}
  *       every 2 minutes for background backfill. Processes up to 50 PENDING commits
  *       per run in a single thread at ~1 req/sec.</li>
  * </ul>
@@ -115,7 +115,7 @@ public class GitHubCommitStatsEnrichmentService {
                 try {
                     f.get();
                 } catch (ExecutionException e) {
-                    log.debug("Enrichment worker error: {}", e.getCause().getMessage());
+                    log.warn("Enrichment worker error: {}", e.getCause().getMessage());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -137,7 +137,7 @@ public class GitHubCommitStatsEnrichmentService {
 
         if (batch.isEmpty()) return 0;
 
-        log.debug("Background enrichment for {}: processing {} PENDING commits",
+        log.info("Background enrichment for {}: processing {} PENDING commits",
                 repoFullName, batch.size());
 
         for (GitCommitEntity commit : batch) {
@@ -161,7 +161,7 @@ public class GitHubCommitStatsEnrichmentService {
         commit.setStatsAttempts(commit.getStatsAttempts() + 1);
 
         if (commit.getStatsAttempts() > MAX_ATTEMPTS) {
-            log.debug("Giving up on commit {}/{}: too many failed attempts", repoFullName, commit.getHash());
+            log.warn("Giving up on commit {}/{}: too many failed attempts", repoFullName, commit.getHash());
             commit.setStatsStatus(StatsStatus.FAILED);
             commit.setStatsFetchedAt(Instant.now());
             return;
@@ -212,19 +212,19 @@ public class GitHubCommitStatsEnrichmentService {
             // from a secondary rate limit (body mentions "rate limit" or "secondary").
             String body = response.body() != null ? response.body().toLowerCase() : "";
             if (body.contains("too large") || body.contains("maximum")) {
-                log.debug("Diff too large for {}/{}, marking SKIPPED", repoFullName, commit.getHash());
+                log.warn("Diff too large for {}/{}, marking SKIPPED", repoFullName, commit.getHash());
                 commit.setStatsStatus(StatsStatus.SKIPPED);
                 commit.setStatsFetchedAt(Instant.now());
             } else {
                 // Rate limit — leave as PENDING for retry.
-                log.info("Secondary rate limit for {}/{}, will retry", repoFullName, commit.getHash());
+                log.warn("Secondary rate limit for {}/{}, will retry", repoFullName, commit.getHash());
             }
             return;
         }
 
         if (status == 422 || status == 404) {
             // Unprocessable or not found — no point retrying.
-            log.debug("Unprocessable/not-found ({}) for {}/{}, marking SKIPPED",
+            log.warn("Unprocessable/not-found ({}) for {}/{}, marking SKIPPED",
                     status, repoFullName, commit.getHash());
             commit.setStatsStatus(StatsStatus.SKIPPED);
             commit.setStatsFetchedAt(Instant.now());
@@ -276,7 +276,7 @@ public class GitHubCommitStatsEnrichmentService {
             long resetEpoch = Long.parseLong(resetAt);
             long waitMs = Math.max(0, (resetEpoch * 1_000L) - System.currentTimeMillis());
             if (waitMs > 0) {
-                log.info("Rate limit nearly exhausted ({} remaining), pausing {}s",
+                log.warn("Rate limit nearly exhausted ({} remaining), pausing {}s",
                         remaining, waitMs / 1000);
                 Thread.sleep(Math.min(waitMs, MAX_BACKOFF_MS));
                 response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
@@ -288,19 +288,11 @@ public class GitHubCommitStatsEnrichmentService {
         if (status == 429 || status == 500 || status == 502 || status == 503) {
             String retryAfter = response.headers().firstValue("Retry-After").orElse(null);
             long waitMs = retryAfter != null ? Long.parseLong(retryAfter) * 1_000L : backoffMs;
-            log.info("GitHub {} for {}/{}, backing off {}ms", status, repoFullName, sha, waitMs);
+            log.warn("GitHub {} for {}/{}, backing off {}ms", status, repoFullName, sha, waitMs);
             Thread.sleep(Math.min(waitMs, MAX_BACKOFF_MS));
             response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
         }
 
         return response;
-    }
-
-    private static String resolveApiBase(String configuredBaseUrl) {
-        if (configuredBaseUrl == null || configuredBaseUrl.isBlank()
-                || configuredBaseUrl.equalsIgnoreCase("https://github.com")) {
-            return "https://api.github.com";
-        }
-        return configuredBaseUrl.stripTrailing().replaceAll("/$", "");
     }
 }

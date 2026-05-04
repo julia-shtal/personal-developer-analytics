@@ -26,6 +26,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static com.juliashtal.devanalytics.helper.ParsingHelper.resolveApiBase;
+
 /**
  * Phase A of two-phase commit ingestion.
  *
@@ -227,14 +229,6 @@ public class GitHubCommitIngestService {
             builder.header("Authorization", "Bearer " + token);
         }
         return builder.build();
-    }
-
-    private String resolveApiBase(String configuredBaseUrl) {
-        if (configuredBaseUrl == null || configuredBaseUrl.isBlank()
-                || configuredBaseUrl.equalsIgnoreCase("https://github.com")) {
-            return "https://api.github.com";
-        }
-        return configuredBaseUrl.stripTrailing().replaceAll("/$", "");
     }
 
     private int fetchTotalCommitCount(String apiBase, String token, String repoFullName) {

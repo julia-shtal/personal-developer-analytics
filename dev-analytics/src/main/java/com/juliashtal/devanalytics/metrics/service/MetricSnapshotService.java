@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,19 +18,45 @@ public class MetricSnapshotService {
 
     private final MetricSnapshotRepository repository;
 
-    List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndDateBetween(User user,
+    public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndDateBetween(User user,
                                                                              MetricType metricType,
                                                                              LocalDate from,
                                                                              LocalDate to) {
         return repository.findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, metricType, from, to);
     }
 
-    List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(User user,
+    public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(User user,
                                                                                           MetricType metricType,
                                                                                           GitRepositoryEntity repo,
                                                                                           LocalDate from,
                                                                                           LocalDate to) {
         return repository.findByUserAndTeamIsNullAndMetricTypeAndRepositoryAndDateBetween(user, metricType, repo, from, to);
+    }
+
+    public List<MetricSnapshot> getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(
+            User user, Team team, MetricType metricType, LocalDate from, LocalDate to) {
+        return repository.findByUserAndTeamAndMetricTypeAndDateBetween(user, team, metricType, from, to);
+    }
+
+    public List<MetricSnapshot> getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(
+            List<Long> userIds,
+            Long teamId,
+            MetricType metricType,
+            LocalDate from,
+            LocalDate to) {
+        return repository.findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(userIds, teamId, metricType, from, to);
+    }
+
+    public MetricSnapshot getExisting(
+            Long userId,
+            Long teamId,
+            Long repoId,
+            LocalDate date,
+            String metricType,
+            LocalDate periodFrom,
+            LocalDate periodTo) {
+        return repository.findExisting(userId, teamId, repoId, date, metricType, periodFrom, periodTo)
+                .orElseThrow(() -> new NoSuchElementException("MetricSnapshot not found for user " + userId + " and team " + teamId + " and repo " + repoId));
     }
 
 }
