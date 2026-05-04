@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Trash2, Database, GitBranch, Layers, AlertCircle,
   ChevronDown, ChevronRight, BookOpen, ExternalLink, UserCheck, UserMinus, Play,
 } from 'lucide-react';
-import { datasourcesApi } from '@/api/datasources';
+import { datasourcesApi, type SyncStatus } from '@/api/datasources';
 import { reposApi } from '@/api/repos';
 import { teamsApi } from '@/api/teams';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
@@ -53,6 +53,65 @@ const NEEDS_PATH: DataSourceType[] = ['GIT_LOCAL'];
 const NEEDS_TOKEN: DataSourceType[] = ['GITHUB', 'JIRA', 'GITHUB_ISSUES'];
 // Types that support repoFullName auto-registration
 const NEEDS_REPO_FULLNAME: DataSourceType[] = ['GITHUB', 'GITHUB_ISSUES'];
+
+// ─── Sync progress display ────────────────────────────────────────────────────
+
+function fmtSeconds(s: number): string {
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60), sec = s % 60;
+  return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
+}
+
+function fmtEta(eta: number | null): string {
+  if (eta === null || eta < 0) return '';
+  if (eta === 0) return 'almost done';
+  if (eta < 60) return `~${eta}s left`;
+  if (eta < 3600) return `~${Math.ceil(eta / 60)} min left`;
+  return `~${(eta / 3600).toFixed(1)} hr left`;
+}
+
+function SyncProgressLine({ status }: { status: SyncStatus | undefined }) {
+  if (!status || status.phase === 'starting') {
+    return <span className="text-xs text-violet-500 animate-pulse">Syncing — starting…</span>;
+  }
+
+  const isKnownPhase = status.phase && status.phase !== 'starting';
+  const phaseLabel = isKnownPhase
+    ? status.totalPhases > 1
+      ? `${status.phase} (phase ${status.phaseNumber}/${status.totalPhases})`
+      : status.phase
+    : null;
+
+  const countStr = status.phaseProcessed > 0
+    ? status.phaseTotal > 0
+      ? `${status.phaseProcessed.toLocaleString()} / ~${status.phaseTotal.toLocaleString()}`
+      : status.phaseProcessed.toLocaleString()
+    : null;
+
+  // Prefer overall ETA (which accounts for future phases), fall back to phase ETA.
+  const etaStr = fmtEta(status.overallEtaSeconds ?? status.phaseEtaSeconds);
+
+  // Completed phases history — shown as "commits: 5,432 (2m 10s)"
+  const history = status.completedPhases.map(p =>
+    `${p.name}: ${p.itemsSaved.toLocaleString()} (${fmtSeconds(p.durationSeconds)})`
+  ).join(' → ');
+
+  const elapsed = status.elapsedSeconds > 0 ? fmtSeconds(status.elapsedSeconds) : null;
+
+  const mainLine = [phaseLabel, countStr].filter(Boolean).join(' — ');
+  const timeLine = etaStr || (elapsed ? `${elapsed} elapsed` : '');
+
+  return (
+    <span className="text-xs text-violet-500 animate-pulse">
+      {`Syncing: ${mainLine}${timeLine ? ` (${timeLine})` : ''}`}
+      {history && (
+        <span className="block text-xs text-gray-400 mt-0.5 not-italic" style={{ animationName: 'none' }}>
+          Done: {history}
+        </span>
+      )}
+    </span>
+  );
+}
 
 // ─── Sync age formatter ───────────────────────────────────────────────────────
 
@@ -179,6 +238,8 @@ export function DataSourcesPage() {
   });
   const [formError, setFormError] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  // Live sync status per data-source ID, populated by the polling loop.
+  const [syncStatuses, setSyncStatuses] = useState<Record<number, SyncStatus>>({});
 
   const { data: sources, isLoading } = useQuery({
     queryKey: ['datasources'],
@@ -211,8 +272,66 @@ export function DataSourcesPage() {
 
   const collectMutation = useMutation({
     mutationFn: (id: number) => datasourcesApi.collect(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['datasources'] }),
+    onSuccess: (_, id) => {
+      // Seed a "starting" status so the UI reacts immediately (202 returns fast).
+      setSyncStatuses(prev => ({
+        ...prev,
+        [id]: {
+          running: true, phaseNumber: 0, totalPhases: 1,
+          phase: 'starting', phaseProcessed: 0, phaseTotal: -1,
+          totalProcessed: 0, elapsedSeconds: 0,
+          phaseEtaSeconds: null, overallEtaSeconds: null,
+          completedPhases: [], result: null, error: null,
+        },
+      }));
+    },
   });
+
+  // Derived: IDs that are actively syncing.
+  const syncingIds = new Set(
+    Object.entries(syncStatuses)
+      .filter(([, s]) => s.running)
+      .map(([id]) => Number(id))
+  );
+
+  // On mount: restore any in-progress jobs from the server so navigation
+  // doesn't lose progress state.
+  useEffect(() => {
+    datasourcesApi.activeCollectStatuses().then(({ data }) => {
+      if (Object.keys(data).length > 0) {
+        setSyncStatuses(prev => {
+          const merged = { ...prev };
+          for (const [key, status] of Object.entries(data)) {
+            merged[Number(key)] = status;
+          }
+          return merged;
+        });
+      }
+    }).catch(() => { /* server may not have any active jobs */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Poll every 3 s for every actively-syncing source.
+  useEffect(() => {
+    if (syncingIds.size === 0) return;
+    const timer = setInterval(async () => {
+      for (const id of syncingIds) {
+        try {
+          const { data } = await datasourcesApi.collectStatus(id);
+          setSyncStatuses(prev => ({ ...prev, [id]: data }));
+          if (!data.running) {
+            qc.invalidateQueries({ queryKey: ['datasources'] });
+          }
+        } catch {
+          // 404 = server restarted, lost in-memory state; treat as done.
+          setSyncStatuses(prev => { const n = { ...prev }; delete n[id]; return n; });
+          qc.invalidateQueries({ queryKey: ['datasources'] });
+        }
+      }
+    }, 3_000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify([...syncingIds])]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -384,9 +503,13 @@ export function DataSourcesPage() {
                     <p className="text-xs text-gray-400 mt-0.5 truncate">{displayUrl}</p>
                   )}
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {src.lastSuccessSync
-                      ? `Synced ${formatSyncAge(src.lastSuccessSync)}`
-                      : 'Never synced'}
+                    {syncingIds.has(src.id) ? (
+                      <SyncProgressLine status={syncStatuses[src.id]} />
+                    ) : (
+                      src.lastSuccessSync
+                        ? `Synced ${formatSyncAge(src.lastSuccessSync)}`
+                        : 'Never synced'
+                    )}
                   </p>
                 </div>
 
@@ -396,9 +519,13 @@ export function DataSourcesPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => collectMutation.mutate(src.id)}
-                    loading={collectMutation.isPending}
+                    loading={
+                      (collectMutation.isPending && collectMutation.variables === src.id) ||
+                      syncingIds.has(src.id)
+                    }
+                    disabled={syncingIds.has(src.id)}
                     className="text-gray-400 hover:text-violet-600"
-                    title="Collect data"
+                    title={syncingIds.has(src.id) ? 'Sync in progress' : 'Collect data'}
                   >
                     <Play className="h-4 w-4" />
                   </Button>

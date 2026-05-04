@@ -61,7 +61,7 @@ public class GitLocalController {
 
     @PostMapping("/repos/{repoId}/collect")
     public ResponseEntity<String> collect(@PathVariable Long repoId) {
-        long saved = gitLocalCollector.collectForRepository(repoId);
+        long saved = gitLocalCollector.collectForRepository(repoId, null);
         return ResponseEntity.ok("Collected " + saved + " commits");
     }
 }
