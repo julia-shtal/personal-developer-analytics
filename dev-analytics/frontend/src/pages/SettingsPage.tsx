@@ -5,7 +5,7 @@ import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { User, Shield, AlertCircle, CheckCircle, ChevronDown } from 'lucide-react';
+import { User, Shield, AlertCircle, CheckCircle, ChevronDown, Lock, Eye, EyeOff } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
 
@@ -102,6 +102,15 @@ export function SettingsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [tzOpen]);
 
+  const [pwOpen, setPwOpen] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwStatus, setPwStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [pwError, setPwError] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
   const updateMutation = useMutation({
     mutationFn: (body: { username?: string; email?: string; timezone?: string; githubLogin?: string }) =>
       api.put<UserProfile>('/users/me', body),
@@ -116,6 +125,40 @@ export function SettingsPage() {
       setSaveStatus('error');
     },
   });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: (body: { oldPassword: string; newPassword: string }) =>
+      api.put('/users/me/password', body),
+    onSuccess: () => {
+      setPwStatus('success');
+      setPwError('');
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => { setPwStatus('idle'); setPwOpen(false); }, 2500);
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setPwError(msg ?? 'Failed to change password.');
+      setPwStatus('error');
+    },
+  });
+
+  function handlePasswordChange(e: FormEvent) {
+    e.preventDefault();
+    setPwStatus('idle');
+    if (newPassword !== confirmPassword) {
+      setPwError('New passwords do not match.');
+      setPwStatus('error');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPwError('New password must be at least 8 characters.');
+      setPwStatus('error');
+      return;
+    }
+    changePasswordMutation.mutate({ oldPassword, newPassword });
+  }
 
   function handleSave(e: FormEvent) {
     e.preventDefault();
@@ -258,7 +301,8 @@ export function SettingsPage() {
           </div>
         </CardHeader>
         <CardBody>
-          <div className="space-y-3">
+          <div className="space-y-4">
+            {/* Session status */}
             <div className="flex items-center justify-between py-2">
               <div>
                 <p className="text-sm font-medium text-gray-700">Session</p>
@@ -267,6 +311,112 @@ export function SettingsPage() {
                 </p>
               </div>
               <Badge color="emerald">Active</Badge>
+            </div>
+
+            {/* Change password — collapsible */}
+            <div className="border border-gray-100 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => { setPwOpen((v) => !v); setPwStatus('idle'); }}
+                className="w-full flex items-center justify-between px-4 py-3 text-left bg-gray-50 hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Change password</span>
+                </div>
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${pwOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {pwOpen && (
+                <form onSubmit={handlePasswordChange} className="px-4 py-4 space-y-3 border-t border-gray-100">
+                  <Input
+                    label="Current password"
+                    type="password"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    placeholder="Enter current password"
+                    required
+                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-gray-700">New password</label>
+                    <div className="relative">
+                      <Input
+                        type={showNew ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="At least 8 characters"
+                        required
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNew((v) => !v)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                        tabIndex={-1}
+                      >
+                        {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-gray-700">Confirm new password</label>
+                    <div className="relative">
+                      <Input
+                        type={showConfirm ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Repeat new password"
+                        required
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirm((v) => !v)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                        tabIndex={-1}
+                      >
+                        {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {pwStatus === 'success' && (
+                    <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                      <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                      Password changed successfully.
+                    </div>
+                  )}
+                  {pwStatus === 'error' && (
+                    <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      {pwError}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <Button type="submit" loading={changePasswordMutation.isPending} size="sm">
+                      Update password
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setOldPassword('');
+                        setNewPassword('');
+                        setConfirmPassword('');
+                        setShowNew(false);
+                        setShowConfirm(false);
+                        setPwStatus('idle');
+                        setPwError('');
+                        setPwOpen(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </CardBody>
