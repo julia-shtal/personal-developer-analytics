@@ -1,10 +1,11 @@
 import type { DateRange } from '@/types';
 
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
+  const d = new Date(iso);
+  const month = d.toLocaleDateString('en-US', { month: 'short' });
+  const day = d.getDate();
+  const year = d.getFullYear().toString().slice(-2);
+  return `${month} ${day} '${year}`;
 }
 
 export function isoDate(d: Date): string {
