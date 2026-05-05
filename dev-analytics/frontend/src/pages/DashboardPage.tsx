@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   GitCommit,
@@ -11,11 +11,34 @@ import {
   ChevronUp,
   Moon,
   Flame,
-  Scissors,
-  GitBranch,
-  Eye,
-  Zap,
+  CirclePlus,
+  CircleCheckBig,
+  ClockCheck,
+  Route,
+  Hourglass,
+  Replace,
+  Shuffle,
+  EyeOff,
+  Layers3,
+  Brain,
 } from 'lucide-react';
+
+function KnowledgeSiloIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      width="16" height="16" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor"
+      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="3.2" fill="currentColor" />
+      <circle cx="5" cy="6" r="1.5" />
+      <circle cx="19" cy="6" r="1.5" />
+      <circle cx="5" cy="18" r="1.5" />
+      <circle cx="19" cy="18" r="1.5" />
+    </svg>
+  );
+}
 import { metricsApi } from '@/api/metrics';
 import { KpiCard, Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -23,8 +46,10 @@ import { DateRangePicker } from '@/components/DateRangePicker';
 import { MetricLineChart } from '@/components/charts/MetricLineChart';
 import { MetricBarChart } from '@/components/charts/MetricBarChart';
 import { PageSpinner } from '@/components/ui/Spinner';
-import { PRESET_RANGES } from '@/lib/dates';
-import type { DateRange } from '@/types';
+import { useDateRange } from '@/context/DateRangeContext';
+import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
+import { AiMetricExplainDrawer } from '@/components/ai/AiMetricExplainDrawer';
+import type { MetricsSummaryDto } from '@/types/ai';
 
 function sum(data: { value: number }[]) {
   return data.reduce((a, b) => a + b.value, 0);
@@ -65,8 +90,19 @@ function ChartSection({ title, subtitle, children }: ChartSectionProps) {
 }
 
 export function DashboardPage() {
-  const [range, setRange] = useState<DateRange>(PRESET_RANGES[1].range); // last 30 days
+  const { range, setRange } = useDateRange();
   const qc = useQueryClient();
+
+  const [aiSummary, setAiSummary] = useState<MetricsSummaryDto | null>(null);
+  const [explainDrawer, setExplainDrawer] = useState<{
+    label: string;
+    description: string;
+    value: string;
+  } | null>(null);
+
+  function openExplain(label: string, description: string, value: string) {
+    setExplainDrawer({ label, description, value });
+  }
 
   const { from, to } = range;
 
@@ -108,11 +144,6 @@ export function DashboardPage() {
   const focusRatio = useQuery({
     queryKey: ['focus-ratio', from, to],
     queryFn: () => metricsApi.focusRatio(from, to).then((r) => r.data),
-  });
-
-  const focusRatioSeries = useQuery({
-    queryKey: ['focus-ratio-series', from, to],
-    queryFn: () => metricsApi.focusRatioSeries(from, to).then((r) => r.data),
   });
 
   const issuesCreated = useQuery({
@@ -170,25 +201,6 @@ export function DashboardPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: [] }),
   });
 
-  // The backend only stores a value=1 snapshot for days with commits; zero-commit
-  // weekdays have no row. Fill in the gaps so the chart shows true on/off activity
-  // rather than a flat line at 1.0 connecting only the active days.
-  const focusRatioFilled = useMemo(() => {
-    const activeDates = new Set((focusRatioSeries.data ?? []).map((p) => p.date));
-    const result: { date: string; value: number; metricType: string }[] = [];
-    const end = new Date(to + 'T00:00:00');
-    const cur = new Date(from + 'T00:00:00');
-    while (cur <= end) {
-      const dow = cur.getDay(); // 0 = Sun, 6 = Sat
-      if (dow !== 0 && dow !== 6) {
-        const dateStr = cur.toISOString().slice(0, 10);
-        result.push({ date: dateStr, value: activeDates.has(dateStr) ? 1 : 0, metricType: 'FOCUS_RATIO_DAYS_TASKS' });
-      }
-      cur.setDate(cur.getDate() + 1);
-    }
-    return result;
-  }, [focusRatioSeries.data, from, to]);
-
   const isLoading = commits.isLoading && prCreated.isLoading;
   if (isLoading) return <PageSpinner />;
 
@@ -234,34 +246,73 @@ export function DashboardPage() {
 
       {/* Primary KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="Total Commits"
-          value={totalCommits}
-          subtitle="in period"
-          icon={<GitCommit className="h-4 w-4" />}
-          tooltip="Number of Git commits authored in the selected period."
-        />
-        <KpiCard
-          label="PRs Merged"
-          value={totalPrsMerged}
-          subtitle="in period"
-          icon={<GitMerge className="h-4 w-4" />}
-          tooltip="Pull requests merged to a target branch in the selected period."
-        />
-        <KpiCard
-          label="PR Lead Time"
-          value={fmtHours(leadTimeHrs)}
-          subtitle="open → merge, median"
-          icon={<Clock className="h-4 w-4" />}
-          tooltip="Median time from when a PR is opened to when it is merged."
-        />
-        <KpiCard
-          label="Focus Ratio"
-          value={focusRatio.data?.value != null ? fmtPct(focusRatio.data.value) : '—'}
-          subtitle="coding days / working days"
-          icon={<Target className="h-4 w-4" />}
-          tooltip="Fraction of working days (Mon–Fri) on which you made at least one commit."
-        />
+        <div className="relative group/explain">
+          <KpiCard
+            label="Total Commits"
+            value={totalCommits}
+            subtitle="in period"
+            icon={<GitCommit className="h-4 w-4" />}
+            tooltip="Number of Git commits authored in the selected period."
+          />
+          <button
+            onClick={() => openExplain('Total Commits', 'Number of Git commits authored in the selected period.', String(totalCommits))}
+            className="absolute bottom-2.5 right-2.5 opacity-0 group-hover/explain:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-violet-50 text-gray-300 hover:text-violet-500"
+            title="Explain with AI"
+          >
+            <Brain className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="relative group/explain">
+          <KpiCard
+            label="PRs Merged"
+            value={totalPrsMerged}
+            subtitle="in period"
+            icon={<GitMerge className="h-4 w-4" />}
+            tooltip="Pull requests merged to a target branch in the selected period."
+          />
+          <button
+            onClick={() => openExplain('PRs Merged', 'Pull requests merged to a target branch in the selected period.', String(totalPrsMerged))}
+            className="absolute bottom-2.5 right-2.5 opacity-0 group-hover/explain:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-violet-50 text-gray-300 hover:text-violet-500"
+            title="Explain with AI"
+          >
+            <Brain className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="relative group/explain">
+          <KpiCard
+            label="PR Lead Time"
+            value={fmtHours(leadTimeHrs)}
+            subtitle="open → merge, median"
+            icon={<Clock className="h-4 w-4" />}
+            tooltip="Median time from when a PR is opened to when it is merged."
+          />
+          <button
+            onClick={() => openExplain('PR Lead Time', 'Median time from when a PR is opened to when it is merged.', fmtHours(leadTimeHrs))}
+            className="absolute bottom-2.5 right-2.5 opacity-0 group-hover/explain:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-violet-50 text-gray-300 hover:text-violet-500"
+            title="Explain with AI"
+          >
+            <Brain className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="relative group/explain">
+          <KpiCard
+            label="Focus Ratio"
+            value={focusRatio.data?.value != null ? fmtPct(focusRatio.data.value) : '—'}
+            subtitle="coding days / working days"
+            icon={<Target className="h-4 w-4" />}
+            tooltip="Fraction of working days (Mon–Fri) on which you made at least one commit."
+          />
+          <button
+            onClick={() => openExplain('Focus Ratio', 'Fraction of working days (Mon–Fri) on which you made at least one commit.', focusRatio.data?.value != null ? fmtPct(focusRatio.data.value) : '—')}
+            className="absolute bottom-2.5 right-2.5 opacity-0 group-hover/explain:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-violet-50 text-gray-300 hover:text-violet-500"
+            title="Explain with AI"
+          >
+            <Brain className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Secondary KPIs */}
@@ -275,7 +326,7 @@ export function DashboardPage() {
         <KpiCard
           label="Issues Closed"
           value={sum(issuesClosed.data ?? [])}
-          icon={<Target className="h-4 w-4" />}
+          icon={<CircleCheckBig className="h-4 w-4" />}
           tooltip="Issues resolved or closed by you in the selected period."
         />
         <KpiCard
@@ -284,14 +335,14 @@ export function DashboardPage() {
             ? fmtHours(reviewTime.data.value)
             : '—'}
           subtitle="first review, median"
-          icon={<Clock className="h-4 w-4" />}
+          icon={<ClockCheck className="h-4 w-4" />}
           tooltip="Median time from PR open to receiving the first review comment or approval."
         />
         <KpiCard
           label="1st Commit → Merge"
           value={fmtHours(firstCommitLeadTimeHrs)}
           subtitle="lead time from first commit"
-          icon={<GitCommit className="h-4 w-4" />}
+          icon={<Route className="h-4 w-4" />}
           tooltip="Median time from the first commit on a PR branch to the PR being merged."
         />
       </div>
@@ -301,21 +352,21 @@ export function DashboardPage() {
         <KpiCard
           label="Issues Created"
           value={sum(issuesCreated.data ?? [])}
-          icon={<GitBranch className="h-4 w-4" />}
+          icon={<CirclePlus className="h-4 w-4" />}
           tooltip="Issues opened in the selected period across all connected trackers."
         />
         <KpiCard
           label="Issue Lead Time"
           value={fmtHours(issueLeadTimeHrs)}
           subtitle="open → close, median"
-          icon={<Clock className="h-4 w-4" />}
+          icon={<Hourglass className="h-4 w-4" />}
           tooltip="Median time from issue creation to it being marked as closed or resolved."
         />
         <KpiCard
           label="Avg Churn"
           value={avgChurn > 0 ? `${(avgChurn * 100).toFixed(1)}%` : '—'}
           subtitle="deleted / total lines"
-          icon={<Scissors className="h-4 w-4" />}
+          icon={<Replace className="h-4 w-4" />}
           tooltip="Average daily ratio of deleted lines to total changed lines. High churn may indicate rework or rewrites."
         />
         <KpiCard
@@ -324,7 +375,7 @@ export function DashboardPage() {
             ? `${Math.round(deepWorkStreak.data.value)}d`
             : '—'}
           subtitle="longest active run"
-          icon={<Zap className="h-4 w-4" />}
+          icon={<Flame className="h-4 w-4" />}
           tooltip="Longest consecutive run of days on which you authored at least one commit."
         />
       </div>
@@ -348,7 +399,7 @@ export function DashboardPage() {
               ? fmtPct(refactorRatio.data.value)
               : '—'}
             subtitle="commits: deletions > additions"
-            icon={<Scissors className="h-4 w-4" />}
+            icon={<Shuffle className="h-4 w-4" />}
             tooltip="Share of commits where deleted lines outnumber added lines — a proxy for cleanup and refactoring activity."
           />
           <KpiCard
@@ -357,7 +408,7 @@ export function DashboardPage() {
               ? fmtPct(mergeWithoutReview.data.value)
               : '—'}
             subtitle="PRs merged with 0 reviews"
-            icon={<Eye className="h-4 w-4" />}
+            icon={<EyeOff className="h-4 w-4" />}
             tooltip="Share of merged PRs that had zero reviewer approvals or comments before merge."
           />
           <KpiCard
@@ -366,7 +417,7 @@ export function DashboardPage() {
               ? `${mergeToMain.data.value.toFixed(1)}/wk`
               : '—'}
             subtitle="merges to main (DORA proxy)"
-            icon={<Flame className="h-4 w-4" />}
+            icon={<RefreshCw className="h-4 w-4" />}
             tooltip="Average number of merges to the main branch per week. Used as a proxy for DORA deployment frequency."
           />
         </div>
@@ -377,7 +428,7 @@ export function DashboardPage() {
               ? fmtPct(knowledgeSilo.data.value)
               : '—'}
             subtitle="max repo ownership share"
-            icon={<GitBranch className="h-4 w-4" />}
+            icon={<KnowledgeSiloIcon />}
             tooltip="Your highest commit share across all repos. A high value means you are the sole owner of that repo's knowledge — a bus-factor risk."
           />
           <KpiCard
@@ -386,11 +437,14 @@ export function DashboardPage() {
               ? `${prSizeComplexity.data.value.toFixed(0)} ln`
               : '—'}
             subtitle="lines/commit, median"
-            icon={<GitPullRequest className="h-4 w-4" />}
+            icon={<Layers3 className="h-4 w-4" />}
             tooltip="Median (additions + deletions) per commit across your PRs. Lower values mean smaller, more focused changes that are easier to review."
           />
         </div>
       </div>
+
+      {/* AI Summary */}
+      <AiSummaryCard range={range} onSummaryGenerated={setAiSummary} />
 
       {/* Charts — progressive disclosure */}
       <div className="space-y-3">
@@ -442,23 +496,10 @@ export function DashboardPage() {
           </div>
         </ChartSection>
 
-        {focusRatioFilled.some((p) => p.value > 0) && (
-          <ChartSection title="Focus ratio over time" subtitle="Weekdays with at least one commit">
-            <MetricBarChart
-              data={focusRatioFilled}
-              label="Active day"
-              color="#7c3aed"
-            />
-            <p className="mt-2 text-xs text-gray-400">
-              1 = had commits that day; 0 = no commits. The card percentage is active days / total weekdays in the period.
-            </p>
-          </ChartSection>
-        )}
-
         {(mergeToMain.data?.value ?? 0) > 0 && (
           <ChartSection title="Merge frequency" subtitle="Merges to main branch — DORA proxy">
             <div className="flex items-center gap-3 py-4">
-              <Flame className="h-8 w-8 text-violet-400" />
+              <RefreshCw className="h-8 w-8 text-violet-400" />
               <div>
                 <p className="text-3xl font-semibold text-gray-900">
                   {mergeToMain.data!.value.toFixed(1)}
@@ -475,7 +516,7 @@ export function DashboardPage() {
         {(prSizeComplexity.data?.value ?? 0) > 0 && (
           <ChartSection title="PR size complexity" subtitle="(additions + deletions) / commits per PR — median">
             <div className="flex items-center gap-3 py-4">
-              <GitPullRequest className="h-8 w-8 text-amber-400" />
+              <Layers3 className="h-8 w-8 text-amber-400" />
               <div>
                 <p className="text-3xl font-semibold text-gray-900">
                   {prSizeComplexity.data!.value.toFixed(0)}
@@ -489,6 +530,16 @@ export function DashboardPage() {
           </ChartSection>
         )}
       </div>
+
+      {/* AI Metric Explain Drawer */}
+      <AiMetricExplainDrawer
+        isOpen={explainDrawer !== null}
+        onClose={() => setExplainDrawer(null)}
+        metricLabel={explainDrawer?.label ?? ''}
+        metricDescription={explainDrawer?.description ?? ''}
+        metricValue={explainDrawer?.value ?? '—'}
+        summary={aiSummary}
+      />
     </div>
   );
 }
