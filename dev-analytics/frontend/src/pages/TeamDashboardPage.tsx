@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/Badge';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { MultiLineChart } from '@/components/charts/MultiLineChart';
 import { PageSpinner } from '@/components/ui/Spinner';
-import { PRESET_RANGES } from '@/lib/dates';
+import { useDateRange } from '@/context/DateRangeContext';
+import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
 import type { DateRange, Team, MemberSummaryDto } from '@/types';
 
 function fmt(v: number | undefined, decimals = 1) {
@@ -102,7 +103,7 @@ function MemberPanel({ member, teamId, range, onClose }: MemberPanelProps) {
 
 export function TeamDashboardPage() {
   const qc = useQueryClient();
-  const [range, setRange] = useState<DateRange>(PRESET_RANGES[1].range);
+  const { range, setRange } = useDateRange();
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
   const [selectedMember, setSelectedMember] = useState<MemberSummaryDto | null>(null);
   const { from, to } = range;
@@ -173,21 +174,15 @@ export function TeamDashboardPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {teams.length > 1 && (
-            <div className="flex gap-1">
+            <select
+              value={activeTeamId ?? ''}
+              onChange={(e) => setSelectedTeamId(Number(e.target.value))}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-colors cursor-pointer"
+            >
               {teams.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedTeamId(t.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                    t.id === activeTeamId
-                      ? 'bg-violet-600 text-white border-violet-600'
-                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {t.name}
-                </button>
+                <option key={t.id} value={t.id}>{t.name}</option>
               ))}
-            </div>
+            </select>
           )}
           <DateRangePicker value={range} onChange={setRange} />
           <Button
@@ -208,6 +203,14 @@ export function TeamDashboardPage() {
         <KpiCard label="PRs Merged" value={Math.round(totals.prsMerged)} icon={<GitMerge className="h-4 w-4" />} />
         <KpiCard label="Issues Closed" value={Math.round(totals.issuesClosed)} icon={<Target className="h-4 w-4" />} />
       </div>
+
+      {/* AI Team Insight */}
+      <AiTeamInsightCard
+        range={range}
+        teamId={activeTeamId!}
+        teamName={activeTeam?.name ?? ''}
+        memberSummary={summary ?? []}
+      />
 
       {/* Team commits chart */}
       <Card>

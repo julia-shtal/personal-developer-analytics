@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.user.controller;
 
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.user.model.UserSummary;
+import com.juliashtal.devanalytics.user.model.request.ChangePasswordRequest;
 import com.juliashtal.devanalytics.user.model.request.UpdateProfileRequest;
 import com.juliashtal.devanalytics.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -27,5 +28,12 @@ public class UserProfileController {
     public ResponseEntity<UserSummary> updateProfile(@RequestBody UpdateProfileRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(UserSummary.from(userService.updateProfile(userId, request)));
+    }
+
+    @PutMapping("/password")
+    public ResponseEntity<Void> changePassword(@RequestBody ChangePasswordRequest request) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        userService.changePassword(userId, request.getOldPassword(), request.getNewPassword());
+        return ResponseEntity.noContent().build();
     }
 }

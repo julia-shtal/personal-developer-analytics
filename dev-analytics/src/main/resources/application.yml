@@ -37,6 +37,11 @@ app:
     expiration: 3600000            # 1 hour
   base-url: ${APP_BASE_URL:http://localhost:8080}
 
+ai:
+  ollama:
+    base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+    model: ${OLLAMA_MODEL:llama3.2}
+
 server:
   port: 8080
 
