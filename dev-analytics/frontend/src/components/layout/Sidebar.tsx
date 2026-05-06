@@ -89,9 +89,16 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* User + logout */}
       <div className="flex-shrink-0 border-t border-gray-100 p-2 space-y-1">
         {!collapsed && user && (
-          <div className="px-3 py-2">
-            <p className="text-xs font-semibold text-gray-900 truncate">{user.username}</p>
-            <p className="text-xs text-gray-400 truncate">{user.email}</p>
+          <div className="px-3 py-2 flex items-center gap-2.5">
+            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center">
+              <span className="text-xs font-semibold text-violet-700">
+                {user.username.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-900 truncate">{user.username}</p>
+              <p className="text-xs text-gray-400 truncate">{user.email}</p>
+            </div>
           </div>
         )}
         <button
