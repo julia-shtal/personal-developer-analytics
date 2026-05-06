@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { clsx } from 'clsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Trash2, Database, GitBranch, Layers, AlertCircle,
@@ -126,6 +127,23 @@ function formatSyncAge(dateStr?: string): string {
   const diffH = Math.floor(diffMin / 60);
   if (diffH < 24) return `${diffH}h ago`;
   return `${Math.floor(diffH / 24)}d ago`;
+}
+
+function syncDotClass(dateStr?: string): string {
+  if (!dateStr) return 'bg-red-400';
+  const diffH = (Date.now() - new Date(dateStr).getTime()) / 3600000;
+  if (diffH < 24) return 'bg-emerald-400';
+  if (diffH < 168) return 'bg-amber-400'; // 7 days
+  return 'bg-red-400';
+}
+
+function SyncStatusLine({ dateStr }: { dateStr?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={clsx('inline-block w-1.5 h-1.5 rounded-full flex-shrink-0', syncDotClass(dateStr))} />
+      {dateStr ? `Synced ${formatSyncAge(dateStr)}` : 'Never synced'}
+    </span>
+  );
 }
 
 // ─── Repos sub-panel ──────────────────────────────────────────────────────────
@@ -526,9 +544,7 @@ export function DataSourcesPage() {
                     {syncingIds.has(src.id) ? (
                       <SyncProgressLine status={syncStatuses[src.id]} />
                     ) : (
-                      src.lastSuccessSync
-                        ? `Synced ${formatSyncAge(src.lastSuccessSync)}`
-                        : 'Never synced'
+                      <SyncStatusLine dateStr={src.lastSuccessSync} />
                     )}
                   </p>
                 </div>

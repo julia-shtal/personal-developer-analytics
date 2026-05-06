@@ -207,7 +207,7 @@ export function SettingsPage() {
               <p className="text-sm font-medium text-gray-700 mb-1.5">Role</p>
               <div className="flex flex-wrap gap-2">
                 {user?.role && (
-                  <Badge color={ROLE_COLORS[user.role] ?? 'gray'}>{user.role}</Badge>
+                  <Badge color={ROLE_COLORS[user.role] ?? 'gray'} dot>{user.role}</Badge>
                 )}
               </div>
             </div>
