@@ -40,17 +40,26 @@ export function CardBody({ children, className }: { children: ReactNode; classNa
   );
 }
 
+type IconVariant = 'violet' | 'teal' | 'amber';
+
+const iconVariantClasses: Record<IconVariant, string> = {
+  violet: 'bg-violet-50 text-violet-600',
+  teal: 'bg-teal-50 text-teal-600',
+  amber: 'bg-amber-50 text-amber-600',
+};
+
 interface KpiCardProps {
   label: string;
   value: string | number;
   subtitle?: string;
   icon?: ReactNode;
+  iconVariant?: IconVariant;
   trend?: 'up' | 'down' | 'neutral';
   trendValue?: string;
   tooltip?: string;
 }
 
-export function KpiCard({ label, value, subtitle, icon, trend, trendValue, tooltip }: KpiCardProps) {
+export function KpiCard({ label, value, subtitle, icon, iconVariant = 'violet', trend, trendValue, tooltip }: KpiCardProps) {
   const trendColor = trend === 'up' ? 'text-emerald-600' : trend === 'down' ? 'text-red-500' : 'text-gray-500';
 
   return (
@@ -64,7 +73,7 @@ export function KpiCard({ label, value, subtitle, icon, trend, trendValue, toolt
           </div>
           {icon && (
             <div className="ml-3 flex-shrink-0 relative group">
-              <div className="p-2.5 rounded-lg bg-violet-50 text-violet-600 cursor-default">
+              <div className={clsx('p-2.5 rounded-lg cursor-default', iconVariantClasses[iconVariant])}>
                 {icon}
               </div>
               {tooltip && (

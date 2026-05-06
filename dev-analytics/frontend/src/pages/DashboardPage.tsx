@@ -21,6 +21,7 @@ import {
   EyeOff,
   Layers3,
   Brain,
+  LayoutDashboard,
 } from 'lucide-react';
 
 function KnowledgeSiloIcon({ className }: { className?: string }) {
@@ -244,6 +245,23 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {/* Empty state — shown when no data has been calculated yet */}
+      {!commits.data?.length && !prMerged.data?.length && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <LayoutDashboard className="h-8 w-8 text-gray-300 mb-3" />
+          <p className="text-sm text-gray-400 mb-4">No data — try recalculating for this period</p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => calculateMutation.mutate()}
+            loading={calculateMutation.isPending}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Recalculate
+          </Button>
+        </div>
+      )}
+
       {/* Primary KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="relative group/explain">
@@ -303,6 +321,7 @@ export function DashboardPage() {
             value={focusRatio.data?.value != null ? fmtPct(focusRatio.data.value) : '—'}
             subtitle="coding days / working days"
             icon={<Target className="h-4 w-4" />}
+            iconVariant="teal"
             tooltip="Fraction of working days (Mon–Fri) on which you made at least one commit."
           />
           <button
@@ -367,6 +386,7 @@ export function DashboardPage() {
           value={avgChurn > 0 ? `${(avgChurn * 100).toFixed(1)}%` : '—'}
           subtitle="deleted / total lines"
           icon={<Replace className="h-4 w-4" />}
+          iconVariant="teal"
           tooltip="Average daily ratio of deleted lines to total changed lines. High churn may indicate rework or rewrites."
         />
         <KpiCard
@@ -376,6 +396,7 @@ export function DashboardPage() {
             : '—'}
           subtitle="longest active run"
           icon={<Flame className="h-4 w-4" />}
+          iconVariant="teal"
           tooltip="Longest consecutive run of days on which you authored at least one commit."
         />
       </div>
@@ -391,6 +412,7 @@ export function DashboardPage() {
               : '—'}
             subtitle="commits outside 09–18 Mon–Fri"
             icon={<Moon className="h-4 w-4" />}
+            iconVariant="amber"
             tooltip="Share of commits made outside 09:00–18:00 Mon–Fri in your local timezone. High values may indicate unsustainable working patterns."
           />
           <KpiCard
@@ -400,6 +422,7 @@ export function DashboardPage() {
               : '—'}
             subtitle="commits: deletions > additions"
             icon={<Shuffle className="h-4 w-4" />}
+            iconVariant="teal"
             tooltip="Share of commits where deleted lines outnumber added lines — a proxy for cleanup and refactoring activity."
           />
           <KpiCard
@@ -409,6 +432,7 @@ export function DashboardPage() {
               : '—'}
             subtitle="PRs merged with 0 reviews"
             icon={<EyeOff className="h-4 w-4" />}
+            iconVariant="amber"
             tooltip="Share of merged PRs that had zero reviewer approvals or comments before merge."
           />
           <KpiCard
@@ -418,6 +442,7 @@ export function DashboardPage() {
               : '—'}
             subtitle="merges to main (DORA proxy)"
             icon={<RefreshCw className="h-4 w-4" />}
+            iconVariant="teal"
             tooltip="Average number of merges to the main branch per week. Used as a proxy for DORA deployment frequency."
           />
         </div>
@@ -429,6 +454,7 @@ export function DashboardPage() {
               : '—'}
             subtitle="max repo ownership share"
             icon={<KnowledgeSiloIcon />}
+            iconVariant="amber"
             tooltip="Your highest commit share across all repos. A high value means you are the sole owner of that repo's knowledge — a bus-factor risk."
           />
           <KpiCard
@@ -438,6 +464,7 @@ export function DashboardPage() {
               : '—'}
             subtitle="lines/commit, median"
             icon={<Layers3 className="h-4 w-4" />}
+            iconVariant="amber"
             tooltip="Median (additions + deletions) per commit across your PRs. Lower values mean smaller, more focused changes that are easier to review."
           />
         </div>

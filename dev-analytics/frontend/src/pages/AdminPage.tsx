@@ -34,7 +34,7 @@ function RoleDropdown({
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
       >
-        <Badge color={ROLE_COLORS[currentRole]}>{currentRole}</Badge>
+        <Badge color={ROLE_COLORS[currentRole]} dot>{currentRole}</Badge>
         <ChevronDown className="h-3 w-3 text-gray-400" />
       </button>
       {open && (
