@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Users, TrendingUp, GitCommit, GitMerge, Target, X } from 'lucide-react';
+import { RefreshCw, Users, TrendingUp, GitCommit, GitMerge, Target, X, Clock, Replace } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
 import { teamMetricsApi } from '@/api/metrics';
 import { Card, CardHeader, CardBody, KpiCard } from '@/components/ui/Card';
@@ -12,6 +12,28 @@ import { PageSpinner } from '@/components/ui/Spinner';
 import { useDateRange } from '@/context/DateRangeContext';
 import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
 import type { DateRange, Team, MemberSummaryDto } from '@/types';
+
+interface ColHeaderProps {
+  label: string;
+  tip: string;
+  align?: 'left' | 'right';
+  px?: string;
+}
+
+function ColHeader({ label, tip, align = 'right', px = 'px-4' }: ColHeaderProps) {
+  return (
+    <th className={`${align === 'right' ? 'text-right' : 'text-left'} ${px} py-3`}>
+      <span className="relative group inline-flex items-center gap-1 cursor-default">
+        <span className="font-semibold text-gray-700 text-xs">{label}</span>
+        <span className="text-gray-400 text-[10px] leading-none select-none">?</span>
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 rounded-lg bg-white border border-gray-200 text-gray-700 text-xs px-3 py-2.5 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none leading-relaxed whitespace-normal text-left">
+          <span className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-white border-r border-b border-gray-200 rotate-45 rounded-sm" />
+          {tip}
+        </span>
+      </span>
+    </th>
+  );
+}
 
 function fmt(v: number | undefined, decimals = 1) {
   if (v == null || v === 0) return '—';
@@ -63,9 +85,24 @@ function MemberPanel({ member, teamId, range, onClose }: MemberPanelProps) {
         <div className="px-5 py-4 space-y-4">
           {/* KPIs */}
           <div className="grid grid-cols-3 gap-3">
-            <KpiCard label="Commits" value={fmt(m.DAILY_COMMITS_COUNT, 0)} icon={<GitCommit className="h-4 w-4" />} />
-            <KpiCard label="PRs Merged" value={fmt(m.DAILY_PR_MERGED, 0)} icon={<GitMerge className="h-4 w-4" />} />
-            <KpiCard label="Issues Closed" value={fmt(m.DAILY_ISSUES_CLOSED, 0)} icon={<Target className="h-4 w-4" />} />
+            <KpiCard
+              label="Commits"
+              value={fmt(m.DAILY_COMMITS_COUNT, 0)}
+              icon={<GitCommit className="h-4 w-4" />}
+              tooltip="Total Git commits authored by this member in the selected period."
+            />
+            <KpiCard
+              label="PRs Merged"
+              value={fmt(m.DAILY_PR_MERGED, 0)}
+              icon={<GitMerge className="h-4 w-4" />}
+              tooltip="Pull requests merged to a target branch by this member in the selected period."
+            />
+            <KpiCard
+              label="Issues Closed"
+              value={fmt(m.DAILY_ISSUES_CLOSED, 0)}
+              icon={<Target className="h-4 w-4" />}
+              tooltip="Issues resolved or closed by this member in the selected period."
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -73,6 +110,8 @@ function MemberPanel({ member, teamId, range, onClose }: MemberPanelProps) {
               label="PR Lead Time"
               value={fmtHours(m.PR_LEAD_TIME_HOURS_MEDIAN)}
               subtitle="open → merge, median"
+              icon={<Clock className="h-4 w-4" />}
+              tooltip="Median time from when a PR is opened to when it is merged. Lower values mean faster delivery."
             />
             <KpiCard
               label="Churn Ratio"
@@ -80,6 +119,9 @@ function MemberPanel({ member, teamId, range, onClose }: MemberPanelProps) {
                 ? `${(m.DAILY_CHURN_RATIO * 100).toFixed(0)}%`
                 : '—'}
               subtitle="lines rewritten"
+              icon={<Replace className="h-4 w-4" />}
+              iconVariant="teal"
+              tooltip="Average ratio of deleted lines to total changed lines. High churn may indicate rework or frequent rewrites."
             />
           </div>
 
@@ -249,17 +291,17 @@ export function TeamDashboardPage() {
           {summaryLoading ? (
             <div className="py-12 flex items-center justify-center text-gray-400 text-sm">Loading…</div>
           ) : summary?.length ? (
-            <div className="overflow-x-auto">
+            <div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs">Member</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs">Commits</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs">PRs merged</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs">PRs created</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs">Issues closed</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs">PR lead time</th>
-                    <th className="text-right px-5 py-3 font-medium text-gray-500 text-xs">Churn avg</th>
+                    <th className="text-left px-5 py-3 font-semibold text-gray-700 text-xs">Member</th>
+                    <ColHeader label="Commits" tip="Total Git commits authored in the selected period." />
+                    <ColHeader label="PRs merged" tip="Pull requests merged to a target branch in the selected period." />
+                    <ColHeader label="PRs created" tip="Pull requests opened in the selected period." />
+                    <ColHeader label="Issues closed" tip="Issues resolved or closed in the selected period." />
+                    <ColHeader label="PR lead time" tip="Median time from PR open to merge. Lower is faster delivery." />
+                    <ColHeader label="Churn avg" tip="Average ratio of deleted to total changed lines. High churn may indicate rework." px="px-5" />
                   </tr>
                 </thead>
                 <tbody>

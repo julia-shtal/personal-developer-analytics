@@ -48,7 +48,7 @@ export const metricsApi = {
 
   // ── Wellness & quality (Ticket 5 metrics) ─────────────────────────────────
   dailyAfterHours: (from: string, to: string) =>
-    api.get<MetricAggregateDto>('/metrics/after-hours', { params: { from, to } }),
+    api.get<MetricAggregateDto>('/metrics/after-hours-ratio', { params: { from, to } }),
 
   dailyRefactorRatio: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/refactor-ratio', { params: { from, to } }),
