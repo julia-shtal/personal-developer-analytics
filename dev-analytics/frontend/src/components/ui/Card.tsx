@@ -77,8 +77,8 @@ export function KpiCard({ label, value, subtitle, icon, iconVariant = 'violet', 
                 {icon}
               </div>
               {tooltip && (
-                <div className="absolute right-0 top-full mt-2 z-50 w-56 rounded-lg bg-gray-900 text-white text-xs px-3 py-2 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none">
-                  <div className="absolute right-3 -top-1.5 w-3 h-3 bg-gray-900 rotate-45 rounded-sm" />
+                <div className="absolute right-0 bottom-full mb-2 z-50 w-60 rounded-lg bg-white border border-gray-200 text-gray-700 text-xs px-3 py-2.5 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none leading-relaxed">
+                  <div className="absolute right-3 -bottom-1.5 w-3 h-3 bg-white border-r border-b border-gray-200 rotate-45 rounded-sm" />
                   {tooltip}
                 </div>
               )}
