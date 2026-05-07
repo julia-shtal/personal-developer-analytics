@@ -3,7 +3,8 @@ package com.juliashtal.devanalytics.ai.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juliashtal.devanalytics.ai.client.LlmClient;
-import com.juliashtal.devanalytics.ai.model.MetricsContext;
+import com.juliashtal.devanalytics.ai.model.AggregatedMetricsContext;
+import com.juliashtal.devanalytics.ai.model.AiResponseDto;
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.model.TeamMetricsContext;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
@@ -19,12 +20,13 @@ import com.juliashtal.devanalytics.user.service.TeamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
@@ -66,10 +68,11 @@ public class MetricsAiService {
     // Personal / repository summary
     // -------------------------------------------------------------------------
 
+    @Cacheable(value = "ai_summaries", key = "{#user.id, #from, #to, #repoId}")
     public MetricsSummaryDto generateSummary(User user, LocalDate from, LocalDate to, Long repoId) {
         GitRepositoryEntity repo = repoId != null ? repoService.getById(repoId) : null;
 
-        MetricsContext ctx = buildMetricsContext(user, from, to, repo);
+        AggregatedMetricsContext ctx = buildMetricsContext(user, from, to, repo);
         String ctxJson = toJson(ctx);
 
         String systemPrompt = buildSystemPrompt();
@@ -92,6 +95,7 @@ public class MetricsAiService {
     // Team summary
     // -------------------------------------------------------------------------
 
+    @Cacheable(value = "ai_summaries", key = "{'team', #teamId, #from, #to}")
     public MetricsSummaryDto generateTeamSummary(User requestingUser, Long teamId, LocalDate from, LocalDate to) {
         Team team = teamService.getById(teamId);
 
@@ -119,11 +123,12 @@ public class MetricsAiService {
     }
 
     // -------------------------------------------------------------------------
-    // Context building — personal
+    // Context building — personal (pre-aggregated)
     // -------------------------------------------------------------------------
 
-    private MetricsContext buildMetricsContext(User user, LocalDate from, LocalDate to, GitRepositoryEntity repo) {
-        Map<String, List<MetricsContext.DataPoint>> series = new LinkedHashMap<>();
+    private AggregatedMetricsContext buildMetricsContext(User user, LocalDate from, LocalDate to,
+                                                         GitRepositoryEntity repo) {
+        Map<String, AggregatedMetricsContext.MetricAggregate> aggregates = new LinkedHashMap<>();
 
         for (MetricType type : CONTEXT_METRIC_TYPES) {
             List<MetricSnapshot> snapshots;
@@ -136,20 +141,66 @@ public class MetricsAiService {
             }
 
             if (!snapshots.isEmpty()) {
-                List<MetricsContext.DataPoint> points = snapshots.stream()
+                List<Double> values = snapshots.stream()
                         .sorted(Comparator.comparing(MetricSnapshot::getDate))
-                        .map(s -> new MetricsContext.DataPoint(s.getDate(), s.getValue()))
-                        .toList();
-                series.put(type.name(), points);
+                        .map(MetricSnapshot::getValue)
+                        .collect(Collectors.toList());
+                aggregates.put(type.name(), computeAggregate(values, isDailySumMetric(type)));
             }
         }
 
-        MetricsContext ctx = new MetricsContext();
+        AggregatedMetricsContext ctx = new AggregatedMetricsContext();
         ctx.setFrom(from);
         ctx.setTo(to);
         ctx.setRepoName(repo != null ? repo.getName() : null);
-        ctx.setMetrics(series);
+        ctx.setMetrics(aggregates);
         return ctx;
+    }
+
+    private AggregatedMetricsContext.MetricAggregate computeAggregate(List<Double> values, boolean isSumMetric) {
+        List<Double> sorted = values.stream().sorted().toList();
+        int n = sorted.size();
+
+        double min = sorted.get(0);
+        double max = sorted.get(n - 1);
+        double median = n % 2 == 1
+                ? sorted.get(n / 2)
+                : (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0;
+        long total = isSumMetric ? Math.round(values.stream().mapToDouble(Double::doubleValue).sum()) : 0L;
+
+        double trendPct = computeTrendPct(values);
+        boolean anomaly = hasAnomaly(values);
+
+        DecimalFormat df = new DecimalFormat("#.##");
+        df.setRoundingMode(RoundingMode.HALF_UP);
+
+        return AggregatedMetricsContext.MetricAggregate.builder()
+                .min(df.format(min))
+                .max(df.format(max))
+                .median(df.format(median))
+                .total(total)
+                .trendPct(trendPct)
+                .anomaly(anomaly)
+                .build();
+    }
+
+    private double computeTrendPct(List<Double> chronological) {
+        int n = chronological.size();
+        if (n < 2) return 0.0;
+        int half = n / 2;
+        double earlyAvg = chronological.subList(0, half).stream().mapToDouble(Double::doubleValue).average().orElse(0);
+        double recentAvg = chronological.subList(n - half, n).stream().mapToDouble(Double::doubleValue).average().orElse(0);
+        if (earlyAvg == 0) return 0.0;
+        return Math.round(((recentAvg - earlyAvg) / earlyAvg) * 1000.0) / 10.0;
+    }
+
+    private boolean hasAnomaly(List<Double> values) {
+        int n = values.size();
+        if (n < 3) return false;
+        double mean = values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+        double variance = values.stream().mapToDouble(v -> (v - mean) * (v - mean)).average().orElse(0);
+        double stdDev = Math.sqrt(variance);
+        return values.stream().anyMatch(v -> Math.abs(v - mean) > 2 * stdDev);
     }
 
     // -------------------------------------------------------------------------
@@ -193,52 +244,61 @@ public class MetricsAiService {
 
     private String buildSystemPrompt() {
         return """
-                You are an assistant for a locally hosted developer analytics platform.
+                You are a developer analytics assistant analysing metrics for a SINGLE individual developer.
+                Do NOT mention teams, team members, other developers, or comparisons to other people.
+                Analyze the provided metrics JSON and return ONLY a valid JSON object.
+                Do not include any markdown, code fences, explanations, or text outside the JSON.
 
-                You receive structured JSON with time series and aggregates for developer productivity \
-                metrics across a selected period and scope. The available metrics may include daily commits, \
-                PRs created and merged, issues created and closed, PR lead time, issue lead time, review \
-                response time, code churn, and focus ratio. The data may be personal or repository-level.
+                Metric name mapping:
+                - DAILY_COMMITS_COUNT: "Daily Commits"
+                - DAILY_PR_CREATED: "PRs Created"
+                - DAILY_PR_MERGED: "Merged PRs"
+                - DAILY_ISSUES_CREATED: "Issues Created"
+                - DAILY_ISSUES_CLOSED: "Issues Closed"
+                - DAILY_CHURN_RATIO: "Churn Ratio"
+                - PR_LEAD_TIME_HOURS_MEDIAN: "PR Lead Time"
+                - PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN: "First Commit to Merge"
+                - ISSUE_LEAD_TIME_HOURS_MEDIAN: "Issue Lead Time"
+                - REVIEW_RESPONSE_TIME_HOURS_MEDIAN: "Review Response Time"
+                - FOCUS_RATIO_DAYS_TASKS: "Focus Ratio"
 
-                Your task is to produce a concise, developer-friendly summary that helps the user understand:
-                - delivery flow and cycle efficiency,
-                - review responsiveness,
-                - multitasking versus focus,
-                - bottlenecks, regressions, or anomalies,
-                - concrete improvement opportunities.
+                Each metric has: min, max, median, total (count metrics only), trendPct (% change recent vs early), anomaly (boolean).
 
-                Use only the provided metrics. Do not speculate beyond the data.
-                Be specific and reference concrete metric changes when possible.
-                Avoid buzzwords, generic productivity language, and motivational phrasing.
-                If data is incomplete or ambiguous, state that clearly.
+                Required output format (JSON only, no other text):
+                {
+                  "overview": "1-2 sentence summary",
+                  "insights": ["bullet 1", "bullet 2", "bullet 3", "bullet 4", "bullet 5"],
+                  "recommendations": ["action 1", "action 2", "action 3"]
+                }
 
-                Respond with exactly these three sections and no other text:
-                1. Overview: 1–2 short paragraphs.
-                2. Insights: 5–8 bullet points.
-                3. Recommendations: 3–5 bullet points.
+                Rules for insights (follow this order strictly):
+                1. Check Churn Ratio and PR Lead Time first — they are primary quality indicators.
+                2. Check Focus Ratio and Daily Commits second — they are primary throughput indicators.
+                3. Any metric with anomaly: true MUST be included as an insight.
+                4. Then cover remaining metrics (review response time, issue lead time, PRs created/merged).
+                5. Reference concrete values (median, trendPct, anomaly) in every insight.
+
+                General rules:
+                - overview: 1-2 sentences on delivery flow, cycle efficiency, and key patterns.
+                - insights: 5-8 items, in the priority order above.
+                - recommendations: 3-5 actionable items backed by the data.
+                - Use only the provided data. Do not speculate beyond the metrics.
+                - Avoid buzzwords and generic motivational phrasing.
+
+                Rules for numbers:
+                - All decimal values in the JSON are pre-rounded; use them exactly as provided.
+                - Totals are whole numbers; do not add decimal places.
+                - Express time metrics in hours (e.g., "22 hours", not "22.0 hours").
+                - Express trend as a percentage with one decimal (e.g., "-19.3%", not "-19.3000%").
                 """;
     }
 
     private String buildUserPrompt(LocalDate from, LocalDate to, GitRepositoryEntity repo, String ctxJson) {
         String scopeInfo = repo != null ? " for repository " + repo.getName() : "";
         return """
-                Analyze the following developer productivity metrics for the period %s to %s%s.
-
-                The JSON contains time series for metrics such as daily commits, pull requests, issues, \
-                lead times, review response time, churn, and focus ratio. Each entry in a series is a \
-                {date, value} pair. Lead-time and aggregate metrics appear as a single entry per period.
-
-                Rules:
-                - Use only the provided data.
-                - Do not speculate without evidence from the metrics.
-                - Reference concrete values and trends when possible.
-                - Prefer precise technical language over vague productivity language.
-                - Keep the summary short and actionable.
-
-                Output format:
-                1. Overview: 1–2 short paragraphs.
-                2. Insights: 5–8 bullet points.
-                3. Recommendations: 3–5 bullet points.
+                Analyze the following INDIVIDUAL developer productivity metrics for the period %s to %s%s.
+                This is a personal analysis — do not mention teams or other developers.
+                Return ONLY the JSON object as specified. No markdown, no extra text.
 
                 Metrics JSON:
                 %s
@@ -251,51 +311,58 @@ public class MetricsAiService {
 
     private String buildTeamSystemPrompt() {
         return """
-                You are an assistant for a locally hosted developer analytics platform.
+                You are a developer analytics assistant.
+                Analyze the provided team metrics JSON and return ONLY a valid JSON object.
+                Do not include any markdown, code fences, explanations, or text outside the JSON.
 
-                You receive structured JSON with per-member time series and aggregates for a software \
-                development team across a selected period. The available metrics per member may include \
-                daily commits, PRs created and merged, issues created and closed, PR lead time, issue \
-                lead time, review response time, code churn, and focus ratio.
+                Metric name mapping:
+                - DAILY_COMMITS_COUNT: "Daily Commits"
+                - DAILY_PR_CREATED: "PRs Created"
+                - DAILY_PR_MERGED: "Merged PRs"
+                - DAILY_ISSUES_CREATED: "Issues Created"
+                - DAILY_ISSUES_CLOSED: "Issues Closed"
+                - DAILY_CHURN_RATIO: "Churn Ratio"
+                - PR_LEAD_TIME_HOURS_MEDIAN: "PR Lead Time"
+                - PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN: "First Commit to Merge"
+                - ISSUE_LEAD_TIME_HOURS_MEDIAN: "Issue Lead Time"
+                - REVIEW_RESPONSE_TIME_HOURS_MEDIAN: "Review Response Time"
+                - FOCUS_RATIO_DAYS_TASKS: "Focus Ratio"
 
-                Your task is to produce a concise, manager-friendly team summary that helps understand:
-                - overall team delivery flow and output,
-                - review responsiveness across members,
-                - focus and multitasking patterns,
-                - individual bottlenecks or risks (high churn, slow reviews, unreviewed merges),
-                - concrete process improvement suggestions for the team.
+                Each member has a "metrics" map of aggregated values for the period.
 
-                Use only the provided metrics. Do not speculate beyond the data.
-                Reference concrete members and metric values when relevant.
-                Avoid generic team language and motivational phrasing.
-                If data is incomplete for some members, state that.
+                Required output format (JSON only, no other text):
+                {
+                  "overview": "1-2 sentence team summary",
+                  "insights": ["bullet 1", "bullet 2", "bullet 3", "bullet 4", "bullet 5"],
+                  "recommendations": ["action 1", "action 2", "action 3"]
+                }
 
-                Respond with exactly these three sections and no other text:
-                1. Overview: 1–2 short paragraphs on the team's overall delivery and collaboration.
-                2. Insights: 5–8 bullet points highlighting patterns, outliers, and risks across members.
-                3. Recommendations: 3–5 bullet points for concrete team process improvements.
+                Rules for insights (follow this order strictly):
+                1. Check Churn Ratio and PR Lead Time first — they are primary quality indicators across members.
+                2. Check Focus Ratio and Daily Commits second — they are primary throughput indicators.
+                3. Identify cross-member outliers (highest/lowest values) for each quality and throughput metric.
+                4. Then cover remaining metrics (review response time, issue lead time, PRs created/merged).
+                5. Reference member usernames and concrete values in every insight.
+
+                General rules:
+                - overview: 1-2 sentences on team delivery flow and collaboration.
+                - insights: 5-8 items, in the priority order above.
+                - recommendations: 3-5 actionable team process improvements backed by the data.
+                - Use only the provided data. Do not speculate beyond the metrics.
+                - Avoid generic team language and motivational phrasing.
+
+                Rules for numbers:
+                - All decimal values in the JSON are pre-rounded; use them exactly as provided.
+                - Totals are whole numbers; do not add decimal places.
+                - Express time metrics in hours (e.g., "22 hours", not "22.0 hours").
+                - Express trend as a percentage with one decimal (e.g., "-19.3%", not "-19.3000%").
                 """;
     }
 
     private String buildTeamUserPrompt(LocalDate from, LocalDate to, String teamName, String ctxJson) {
         return """
                 Analyze the following team productivity metrics for team "%s" for the period %s to %s.
-
-                The JSON contains per-member time series. Each member has a "metrics" map where \
-                each key is a metric type and the value is a list of {date, value} data points. \
-                Aggregate metrics (lead times, ratios) appear as a single entry per period.
-
-                Rules:
-                - Use only the provided data.
-                - Reference member usernames and specific metric values when possible.
-                - Identify cross-member patterns (e.g., who has the slowest reviews, highest churn).
-                - Prefer precise technical language.
-                - Keep the summary short and actionable.
-
-                Output format:
-                1. Overview: 1–2 short paragraphs.
-                2. Insights: 5–8 bullet points.
-                3. Recommendations: 3–5 bullet points.
+                Return ONLY the JSON object as specified. No markdown, no extra text.
 
                 Team Metrics JSON:
                 %s
@@ -308,66 +375,39 @@ public class MetricsAiService {
 
     private MetricsSummaryDto parseSummary(String raw, LocalDate from, LocalDate to,
                                            String scope, String scopeName) {
-        String text = raw.replace("\r\n", "\n").replace("\r", "\n");
-
-        String overview = extractSection(text, "Overview", new String[]{"Insights", "Recommendations"});
-        String insightsRaw = extractSection(text, "Insights", new String[]{"Recommendations"});
-        String recommendationsRaw = extractSection(text, "Recommendations", new String[]{});
-
-        List<String> insights = parseBullets(insightsRaw);
-        List<String> recommendations = parseBullets(recommendationsRaw);
-
-        if (overview.isBlank() && insights.isEmpty() && recommendations.isEmpty()) {
-            log.warn("Could not parse structured sections from model output; using raw text as overview");
-            overview = raw;
+        String cleaned = raw.strip();
+        // Strip markdown code fences that models sometimes add despite instructions
+        if (cleaned.startsWith("```")) {
+            cleaned = cleaned.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "").strip();
         }
 
-        return MetricsSummaryDto.builder()
-                .from(from)
-                .to(to)
-                .scope(scope)
-                .repoName(scopeName)
-                .overview(overview.strip())
-                .insights(insights)
-                .recommendations(recommendations)
-                .rawModelOutput(raw)
-                .modelName(model)
-                .build();
-    }
-
-    private String extractSection(String text, String sectionName, String[] nextSections) {
-        Pattern headerPattern = buildHeaderPattern(sectionName);
-        Matcher headerMatcher = headerPattern.matcher(text);
-        if (!headerMatcher.find()) {
-            return "";
+        try {
+            AiResponseDto response = objectMapper.readValue(cleaned, AiResponseDto.class);
+            return MetricsSummaryDto.builder()
+                    .from(from)
+                    .to(to)
+                    .scope(scope)
+                    .repoName(scopeName)
+                    .overview(response.overview() != null ? response.overview().strip() : "")
+                    .insights(response.insights() != null ? response.insights() : List.of())
+                    .recommendations(response.recommendations() != null ? response.recommendations() : List.of())
+                    .rawModelOutput(raw)
+                    .modelName(model)
+                    .build();
+        } catch (JsonProcessingException e) {
+            log.error("Failed to parse AI JSON output, returning raw text as overview. Error: {}", e.getMessage());
+            return MetricsSummaryDto.builder()
+                    .from(from)
+                    .to(to)
+                    .scope(scope)
+                    .repoName(scopeName)
+                    .overview(raw)
+                    .insights(List.of())
+                    .recommendations(List.of())
+                    .rawModelOutput(raw)
+                    .modelName(model)
+                    .build();
         }
-        int start = headerMatcher.end();
-
-        int end = text.length();
-        for (String next : nextSections) {
-            Pattern nextPattern = buildHeaderPattern(next);
-            Matcher nextMatcher = nextPattern.matcher(text);
-            nextMatcher.region(start, text.length());
-            if (nextMatcher.find()) {
-                end = Math.min(end, nextMatcher.start());
-            }
-        }
-        return text.substring(start, end).strip();
-    }
-
-    private Pattern buildHeaderPattern(String sectionName) {
-        String regex = "(?im)^[#*\\d.\\s]*\\*{0,2}" + Pattern.quote(sectionName) + "\\*{0,2}:?\\s*$";
-        return Pattern.compile(regex);
-    }
-
-    private List<String> parseBullets(String text) {
-        if (text == null || text.isBlank()) return new ArrayList<>();
-        return Arrays.stream(text.split("\n"))
-                .map(String::trim)
-                .filter(line -> line.matches("^[-*•]\\s+.+") || line.matches("^\\d+[.):]\\s+.+"))
-                .map(line -> line.replaceFirst("^[-*•]\\s+|^\\d+[.):] ?", "").trim())
-                .filter(s -> !s.isBlank())
-                .collect(Collectors.toList());
     }
 
     // -------------------------------------------------------------------------

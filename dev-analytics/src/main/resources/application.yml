@@ -41,6 +41,8 @@ ai:
   ollama:
     base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
     model: ${OLLAMA_MODEL:llama3.2}
+    num-predict: ${OLLAMA_NUM_PREDICT:1024}
+    seed: ${OLLAMA_SEED:42}
 
 server:
   port: 8080

@@ -1,7 +1,6 @@
 package com.juliashtal.devanalytics.ai.client;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,16 +10,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Map;
+
 @Service
 @Slf4j
 public class OllamaLlmClient implements LlmClient {
 
     private final String baseUrl;
+    private final int numPredict;
     private final RestTemplate restTemplate;
 
+    private final int seed;
+
     public OllamaLlmClient(
-            @Value("${ai.ollama.base-url:http://localhost:11434}") String baseUrl) {
+            @Value("${ai.ollama.base-url:http://localhost:11434}") String baseUrl,
+            @Value("${ai.ollama.num-predict:1024}") int numPredict,
+            @Value("${ai.ollama.seed:42}") int seed) {
         this.baseUrl = baseUrl;
+        this.numPredict = numPredict;
+        this.seed = seed;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(300_000); // 5 minutes — LLM inference can be slow
@@ -29,8 +37,15 @@ public class OllamaLlmClient implements LlmClient {
 
     @Override
     public String complete(String model, String systemPrompt, String userPrompt) {
-        OllamaRequest req = new OllamaRequest(model, systemPrompt, userPrompt, false);
-        log.debug("Sending request to Ollama: model={}, promptLength={}", model, userPrompt.length());
+        OllamaRequest req = new OllamaRequest();
+        req.setModel(model);
+        req.setSystem(systemPrompt);
+        req.setPrompt(userPrompt);
+        req.setStream(false);
+        req.setFormat("json");
+        req.setOptions(Map.of("num_predict", numPredict, "temperature", 0.0, "seed", seed));
+
+        log.debug("Sending request to Ollama: model={}, promptLength={}, numPredict={}, seed={}", model, userPrompt.length(), numPredict, seed);
         try {
             OllamaResponse resp = restTemplate.postForObject(
                     baseUrl + "/api/generate", req, OllamaResponse.class);
@@ -50,13 +65,14 @@ public class OllamaLlmClient implements LlmClient {
     }
 
     @Data
-    @AllArgsConstructor
     @JsonInclude(JsonInclude.Include.NON_NULL)
     static class OllamaRequest {
         private String model;
         private String system;
         private String prompt;
         private boolean stream;
+        private String format;
+        private Map<String, Object> options;
     }
 
     @Data
