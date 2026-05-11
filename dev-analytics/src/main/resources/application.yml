@@ -48,5 +48,7 @@ server:
   port: 8080
 
 logging:
+  # Fine-grained levels are managed in logback-spring.xml.
+  # Override log path via LOG_PATH env var (default: logs/).
   level:
-    com.juliashtal: DEBUG
+    root: INFO

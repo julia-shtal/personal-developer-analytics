@@ -11,6 +11,7 @@ import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -45,6 +47,7 @@ public class AuthService {
         user.setGithubLogin(request.getGithubLogin());
 
         userRepository.save(user);
+        log.info("New user registered: username={}", request.getUsername());
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -57,10 +60,13 @@ public class AuthService {
                     )
             );
         } catch (BadCredentialsException ex) {
+            log.warn("Failed login attempt for identifier={}", request.getUsernameOrEmail());
             throw new BadCredentialsException("Invalid credentials");
         }
 
         CustomUserDetails userDetails = (CustomUserDetails) auth.getPrincipal();
+        log.info("User logged in: username={}", userDetails.getUsername());
+
         String accessToken = jwtService.generateAccessToken(userDetails);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getUser());
 
@@ -91,5 +97,6 @@ public class AuthService {
         Long userId = token.getUser().getId();
         refreshTokenService.revokeAllUserTokens(userId);
         userRepository.incrementTokenVersion(userId);
+        log.info("User logged out: userId={}", userId);
     }
 }

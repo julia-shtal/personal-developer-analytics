@@ -21,9 +21,10 @@ public class TokenCleanupScheduler {
     @Scheduled(cron = "0 0 2 * * ?")
     @Transactional
     public void cleanupExpiredTokens() {
+        log.info("Token cleanup scheduler started");
         Instant now = Instant.now();
         refreshTokenRepository.deleteExpiredTokens(now);
         passwordResetTokenRepository.deleteExpiredOrUsedTokens(now);
-        log.debug("Expired and used tokens cleaned up");
+        log.info("Token cleanup scheduler finished — expired and used tokens removed");
     }
 }

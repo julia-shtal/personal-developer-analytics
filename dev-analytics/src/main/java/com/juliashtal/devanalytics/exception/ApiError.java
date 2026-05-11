@@ -1,16 +1,19 @@
 package com.juliashtal.devanalytics.exception;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
 @Data
-@AllArgsConstructor
+@Builder
+@JsonInclude(JsonInclude.Include.NON_NULL)
 @Schema(name = "ApiError", description = "Error response containing status, message, and timestamp")
 public class ApiError {
+
     @Schema(description = "Date and time when the error occurred", example = "25-05-2025 14:12:34")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd-MM-yyyy' 'HH:mm:ss")
     private LocalDateTime timestamp;
@@ -21,10 +24,12 @@ public class ApiError {
     @Schema(description = "HTTP status reason", example = "Internal Server Error")
     private String error;
 
-    @Schema(description = "Detailed error message", example = "Null pointer exception")
+    @Schema(description = "User-facing error message", example = "Resource not found")
     private String message;
 
     @Schema(description = "Request path where the error occurred", example = "/api/datasources")
     private String path;
-}
 
+    @Schema(description = "Correlation ID for tracing the request", example = "550e8400-e29b-41d4-a716-446655440000")
+    private String correlationId;
+}

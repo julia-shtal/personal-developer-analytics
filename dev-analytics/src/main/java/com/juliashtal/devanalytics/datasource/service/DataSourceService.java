@@ -19,6 +19,7 @@ import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DataSourceService {
 
     private final DataSourceConfigRepository repository;
@@ -98,8 +100,7 @@ public class DataSourceService {
                 gitRepositoryService.registerLocalRepo(userId, localReq);
             } catch (Exception e) {
                 // Non-fatal: DS is saved, repo registration failed (e.g. path issue)
-                org.slf4j.LoggerFactory.getLogger(DataSourceService.class)
-                        .warn("Auto-registration of local repo failed: {}", e.getMessage());
+                log.warn("Auto-registration of local repo failed: {}", e.getMessage());
             }
         } else if ((saved.getType() == DataSourceType.GITHUB
                 || saved.getType() == DataSourceType.GITHUB_ISSUES)
@@ -107,8 +108,7 @@ public class DataSourceService {
             try {
                 gitHubRepositoryService.registerGitHubRepo(userId, saved.getId(), req.getRepoFullName());
             } catch (Exception e) {
-                org.slf4j.LoggerFactory.getLogger(DataSourceService.class)
-                        .warn("Auto-registration of GitHub repo failed: {}", e.getMessage());
+                log.warn("Auto-registration of GitHub repo failed: {}", e.getMessage());
             }
         }
 

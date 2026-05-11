@@ -7,6 +7,7 @@ import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.issue.IssueRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.kohsuke.github.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GitHubIssuesCollector {
 
     private final GitHubClientFactory clientFactory;
@@ -29,6 +31,7 @@ public class GitHubIssuesCollector {
      */
     @Transactional
     public int collectIssuesForRepo(DataSourceConfig config, String fullName) {
+        log.info("Collecting GitHub issues for repo: {}", fullName);
         GitHub github = clientFactory.createClient(config);
 
         try {
@@ -49,6 +52,7 @@ public class GitHubIssuesCollector {
             }
 
             issueRepository.saveAll(batch);
+            log.info("Collected {} issues for repo: {}", batch.size(), fullName);
             return batch.size();
         } catch (IOException e) {
             throw new GitHubException("Failed to collect GitHub issues for " + fullName, e);
