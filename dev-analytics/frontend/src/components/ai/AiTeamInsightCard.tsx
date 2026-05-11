@@ -247,7 +247,7 @@ export function AiTeamInsightCard({ range, teamId, teamName, memberSummary, onSu
             <Sparkles className="h-4 w-4 text-violet-500" />
             <h2 className="text-sm font-semibold text-gray-900">AI Team Insight</h2>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">Team-level interpretation for the selected period</p>
+          <p className="text-xs text-gray-400 mt-0.5">{teamName} · Team-level interpretation for the selected period</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-4">
           {isLoading && (

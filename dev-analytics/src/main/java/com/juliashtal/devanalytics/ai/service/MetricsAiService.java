@@ -55,6 +55,16 @@ public class MetricsAiService {
             DAILY_ISSUES_CREATED, DAILY_ISSUES_CLOSED
     );
 
+    // Metrics stored with periodFrom/periodTo (not date-series) — must use exact-period query.
+    // FOCUS_RATIO_DAYS_TASKS is excluded: it is stored as per-day markers (periodFrom/To = null)
+    // and its aggregate is computed on the read side by counting markers in the date range.
+    private static final Set<MetricType> AGGREGATE_METRICS = Set.of(
+            PR_LEAD_TIME_HOURS_MEDIAN,
+            PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
+            ISSUE_LEAD_TIME_HOURS_MEDIAN,
+            REVIEW_RESPONSE_TIME_HOURS_MEDIAN
+    );
+
     private final MetricSnapshotService metricSnapshotService;
     private final RepoService repoService;
     private final TeamService teamService;
@@ -132,12 +142,15 @@ public class MetricsAiService {
 
         for (MetricType type : CONTEXT_METRIC_TYPES) {
             List<MetricSnapshot> snapshots;
+            boolean isAggregate = AGGREGATE_METRICS.contains(type);
             if (repo != null) {
-                snapshots = metricSnapshotService
-                        .getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to);
+                snapshots = isAggregate
+                        ? metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(user, type, repo, from, to)
+                        : metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to);
             } else {
-                snapshots = metricSnapshotService
-                        .getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to);
+                snapshots = isAggregate
+                        ? metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(user, type, from, to)
+                        : metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to);
             }
 
             if (!snapshots.isEmpty()) {

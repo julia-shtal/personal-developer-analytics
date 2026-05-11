@@ -65,6 +65,7 @@ public class JiraCollector {
         int startAt = 0;
         List<JiraSearchResponse.JiraIssue> issues;
 
+        log.info("Starting Jira issue collection from: {}", baseUrl);
         do {
             URI uri = UriComponentsBuilder.fromUriString(searchUrl)
                     .queryParam("jql", jql)
@@ -93,10 +94,11 @@ public class JiraCollector {
 
             startAt += pageSize;
 
-            log.info("Fetched {} issues (page startAt={}, pageSize={})", saved, startAt - pageSize, issues.size());
+            log.debug("Fetched page: issues so far={}, startAt={}, pageSize={}", saved, startAt - pageSize, issues.size());
 
         } while (issues.size() == pageSize);
 
+        log.info("Jira collection complete: {} issues collected from {}", saved, baseUrl);
         return saved;
     }
 

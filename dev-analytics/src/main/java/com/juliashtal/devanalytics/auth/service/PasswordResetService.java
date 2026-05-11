@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.email.EmailService;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PasswordResetService {
 
     private final PasswordResetTokenRepository tokenRepository;
@@ -34,6 +36,7 @@ public class PasswordResetService {
         User user = userRepository.findByEmail(email).orElse(null);
         // Silent fail — do not reveal whether the email is registered
         if (user == null) {
+            log.debug("Password reset requested for unknown email — silently ignored");
             return;
         }
 
@@ -45,18 +48,24 @@ public class PasswordResetService {
 
         String resetLink = baseUrl + "/reset-password.html?token=" + resetToken.getToken();
         emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+        log.info("Password reset email sent for userId={}", user.getId());
     }
 
     @Transactional
     public void resetPassword(String tokenValue, String newPassword) {
         PasswordResetToken resetToken = tokenRepository.findByToken(tokenValue)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid reset token"));
+                .orElseThrow(() -> {
+                    log.warn("Password reset attempt with invalid token");
+                    return new IllegalArgumentException("Invalid reset token");
+                });
 
         if (resetToken.isUsed()) {
+            log.warn("Password reset attempt with already-used token for userId={}", resetToken.getUser().getId());
             throw new IllegalArgumentException("Reset token has already been used");
         }
 
         if (resetToken.getExpiresAt().isBefore(Instant.now())) {
+            log.warn("Password reset attempt with expired token for userId={}", resetToken.getUser().getId());
             throw new IllegalArgumentException("Reset token has expired");
         }
 
@@ -66,5 +75,6 @@ public class PasswordResetService {
 
         resetToken.setUsed(true);
         tokenRepository.save(resetToken);
+        log.info("Password successfully reset for userId={}", user.getId());
     }
 }

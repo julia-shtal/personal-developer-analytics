@@ -10,6 +10,7 @@ import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigReposit
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GitHubRepositoryService {
 
     private final GitRepositoryEntityRepository repoRepository;
@@ -45,6 +47,7 @@ public class GitHubRepositoryService {
                 reg.setRepository(repo);
                 reg.setDataSourceConfig(cfg);
                 userRepoRegRepository.save(reg);
+                log.info("User {} subscribed to existing repo: {}", userId, fullName);
             } else if (cfg != null && existingReg.get().getDataSourceConfig() == null) {
                 // Registration exists but has no DS link (e.g. created via the manual subscribe
                 // button, or the previous DS was deleted and ON DELETE SET NULL fired).
@@ -84,7 +87,7 @@ public class GitHubRepositoryService {
         reg.setRepository(repo);
         reg.setDataSourceConfig(cfg);
         userRepoRegRepository.save(reg);
-
+        log.info("Registered new GitHub repo: {} for userId={}", fullName, userId);
         return repo;
     }
 }

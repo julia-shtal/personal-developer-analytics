@@ -9,8 +9,7 @@ import com.juliashtal.devanalytics.ai.service.MetricsAiService;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -21,9 +20,8 @@ import java.time.LocalDate;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class MetricsSummaryScheduler {
-
-    private static final Logger log = LoggerFactory.getLogger(MetricsSummaryScheduler.class);
 
     private final UserRepository userRepository;
     private final MetricsAiService metricsAiService;
@@ -44,7 +42,7 @@ public class MetricsSummaryScheduler {
                 summaryRepository.save(entity);
                 log.debug("Saved weekly summary for userId={}", user.getId());
             } catch (Exception e) {
-                log.error("Failed to generate weekly summary for userId={}: {}", user.getId(), e.getMessage());
+                log.error("Failed to generate weekly summary for userId={}: {}", user.getId(), e.getMessage(), e);
             }
         });
 

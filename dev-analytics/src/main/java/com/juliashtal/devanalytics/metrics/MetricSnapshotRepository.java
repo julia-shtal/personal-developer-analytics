@@ -75,6 +75,43 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             @Param("to") LocalDate to);
 
     // -------------------------------------------------------------------------
+    // Period-overlap queries — for aggregate metrics where `date` = fromDate
+    // and may predate the UI's requested range
+    // -------------------------------------------------------------------------
+
+    @Query("""
+            SELECT s FROM MetricSnapshot s
+            WHERE s.user = :user
+              AND s.team IS NULL
+              AND s.metricType = :metricType
+              AND s.repository = :repository
+              AND s.periodFrom IS NOT NULL
+              AND s.periodFrom = :from
+              AND s.periodTo = :to
+            """)
+    List<MetricSnapshot> findPersonalAggregateByRepositoryAndPeriod(
+            @Param("user") User user,
+            @Param("metricType") MetricType metricType,
+            @Param("repository") GitRepositoryEntity repository,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
+
+    @Query("""
+            SELECT s FROM MetricSnapshot s
+            WHERE s.user = :user
+              AND s.team IS NULL
+              AND s.metricType = :metricType
+              AND s.periodFrom IS NOT NULL
+              AND s.periodFrom = :from
+              AND s.periodTo = :to
+            """)
+    List<MetricSnapshot> findPersonalAggregateByPeriod(
+            @Param("user") User user,
+            @Param("metricType") MetricType metricType,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
+
+    // -------------------------------------------------------------------------
     // Upsert guard — includes team_id so personal and team snapshots never clash
     // -------------------------------------------------------------------------
 
