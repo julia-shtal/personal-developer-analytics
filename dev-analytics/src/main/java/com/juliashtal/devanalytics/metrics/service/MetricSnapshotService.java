@@ -25,12 +25,27 @@ public class MetricSnapshotService {
         return repository.findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, metricType, from, to);
     }
 
+    public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(User user,
+                                                                                    MetricType metricType,
+                                                                                    LocalDate from,
+                                                                                    LocalDate to) {
+        return repository.findPersonalAggregateByPeriod(user, metricType, from, to);
+    }
+
     public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(User user,
                                                                                           MetricType metricType,
                                                                                           GitRepositoryEntity repo,
                                                                                           LocalDate from,
                                                                                           LocalDate to) {
         return repository.findByUserAndTeamIsNullAndMetricTypeAndRepositoryAndDateBetween(user, metricType, repo, from, to);
+    }
+
+    public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(User user,
+                                                                                                 MetricType metricType,
+                                                                                                 GitRepositoryEntity repo,
+                                                                                                 LocalDate from,
+                                                                                                 LocalDate to) {
+        return repository.findPersonalAggregateByRepositoryAndPeriod(user, metricType, repo, from, to);
     }
 
     public List<MetricSnapshot> getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(

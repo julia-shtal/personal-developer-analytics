@@ -13,6 +13,7 @@ import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigReposit
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GitRepositoryService {
 
     private final GitRepositoryEntityRepository repoRepository;
@@ -61,6 +63,7 @@ public class GitRepositoryService {
         reg.setRepository(saved);
         userRepoRegRepository.save(reg);
 
+        log.info("Registered local repo: name='{}', path={}, userId={}", req.getName(), normalizedPath, userId);
         return saved;
     }
 

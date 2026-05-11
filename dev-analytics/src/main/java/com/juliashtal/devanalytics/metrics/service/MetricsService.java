@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.metrics.service;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
@@ -397,12 +398,15 @@ public class MetricsService {
         long total = rows.size();
         long outOfHours = 0;
         long refactorCount = 0;
+        long enrichedTotal = 0; // commits with real diff stats (statsStatus = COMPLETE)
 
         for (Object[] row : rows) {
             Instant authorDate = (Instant) row[0];
             int additions = ((Number) row[1]).intValue();
             int deletions = ((Number) row[2]).intValue();
+            StatsStatus statsStatus = (StatsStatus) row[3];
 
+            // AFTER_HOURS uses authorDate only — always reliable regardless of enrichment status
             ZonedDateTime zdt = authorDate.atZone(zone);
             DayOfWeek dow = zdt.getDayOfWeek();
             int hour = zdt.getHour();
@@ -410,13 +414,24 @@ public class MetricsService {
             boolean isWorkHours = hour >= 9 && hour < 18;
             if (isWeekend || !isWorkHours) outOfHours++;
 
-            if (deletions > additions) refactorCount++;
+            // REFACTOR_RATIO only counts commits where diff stats have been enriched.
+            // PENDING/FAILED GitHub commits have additions=0 and deletions=0 as placeholders,
+            // which would make the ratio artificially zero until enrichment completes.
+            if (statsStatus == StatsStatus.COMPLETE) {
+                enrichedTotal++;
+                if (deletions > additions) refactorCount++;
+            }
         }
 
         saveMetric(user, team, fromDate, AFTER_HOURS_COMMIT_RATIO,
                 (double) outOfHours / total, null, fromDate, toDate);
-        saveMetric(user, team, fromDate, REFACTOR_RATIO,
-                (double) refactorCount / total, null, fromDate, toDate);
+
+        // Only persist REFACTOR_RATIO once there is at least one enriched commit.
+        // This avoids saving a misleading 0.0 when all commits are still PENDING.
+        if (enrichedTotal > 0) {
+            saveMetric(user, team, fromDate, REFACTOR_RATIO,
+                    (double) refactorCount / enrichedTotal, null, fromDate, toDate);
+        }
     }
 
     /**

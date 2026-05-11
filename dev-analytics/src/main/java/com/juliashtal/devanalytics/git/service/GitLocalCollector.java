@@ -8,6 +8,7 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
@@ -41,6 +42,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GitLocalCollector {
 
     private static final int BATCH_SIZE = 500;
@@ -61,6 +63,8 @@ public class GitLocalCollector {
         // JOIN FETCH loads dataSourceConfig eagerly so it is available after the session closes.
         GitRepositoryEntity dbRepo = repoRepository.findByIdWithDataSourceConfig(repoId)
                 .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
+
+        log.info("Collecting commits from local repo: id={}, path={}", repoId, dbRepo.getLocalPath());
 
         File repoDir = new File(dbRepo.getLocalPath());
         if (!repoDir.exists()) {
@@ -103,6 +107,7 @@ public class GitLocalCollector {
             }
 
             if (pending.isEmpty()) {
+                log.debug("No new commits for local repo id={}", repoId);
                 dbRepo.setLastScanAt(LocalDateTime.now());
                 repoRepository.save(dbRepo);
                 return 0;
@@ -162,7 +167,7 @@ public class GitLocalCollector {
             cfg.setLastSuccessSync(LocalDateTime.now());
 
             repoRepository.save(dbRepo);
-
+            log.info("Collected {} new commits from local repo id={}", pending.size(), repoId);
             return pending.size();
 
         } catch (IOException | GitAPIException e) {

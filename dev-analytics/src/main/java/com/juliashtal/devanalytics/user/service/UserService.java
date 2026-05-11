@@ -1,21 +1,22 @@
 package com.juliashtal.devanalytics.user.service;
 
+import com.juliashtal.devanalytics.exception.BadRequestException;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.request.UpdateProfileRequest;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
     private final UserRepository repository;
     private final PasswordEncoder passwordEncoder;
@@ -43,20 +44,24 @@ public class UserService {
         User user = repository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found"));
         if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
+            log.warn("Failed password change attempt for userId={}: incorrect current password", userId);
+            throw new BadRequestException("Current password is incorrect");
         }
         if (newPassword == null || newPassword.length() < 8) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password must be at least 8 characters");
+            throw new BadRequestException("New password must be at least 8 characters");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         repository.save(user);
+        log.info("Password changed for userId={}", userId);
     }
 
     public User updateRole(Long userId, Role role) {
         User user = repository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found"));
         user.setRole(role);
-        return repository.save(user);
+        User saved = repository.save(user);
+        log.info("Role updated for userId={} to {}", userId, role);
+        return saved;
     }
 
     public List<User> findAll() {
@@ -68,6 +73,6 @@ public class UserService {
             throw new NoSuchElementException("User not found");
         }
         repository.deleteById(userId);
+        log.info("User deleted: id={}", userId);
     }
 }
-

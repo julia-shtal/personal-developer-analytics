@@ -28,5 +28,6 @@ public class MetricsScheduler {
                 log.warn("Nightly metrics failed for user {}: {}", user.getId(), e.getMessage());
             }
         });
+        log.info("Nightly metrics scheduler: finished for {}", yesterday);
     }
 }

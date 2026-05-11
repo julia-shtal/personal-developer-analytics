@@ -39,6 +39,7 @@ public class DataSourceCollectService {
      */
     public String collectForDataSource(Long userId, Long dataSourceId, SyncJobTracker.JobState jobState) {
         DataSourceConfig cfg = dataSourceService.getForUser(userId, dataSourceId);
+        log.info("Collection started: dataSourceId={}, type={}, userId={}", dataSourceId, cfg.getType(), userId);
 
         int total = 0;
         StringBuilder summary = new StringBuilder();
@@ -109,6 +110,8 @@ public class DataSourceCollectService {
         cfg.setLastSuccessSync(LocalDateTime.now());
         configRepository.save(cfg);
 
-        return summary.isEmpty() ? "Nothing to collect (no repos registered)" : summary.toString().trim();
+        String result = summary.isEmpty() ? "Nothing to collect (no repos registered)" : summary.toString().trim();
+        log.info("Collection finished: dataSourceId={}, total={}, summary={}", dataSourceId, total, result);
+        return result;
     }
 }

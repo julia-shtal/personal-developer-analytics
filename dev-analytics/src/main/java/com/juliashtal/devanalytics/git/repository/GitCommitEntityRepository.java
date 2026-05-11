@@ -120,11 +120,13 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
             @Param("prNumber") int prNumber);
 
     /**
-     * Returns (authorDate, additions, deletions) for all commits by one author in a window.
+     * Returns (authorDate, additions, deletions, statsStatus) for all commits by one author in a window.
      * Used by after-hours ratio and refactor ratio calculations.
+     * statsStatus is included so callers can exclude PENDING/FAILED commits from metrics
+     * that depend on real diff stats (additions/deletions).
      */
     @Query("""
-    select c.authorDate, c.additions, c.deletions
+    select c.authorDate, c.additions, c.deletions, c.statsStatus
     from GitCommitEntity c
     where c.repository.id IN :repoIds
       and c.authorEmail = :authorEmail
