@@ -212,7 +212,7 @@ public class GitHubCommitIngestService {
             long waitSeconds = response.headers().firstValue("Retry-After")
                     .map(v -> { try { return Long.parseLong(v); } catch (NumberFormatException e) { return 60L; } })
                     .orElse(60L);
-            log.info("GitHub rate limit hit ({}) during ingest, waiting {}s for {}",
+            log.warn("GitHub rate limit hit ({}) during ingest, waiting {}s for {}",
                     response.statusCode(), waitSeconds, context);
             Thread.sleep(waitSeconds * 1_000L);
             response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());

@@ -199,7 +199,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(DEEP_WORK_STREAK_DAYS, from, to, null);
     }
 
-    @GetMapping("/merge-frequency")
+    @GetMapping("/merge-to-main-frequency")
     public MetricAggregateDto getMergeFrequency(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
@@ -380,11 +380,11 @@ public class MetricsController {
 
         if (repoId == null) {
             list = metricSnapshotService
-                    .getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to);
+                    .getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(user, type, from, to);
         } else {
             GitRepositoryEntity repo = repoService.getById(repoId);
             list = metricSnapshotService
-                    .getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to);
+                    .getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(user, type, repo, from, to);
         }
 
         if (list.isEmpty()) return new MetricAggregateDto(type, 0.0, null, null);
