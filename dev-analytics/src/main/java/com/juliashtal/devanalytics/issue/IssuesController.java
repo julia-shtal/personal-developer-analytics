@@ -7,10 +7,14 @@ import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
 import com.juliashtal.devanalytics.issue.model.IssueDto;
 import com.juliashtal.devanalytics.issue.service.IssueService;
 import com.juliashtal.devanalytics.jira.JiraCollector;
+import com.juliashtal.devanalytics.jira.JiraProjectService;
+import com.juliashtal.devanalytics.jira.JiraProjectService.JiraProjectDto;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import java.util.List;
+import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -22,9 +26,25 @@ import org.springframework.web.bind.annotation.*;
 public class IssuesController {
 
     private final IssueService issueService;
+    private final IssueRepository issueRepository;
     private final JiraCollector jiraCollector;
+    private final JiraProjectService jiraProjectService;
     private final GitHubIssuesCollector gitHubIssuesCollector;
     private final DataSourceService dataSourceService;
+
+    @GetMapping("/count")
+    public Map<String, Long> getIssueCount(@RequestParam Long repoId) {
+        long open   = issueRepository.countByRepository_IdAndState(repoId, "open");
+        long closed = issueRepository.countByRepository_IdAndState(repoId, "closed");
+        return Map.of("open", open, "closed", closed);
+    }
+
+    @GetMapping("/jira-projects")
+    public List<JiraProjectDto> listJiraProjects(@RequestParam Long dataSourceId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        DataSourceConfig cfg = getUserDataSource(userId, dataSourceId, DataSourceType.JIRA);
+        return jiraProjectService.listProjects(cfg);
+    }
 
     @PostMapping("/jira/{dataSourceId}/collect")
     public ResponseEntity<String> collectJira(@PathVariable Long dataSourceId) {

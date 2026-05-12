@@ -62,6 +62,13 @@ export interface CreateDataSourceRequest {
   apiToken?: string;
   teamId?: number;
   repoFullName?: string;
+  projectKey?: string; // JIRA only — scopes collection to a single project
+}
+
+export interface JiraProjectDto {
+  key: string;
+  name: string;
+  id: string;
 }
 
 export interface RepoDto {
@@ -72,6 +79,13 @@ export interface RepoDto {
   dataSourceId: number;
   subscribed: boolean;
   repoUrl?: string;
+  collectIssues: boolean;
+  issuesLastSyncedAt?: string;
+}
+
+export interface IssueCountDto {
+  open: number;
+  closed: number;
 }
 
 // ─── Metrics ──────────────────────────────────────────────────────────────────

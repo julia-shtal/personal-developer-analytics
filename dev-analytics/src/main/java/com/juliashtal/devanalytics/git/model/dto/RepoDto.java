@@ -7,5 +7,7 @@ public record RepoDto(
         String localPath,
         Long dataSourceId,
         boolean subscribed,
-        String repoUrl
+        String repoUrl,
+        boolean collectIssues,
+        java.time.Instant issuesLastSyncedAt
 ) {}

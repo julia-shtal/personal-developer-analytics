@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Trash2, Database, GitBranch, Layers, AlertCircle,
   ChevronDown, ChevronRight, BookOpen, ExternalLink, UserCheck, UserMinus, Play,
-  Eye, EyeOff,
+  Eye, EyeOff, MessageSquare,
 } from 'lucide-react';
 import { datasourcesApi, type SyncStatus } from '@/api/datasources';
+import { issuesApi } from '@/api/issues';
 import { reposApi } from '@/api/repos';
 import { teamsApi } from '@/api/teams';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
@@ -16,7 +17,7 @@ import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
-import type { DataSourceType, CreateDataSourceRequest, RepoDto, Team } from '@/types';
+import type { DataSourceType, CreateDataSourceRequest, RepoDto, Team, JiraProjectDto } from '@/types';
 
 // ─── Type helpers ─────────────────────────────────────────────────────────────
 
@@ -41,20 +42,21 @@ function TypeIcon({ type }: { type: DataSourceType }) {
 }
 
 const TYPE_OPTIONS = [
-  { value: 'GIT_LOCAL',       label: 'Local Git repository' },
-  { value: 'GITHUB',          label: 'GitHub' },
-  { value: 'JIRA',            label: 'Jira' },
-  { value: 'GITHUB_ISSUES',   label: 'GitHub Issues' },
+  { value: 'GIT_LOCAL', label: 'Local Git repository' },
+  { value: 'GITHUB',    label: 'GitHub' },
+  { value: 'JIRA',      label: 'Jira' },
+  // GITHUB_ISSUES is kept as a backend type for DB compatibility but is no longer
+  // a user-facing data source — issues are managed per-repository inside the GitHub source.
 ];
 
 // Types that need a base URL (the remote API address)
-const NEEDS_BASEURL: DataSourceType[] = ['GITHUB', 'JIRA', 'GITHUB_ISSUES'];
+const NEEDS_BASEURL: DataSourceType[] = ['GITHUB', 'JIRA'];
 // Types that need a local filesystem path
 const NEEDS_PATH: DataSourceType[] = ['GIT_LOCAL'];
 // Types that need an API token
-const NEEDS_TOKEN: DataSourceType[] = ['GITHUB', 'JIRA', 'GITHUB_ISSUES'];
+const NEEDS_TOKEN: DataSourceType[] = ['GITHUB', 'JIRA'];
 // Types that support repoFullName auto-registration
-const NEEDS_REPO_FULLNAME: DataSourceType[] = ['GITHUB', 'GITHUB_ISSUES'];
+const NEEDS_REPO_FULLNAME: DataSourceType[] = ['GITHUB'];
 
 // ─── Sync progress display ────────────────────────────────────────────────────
 
@@ -148,8 +150,109 @@ function SyncStatusLine({ dateStr }: { dateStr?: string }) {
 
 // ─── Repos sub-panel ──────────────────────────────────────────────────────────
 
-function ReposPanel({ dataSourceId }: { dataSourceId: number }) {
+function RepoIssuesSection({ repo, isGitHub }: { repo: RepoDto; isGitHub: boolean }) {
   const qc = useQueryClient();
+  const [enabled, setEnabled] = useState(repo.collectIssues);
+
+  // Keep local state in sync when the server value changes (e.g. after refetch).
+  useEffect(() => {
+    setEnabled(repo.collectIssues);
+  }, [repo.collectIssues]);
+
+  const { data: counts } = useQuery({
+    queryKey: ['issue-count', repo.id],
+    queryFn: () => issuesApi.getCount(repo.id).then((r) => r.data),
+    enabled: isGitHub && enabled,
+    // Poll while issues are enabled but haven't been synced yet, so the count
+    // updates automatically once the async collection finishes.
+    refetchInterval: enabled && !repo.issuesLastSyncedAt ? 5_000 : false,
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (next: boolean) => reposApi.setCollectIssues(repo.id, next),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['repos'] });
+      qc.invalidateQueries({ queryKey: ['issue-count', repo.id] });
+    },
+    onError: () => setEnabled(repo.collectIssues), // roll back on failure
+  });
+
+  if (!isGitHub) return null;
+
+  // `owner/repo` → `https://github.com/owner/repo/issues`
+  const issuesUrl = repo.repoUrl ? `${repo.repoUrl}/issues` : undefined;
+  // True when tracking just started and no sync has completed yet.
+  const isInitialSync = enabled && !repo.issuesLastSyncedAt;
+
+  function handleToggle() {
+    const next = !enabled;
+    setEnabled(next);
+    toggleMutation.mutate(next);
+  }
+
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between gap-3">
+      {/* Left: icon + label + count / status */}
+      <div className="flex items-center gap-1.5 text-xs min-w-0">
+        <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+        <span className="text-gray-500">Issues</span>
+
+        {enabled && (
+          isInitialSync && !counts ? (
+            <span className="text-violet-400 animate-pulse">— syncing…</span>
+          ) : counts ? (
+            <span className="text-gray-400">
+              {'— '}
+              <span className="text-emerald-600 font-medium">{counts.open.toLocaleString()}</span>
+              <span> open</span>
+              <span className="mx-0.5 text-gray-300">/</span>
+              <span>{counts.closed.toLocaleString()} closed</span>
+            </span>
+          ) : null
+        )}
+      </div>
+
+      {/* Right: issues link + toggle switch */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <button
+          role="switch"
+          aria-checked={enabled}
+          aria-label={enabled ? 'Disable issue collection' : 'Enable issue collection'}
+          onClick={handleToggle}
+          disabled={toggleMutation.isPending}
+          className={clsx(
+            'relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent',
+            'transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1',
+            enabled ? 'bg-violet-500' : 'bg-gray-200',
+            toggleMutation.isPending && 'opacity-50 cursor-not-allowed'
+          )}
+        >
+          <span
+            className={clsx(
+              'inline-block h-3 w-3 transform rounded-full bg-white shadow transition duration-200',
+              enabled ? 'translate-x-3' : 'translate-x-0'
+            )}
+          />
+        </button>
+        {issuesUrl && (
+          <a
+            href={issuesUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-1 rounded text-gray-400 hover:text-violet-600 transition-colors"
+            title="Open issues in browser"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; sourceType: DataSourceType }) {
+  const qc = useQueryClient();
+  const isGitHub = sourceType === 'GITHUB';
 
   const { data: repos, isLoading } = useQuery({
     queryKey: ['repos', dataSourceId],
@@ -178,52 +281,82 @@ function ReposPanel({ dataSourceId }: { dataSourceId: number }) {
   return (
     <ul className="space-y-1.5">
       {repos.map((repo: RepoDto) => (
-        <li key={repo.id} className="flex items-center justify-between gap-2 rounded-md bg-gray-50 px-3 py-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <BookOpen className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-            <span className="text-xs font-medium text-gray-800 truncate">
-              {repo.repoFullName ?? repo.name}
-            </span>
-            {repo.subscribed && (
-              <Badge color="violet" className="text-[10px] px-1.5 py-0">subscribed</Badge>
-            )}
+        <li key={repo.id} className="rounded-md bg-gray-50 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <BookOpen className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+              <span className="text-xs font-medium text-gray-800 truncate">
+                {repo.repoFullName ?? repo.name}
+              </span>
+              {repo.subscribed && (
+                <Badge color="violet" className="text-[10px] px-1.5 py-0">subscribed</Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {repo.subscribed ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => unsubscribeMutation.mutate(repo.id)}
+                  loading={unsubscribeMutation.isPending}
+                  className="flex-shrink-0 text-violet-500 hover:text-red-600 text-xs"
+                  title="Unsubscribe"
+                >
+                  <UserMinus className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => subscribeMutation.mutate(repo.id)}
+                  loading={subscribeMutation.isPending}
+                  className="flex-shrink-0 text-gray-400 hover:text-violet-600 text-xs"
+                  title="Subscribe"
+                >
+                  <UserCheck className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              {repo.repoUrl && (
+                <a
+                  href={repo.repoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 rounded text-gray-400 hover:text-violet-600 transition-colors"
+                  title="Open in browser"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {repo.repoUrl && (
-              <a
-                href={repo.repoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-1 rounded text-gray-400 hover:text-violet-600 transition-colors"
-                title="Open in browser"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            )}
-            {repo.subscribed ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => unsubscribeMutation.mutate(repo.id)}
-                loading={unsubscribeMutation.isPending}
-                className="flex-shrink-0 text-violet-500 hover:text-red-600 text-xs"
-                title="Unsubscribe"
-              >
-                <UserMinus className="h-3.5 w-3.5" />
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => subscribeMutation.mutate(repo.id)}
-                loading={subscribeMutation.isPending}
-                className="flex-shrink-0 text-gray-400 hover:text-violet-600 text-xs"
-                title="Subscribe"
-              >
-                <UserCheck className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
+          <RepoIssuesSection repo={repo} isGitHub={isGitHub} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ─── Jira projects sub-panel ──────────────────────────────────────────────────
+
+function JiraProjectsPanel({ dataSourceId }: { dataSourceId: number }) {
+  const { data: projects, isLoading, isError } = useQuery({
+    queryKey: ['jira-projects', dataSourceId],
+    queryFn: () => issuesApi.listJiraProjects(dataSourceId).then((r) => r.data),
+    retry: false,
+  });
+
+  if (isLoading) return <p className="text-xs text-gray-400 py-2">Loading projects…</p>;
+  if (isError) return <p className="text-xs text-red-400 py-2">Could not load Jira projects.</p>;
+  if (!projects?.length) return <p className="text-xs text-gray-400 py-2">No projects found in this Jira account.</p>;
+
+  return (
+    <ul className="space-y-1.5">
+      {projects.map((p: JiraProjectDto) => (
+        <li key={p.id} className="flex items-center gap-3 rounded-md bg-gray-50 px-3 py-2">
+          <span className="text-xs font-mono font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+            {p.key}
+          </span>
+          <span className="text-xs text-gray-700 truncate">{p.name}</span>
         </li>
       ))}
     </ul>
@@ -240,6 +373,7 @@ type FormState = {
   apiToken: string;
   teamId: string;
   repoFullName: string;
+  projectKey: string;
 };
 
 export function DataSourcesPage() {
@@ -254,6 +388,7 @@ export function DataSourcesPage() {
     apiToken: '',
     teamId: '',
     repoFullName: '',
+    projectKey: '',
   });
   const [formError, setFormError] = useState('');
   const [showToken, setShowToken] = useState(false);
@@ -278,7 +413,7 @@ export function DataSourcesPage() {
       qc.invalidateQueries({ queryKey: ['datasources'] });
       setShowForm(false);
       setShowToken(false);
-      setForm({ type: 'GITHUB', name: '', baseUrl: 'https://api.github.com', path: '', apiToken: '', teamId: '', repoFullName: '' });
+      setForm({ type: 'GITHUB', name: '', baseUrl: 'https://api.github.com', path: '', apiToken: '', teamId: '', repoFullName: '', projectKey: '' });
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -363,6 +498,7 @@ export function DataSourcesPage() {
     if (NEEDS_TOKEN.includes(form.type) && form.apiToken) req.apiToken = form.apiToken;
     if (form.teamId) req.teamId = Number(form.teamId);
     if (NEEDS_REPO_FULLNAME.includes(form.type) && form.repoFullName) req.repoFullName = form.repoFullName;
+    if (form.type === 'JIRA' && form.projectKey) req.projectKey = form.projectKey;
     createMutation.mutate(req);
   }
 
@@ -406,7 +542,7 @@ export function DataSourcesPage() {
                     const t = e.target.value as DataSourceType;
                     const defaultBaseUrl = (t === 'GITHUB' || t === 'GITHUB_ISSUES') ? 'https://api.github.com' : '';
                     setShowToken(false);
-                    setForm({ ...form, type: t, baseUrl: defaultBaseUrl, path: '', repoFullName: '' });
+                    setForm({ ...form, type: t, baseUrl: defaultBaseUrl, path: '', repoFullName: '', projectKey: '' });
                   }}
                 />
                 <Input
@@ -473,6 +609,20 @@ export function DataSourcesPage() {
                   onChange={(e) => setForm({ ...form, repoFullName: e.target.value })}
                   placeholder="e.g. acme/backend-api"
                 />
+              )}
+
+              {form.type === 'JIRA' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">
+                    Jira project key{' '}
+                    <span className="text-xs text-gray-400 font-normal">(optional — leave blank to collect all projects)</span>
+                  </label>
+                  <Input
+                    value={form.projectKey}
+                    onChange={(e) => setForm({ ...form, projectKey: e.target.value.toUpperCase() })}
+                    placeholder="e.g. PDA, PROJ"
+                  />
+                </div>
               )}
 
               {(isManager || isAdmin) && availableTeams && availableTeams.length > 0 && (
@@ -602,7 +752,17 @@ export function DataSourcesPage() {
                   <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
                     Repositories
                   </p>
-                  <ReposPanel dataSourceId={src.id} />
+                  <ReposPanel dataSourceId={src.id} sourceType={src.type} />
+                </div>
+              )}
+
+              {/* Jira projects panel */}
+              {expanded && src.type === 'JIRA' && (
+                <div className="border-t border-gray-100 px-5 py-3">
+                  <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
+                    Jira Projects
+                  </p>
+                  <JiraProjectsPanel dataSourceId={src.id} />
                 </div>
               )}
             </Card>
