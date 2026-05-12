@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -27,10 +28,24 @@ public class GitHubIssuesCollector {
     private final GitRepositoryEntityRepository gitRepositoryEntityRepository;
 
     /**
+     * Collects issues for a repository entity — updates {@code issuesLastSyncedAt} on success.
+     */
+    @Transactional
+    public int collectIssuesForRepo(DataSourceConfig config, GitRepositoryEntity repo) {
+        int count = collectIssuesForRepo(config, repo.getRepoFullName());
+        repo.setIssuesLastSyncedAt(Instant.now());
+        gitRepositoryEntityRepository.save(repo);
+        return count;
+    }
+
+    /**
      * Collects issues for a specific repository (name = "owner/repo").
      */
     @Transactional
     public int collectIssuesForRepo(DataSourceConfig config, String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            throw new IllegalArgumentException("repoFullName is required for GitHub Issues collection");
+        }
         log.info("Collecting GitHub issues for repo: {}", fullName);
         GitHub github = clientFactory.createClient(config);
 
@@ -62,7 +77,7 @@ public class GitHubIssuesCollector {
     private IssueEntity buildIssueEntity(DataSourceConfig config,
                                          GitRepositoryEntity repo,
                                          GHIssue gi) throws IOException {
-        String externalId = repo.getName() + "#" + gi.getNumber();
+        String externalId = repo.getRepoFullName() + "#" + gi.getNumber();
 
         IssueEntity issue = issueRepository
                 .findByDataSourceAndExternalId(config, externalId)

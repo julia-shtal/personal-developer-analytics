@@ -2,12 +2,14 @@ package com.juliashtal.devanalytics.git.controller;
 
 import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.git.service.RepoService;
+import com.juliashtal.devanalytics.github.service.AsyncIssuesCollectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import java.util.Map;
 
 /**
  * Unified repo subscription API.
@@ -23,6 +25,7 @@ import java.util.*;
 public class RepoController {
 
     private final RepoService repoService;
+    private final AsyncIssuesCollectService asyncIssuesCollectService;
 
     @GetMapping
     public List<RepoDto> listAccessible(
@@ -40,5 +43,15 @@ public class RepoController {
     public ResponseEntity<Void> unsubscribe(@PathVariable Long repoId) {
         repoService.unsubscribe(repoId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{repoId}/collect-issues")
+    public RepoDto setCollectIssues(
+            @PathVariable Long repoId,
+            @RequestBody Map<String, Boolean> body
+    ) {
+        boolean enabled = Boolean.TRUE.equals(body.get("enabled"));
+        return repoService.setCollectIssues(repoId, enabled,
+                asyncIssuesCollectService::collectIssuesForRepo);
     }
 }

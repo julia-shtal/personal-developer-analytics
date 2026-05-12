@@ -10,11 +10,14 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     Optional<IssueEntity> findByDataSourceAndExternalId(DataSourceConfig source, String externalId);
     Page<IssueEntity> findByDataSource(DataSourceConfig source, Pageable pageable);
+
+    long countByRepository_IdAndState(Long repositoryId, String state);
 
     // -------------------------------------------------------------------------
     // Team-repo variants: filter by explicit repo IDs, no author filter.

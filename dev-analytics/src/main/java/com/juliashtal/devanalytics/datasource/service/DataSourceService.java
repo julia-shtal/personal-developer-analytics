@@ -64,7 +64,7 @@ public class DataSourceService {
             if (existingRepo.isPresent()) {
                 Long existingDsId = existingRepo.get().getDataSourceConfig().getId();
                 gitHubRepositoryService.registerGitHubRepo(userId, existingDsId, req.getRepoFullName());
-                return null; // No new DS created; controller returns 200 instead of 201
+                return existingRepo.get().getDataSourceConfig(); // No new DS created.
             }
         }
 
@@ -76,6 +76,9 @@ public class DataSourceService {
         cfg.setPath(req.getPath());
         if (req.getApiToken() != null && !req.getApiToken().isBlank()) {
             cfg.setApiTokenEncrypted(tokenEncryptor.encrypt(req.getApiToken()));
+        }
+        if (req.getProjectKey() != null && !req.getProjectKey().isBlank()) {
+            cfg.setProjectKey(req.getProjectKey().trim());
         }
         cfg.setEnabled(true);
 
@@ -214,6 +217,9 @@ public class DataSourceService {
         }
         if (req.getEnabled() != null) {
             cfg.setEnabled(req.getEnabled());
+        }
+        if (req.getProjectKey() != null) {
+            cfg.setProjectKey(req.getProjectKey().isBlank() ? null : req.getProjectKey().trim());
         }
 
         return repository.save(cfg);

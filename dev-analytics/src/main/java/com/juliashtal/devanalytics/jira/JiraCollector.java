@@ -35,9 +35,6 @@ public class JiraCollector {
     private final SimpleTokenEncryptor tokenEncryptor;
     ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${jira.default-jql:assignee = currentUser() ORDER BY created DESC}")
-    private String defaultJql;
-
     @Value("${jira.page-size:100}")
     private int pageSize;
 
@@ -46,10 +43,6 @@ public class JiraCollector {
 
     @Transactional
     public int collectIssues(DataSourceConfig config) {
-        String jql = defaultJql;
-        if (jql == null || jql.trim().isEmpty()) {
-            throw new IllegalArgumentException("JQL required.");
-        }
 
         String baseUrl = config.getBaseUrl();
         String searchUrl = baseUrl + "/rest/api/3/search/jql";
@@ -61,12 +54,17 @@ public class JiraCollector {
         String[] parts = decryptedToken.split(":", 2);
         headers.setBasicAuth(parts[0], parts[1]);
 
+        String accountId = fetchCurrentUserAccountId(baseUrl, headers);
+        log.info("Jira authenticated as accountId={}", accountId);
+
+        String jql = buildJql(config.getProjectKey(), accountId);
+
         int saved = 0;
         int startAt = 0;
-        List<JiraSearchResponse.JiraIssue> issues;
+        int total = Integer.MAX_VALUE; // updated after first response
 
-        log.info("Starting Jira issue collection from: {}", baseUrl);
-        do {
+        log.info("Starting Jira issue collection from: {}, jql: {}", baseUrl, jql);
+        while (startAt < total) {
             URI uri = UriComponentsBuilder.fromUriString(searchUrl)
                     .queryParam("jql", jql)
                     .queryParam("startAt", startAt)
@@ -82,24 +80,61 @@ public class JiraCollector {
             }
 
             JiraSearchResponse resp = parseResponse(response.getBody());
-            issues = resp.getIssues();
+            total = resp.getTotal();
 
-            if (issues.isEmpty())
-                break;
+            List<JiraSearchResponse.JiraIssue> issues = resp.getIssues();
+            if (issues == null || issues.isEmpty()) break;
 
             for (JiraSearchResponse.JiraIssue ji : issues) {
                 upsertJiraIssue(config, ji);
                 saved++;
             }
 
-            startAt += pageSize;
-
-            log.debug("Fetched page: issues so far={}, startAt={}, pageSize={}", saved, startAt - pageSize, issues.size());
-
-        } while (issues.size() == pageSize);
+            startAt += issues.size();
+            log.debug("Jira page fetched: saved={}, startAt={}, total={}", saved, startAt, total);
+        }
 
         log.info("Jira collection complete: {} issues collected from {}", saved, baseUrl);
         return saved;
+    }
+
+    private String fetchCurrentUserAccountId(String baseUrl, HttpHeaders headers) {
+        URI uri = URI.create(baseUrl + "/rest/api/3/myself");
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    uri, HttpMethod.GET, entity, String.class);
+
+            if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+                throw new JiraException("Failed to fetch Jira current user, status: "
+                        + response.getStatusCode());
+            }
+
+            JsonNode root = objectMapper.readTree(response.getBody());
+            JsonNode accountIdNode = root.get("accountId");
+
+            if (accountIdNode == null || accountIdNode.isNull()) {
+                throw new JiraException("Jira /myself response missing accountId field. " +
+                        "Response: " + response.getBody());
+            }
+
+            return accountIdNode.asText();
+
+        } catch (JiraException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new JiraException("Error fetching Jira current user from: " + uri, e);
+        }
+    }
+
+    private String buildJql(String projectKey, String accountId) {
+        String assigneeFilter = "assignee = " + accountId + " ";
+        if (projectKey != null && !projectKey.isBlank()) {
+            return "project = " + projectKey + " AND "
+                    + assigneeFilter + " ORDER BY created DESC";
+        }
+        return assigneeFilter + " ORDER BY created DESC";
     }
 
     private JiraSearchResponse parseResponse(String body) {

@@ -91,6 +91,27 @@ public class RepoService {
                 .ifPresent(userRepoRegRepository::delete);
     }
 
+    @org.springframework.transaction.annotation.Transactional
+    public RepoDto setCollectIssues(Long repoId, boolean enabled,
+                                    java.util.function.Consumer<Long> asyncTrigger) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        GitRepositoryEntity repo = gitRepoRepository.findById(repoId)
+                .orElseThrow(() -> new NoSuchElementException("Repo not found: " + repoId));
+
+        repo.setCollectIssues(enabled);
+        gitRepoRepository.save(repo);
+
+        Set<Long> subscribedIds = new HashSet<>(userRepoRegRepository.findRepoIdsByUserId(userId));
+        RepoDto dto = getDtos(List.of(repo), subscribedIds).get(0);
+
+        // Fire async trigger AFTER the transaction flushes so the new flag is visible to the worker.
+        if (enabled) {
+            asyncTrigger.accept(repoId);
+        }
+
+        return dto;
+    }
+
     /**
      * Converts an API base URL (e.g. https://api.github.com) to its web equivalent
      * (https://github.com) so repo links open the right page in a browser.
@@ -122,7 +143,9 @@ public class RepoService {
                             r.getLocalPath(),
                             dsCfg != null ? dsCfg.getId() : null,
                             subscribedIds.contains(r.getId()),
-                            repoUrl
+                            repoUrl,
+                            r.isCollectIssues(),
+                            r.getIssuesLastSyncedAt()
                     );
                 })
                 .toList();

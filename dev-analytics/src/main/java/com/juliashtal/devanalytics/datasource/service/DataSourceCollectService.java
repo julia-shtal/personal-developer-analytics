@@ -47,7 +47,12 @@ public class DataSourceCollectService {
         // Inform the tracker how many phases this job has so the UI can show "phase N of M".
         if (jobState != null) {
             jobState.totalPhases = switch (cfg.getType()) {
-                case GITHUB -> 2;    // commits → pull requests
+                case GITHUB -> {
+                    var repos = gitRepoRepository.findAllByDataSourceConfig(cfg);
+                    // phase 3 (issues) is added only if at least one repo has the flag on
+                    boolean anyIssues = repos.stream().anyMatch(r -> r.isCollectIssues());
+                    yield anyIssues ? 3 : 2;
+                }
                 default -> 1;
             };
         }
@@ -74,9 +79,17 @@ public class DataSourceCollectService {
                         if (jobState != null) tracker.setPhase(jobState, "pull requests", -1);
                         int prs = prCollector.collectForRepository(repo.getId(), jobState);
 
-                        total += commits + prs;
+                        int issues = 0;
+                        if (repo.isCollectIssues()) {
+                            if (jobState != null) tracker.setPhase(jobState, "issues", -1);
+                            issues = issuesCollector.collectIssuesForRepo(cfg, repo);
+                        }
+
+                        total += commits + prs + issues;
                         summary.append(repo.getName()).append(": ").append(commits)
-                               .append(" commits, ").append(prs).append(" PRs. ");
+                               .append(" commits, ").append(prs).append(" PRs");
+                        if (repo.isCollectIssues()) summary.append(", ").append(issues).append(" issues");
+                        summary.append(". ");
                     } catch (Exception e) {
                         log.warn("Collection failed for repo {}: {}", repo.getId(), e.getMessage());
                     }

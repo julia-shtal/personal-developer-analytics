@@ -7,6 +7,7 @@ import java.util.List;
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class JiraSearchResponse {
+    private int total;
     private List<JiraIssue> issues;
     private Boolean isLast;
 
