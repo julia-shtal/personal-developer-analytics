@@ -28,5 +28,8 @@ public class CreateDataSourceRequest {
 
     // repo to auto-register after DS creation (GITHUB / GITHUB_ISSUES types)
     private String repoFullName;
+
+    // optional: Jira project key to scope collection to a single project (JIRA type)
+    private String projectKey;
 }
 

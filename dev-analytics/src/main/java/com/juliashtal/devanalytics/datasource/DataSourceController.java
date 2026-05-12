@@ -36,7 +36,6 @@ public class DataSourceController {
     public ResponseEntity<DataSourceConfig> create(@RequestBody @Valid CreateDataSourceRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
         DataSourceConfig created = dataSourceService.create(userId, request);
-        // null means the repo already existed — only a subscription was added, no new DS was created.
         if (created == null) {
             return ResponseEntity.ok().build();
         }
