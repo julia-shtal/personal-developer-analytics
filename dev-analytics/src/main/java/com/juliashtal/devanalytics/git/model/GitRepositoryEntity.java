@@ -39,6 +39,13 @@ public class GitRepositoryEntity {
     @Column(unique = true)
     private String repoFullName;
 
+    // whether issues should be fetched during GitHub sync for this repo
+    @Column(name = "collect_issues", nullable = false)
+    private boolean collectIssues = false;
+
+    @Column(name = "issues_last_synced_at")
+    private Instant issuesLastSyncedAt;
+
     // for incremental collecting
     private String lastFetchedCommitHash;
 
