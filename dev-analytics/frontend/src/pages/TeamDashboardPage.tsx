@@ -11,6 +11,7 @@ import { MultiLineChart } from '@/components/charts/MultiLineChart';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useDateRange } from '@/context/DateRangeContext';
 import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
+import { Avatar } from '@/components/ui/Avatar';
 import type { DateRange, Team, MemberSummaryDto } from '@/types';
 
 interface ColHeaderProps {
@@ -69,9 +70,7 @@ function MemberPanel({ member, teamId, range, onClose }: MemberPanelProps) {
       <div className="w-full max-w-lg bg-white rounded-2xl border border-gray-200 shadow-2xl">
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-violet-100 flex items-center justify-center text-violet-700 text-sm font-semibold">
-              {member.username[0].toUpperCase()}
-            </div>
+            <Avatar user={{ id: member.userId, username: member.username, hasCustomAvatar: member.hasCustomAvatar, avatarPreset: member.avatarPreset }} size="md" />
             <div>
               <p className="font-semibold text-gray-900">{member.username}</p>
               <p className="text-xs text-gray-400">Member detail</p>
@@ -313,9 +312,7 @@ export function TeamDashboardPage() {
                     >
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-violet-700 text-xs font-semibold">
-                            {m.username[0].toUpperCase()}
-                          </div>
+                          <Avatar user={{ id: m.userId, username: m.username, hasCustomAvatar: m.hasCustomAvatar, avatarPreset: m.avatarPreset }} size="sm" />
                           <span className="font-medium text-gray-900">{m.username}</span>
                         </div>
                       </td>

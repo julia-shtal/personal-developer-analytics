@@ -104,6 +104,13 @@
             <version>2.0-rc.5</version>
         </dependency>
 
+        <!-- Image processing -->
+        <dependency>
+            <groupId>net.coobird</groupId>
+            <artifactId>thumbnailator</artifactId>
+            <version>0.4.20</version>
+        </dependency>
+
         <!-- OpenAPI / Swagger annotations -->
         <dependency>
             <groupId>io.swagger.core.v3</groupId>

@@ -3,6 +3,7 @@ import { ShieldAlert, Trash2, ChevronDown } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Avatar } from '@/components/ui/Avatar';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { Navigate } from 'react-router-dom';
@@ -121,9 +122,7 @@ export function AdminPage() {
                     <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-violet-700 text-xs font-semibold">
-                            {u.username[0].toUpperCase()}
-                          </div>
+                          <Avatar user={u} size="sm" />
                           <span className="font-medium text-gray-900">{u.username}</span>
                           {u.id === currentUser?.id && (
                             <span className="text-xs text-gray-400">(you)</span>

@@ -10,6 +10,8 @@ public class UserSummary {
     private Role role;
     private String timezone;
     private String githubLogin;
+    private boolean hasCustomAvatar;
+    private String avatarPreset;
 
     public static UserSummary from(User user) {
         UserSummary dto = new UserSummary();
@@ -19,6 +21,8 @@ public class UserSummary {
         dto.role = user.getRole();
         dto.timezone = user.getTimezone();
         dto.githubLogin = user.getGithubLogin();
+        dto.hasCustomAvatar = user.getAvatarData() != null;
+        dto.avatarPreset = user.getAvatarPreset();
         return dto;
     }
 }
