@@ -286,7 +286,9 @@ public class MetricsController {
         }
 
         return members.stream()
-                .map(m -> new MemberSummaryDto(m.getId(), m.getUsername(), byUser.get(m.getId())))
+                .map(m -> new MemberSummaryDto(
+                        m.getId(), m.getUsername(), byUser.get(m.getId()),
+                        m.getAvatarData() != null, m.getAvatarPreset()))
                 .toList();
     }
 
@@ -312,7 +314,9 @@ public class MetricsController {
                     .forEach(s -> metrics.merge(type, s.getValue(), Double::sum));
         }
 
-        return new MemberSummaryDto(member.getId(), member.getUsername(), metrics);
+        return new MemberSummaryDto(
+                member.getId(), member.getUsername(), metrics,
+                member.getAvatarData() != null, member.getAvatarPreset());
     }
 
     @GetMapping("/teams/{teamId}/members/{memberId}/daily-commits")

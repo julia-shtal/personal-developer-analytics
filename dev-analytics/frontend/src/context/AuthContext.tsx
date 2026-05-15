@@ -10,6 +10,7 @@ interface AuthContextValue {
   login: (req: LoginRequest) => Promise<void>;
   register: (req: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   isManager: boolean;
   isAdmin: boolean;
 }
@@ -56,6 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.post('/auth/register', req);
   }
 
+  async function refreshUser() {
+    const data = await api.get<UserProfile>('/users/me');
+    setUser(data.data);
+  }
+
   async function logout() {
     const refreshToken = localStorage.getItem('refresh_token');
     if (refreshToken) {
@@ -70,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = user?.role === 'ADMIN';
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, isManager, isAdmin }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, refreshUser, isManager, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );
