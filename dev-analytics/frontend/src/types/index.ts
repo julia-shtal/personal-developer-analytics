@@ -28,6 +28,8 @@ export interface UserProfile {
   role: Role;
   timezone?: string;
   githubLogin?: string;
+  hasCustomAvatar?: boolean;
+  avatarPreset?: string;
 }
 
 export interface UpdateProfileRequest {
@@ -137,6 +139,8 @@ export interface MemberSummaryDto {
   userId: number;
   username: string;
   metrics: Partial<Record<MetricType, number>>;
+  hasCustomAvatar?: boolean;
+  avatarPreset?: string;
 }
 
 // ─── Teams ───────────────────────────────────────────────────────────────────

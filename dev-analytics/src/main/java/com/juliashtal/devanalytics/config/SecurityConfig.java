@@ -55,6 +55,8 @@ public class SecurityConfig {
                                 "/api/auth/logout",
                                 "/api/auth/forgot-password",
                                 "/api/auth/reset-password",
+                                "/api/users/*/avatar",   // avatar images served unauthenticated
+                                "/api/users/avatar/presets",
                                 "/actuator/health",
                                 // SPA static assets and entry points
                                 "/",
@@ -69,6 +71,7 @@ public class SecurityConfig {
                                 "/settings",
                                 "/admin",
                                 "/assets/**",
+                                "/avatars/**",
                                 "/*.svg",
                                 "/*.ico",
                                 "/*.png"
