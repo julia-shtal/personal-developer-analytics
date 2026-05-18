@@ -33,14 +33,11 @@ public class DataSourceController {
     private final SyncJobTracker syncJobTracker;
 
     @PostMapping
-    public ResponseEntity<DataSourceConfig> create(@RequestBody @Valid CreateDataSourceRequest request) {
+    public ResponseEntity<DataSourceResponseDto> create(@RequestBody @Valid CreateDataSourceRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
-        DataSourceConfig created = dataSourceService.create(userId, request);
-        if (created == null) {
-            return ResponseEntity.ok().build();
-        }
+        DataSourceResponseDto created = dataSourceService.create(userId, request);
         return ResponseEntity
-                .created(URI.create("/api/datasources/" + created.getId()))
+                .created(URI.create("/api/datasources/" + created.id()))
                 .body(created);
     }
 

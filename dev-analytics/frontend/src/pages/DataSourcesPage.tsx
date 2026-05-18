@@ -334,7 +334,53 @@ function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; source
 
 // ─── Jira projects sub-panel ──────────────────────────────────────────────────
 
-function JiraProjectsPanel({ dataSourceId }: { dataSourceId: number }) {
+function JiraProjectRow({ p, syncing }: { p: TrackedJiraProjectDto; syncing: boolean }) {
+  const { data: counts } = useQuery({
+    queryKey: ['jira-issue-count', p.id],
+    queryFn: () => issuesApi.getJiraProjectCount(p.id).then((r) => r.data),
+    refetchInterval: syncing ? 3_000 : false,
+  });
+
+  const projectUrl = p.dataSourceBaseUrl
+    ? `${p.dataSourceBaseUrl}/browse/${p.projectKey}`
+    : undefined;
+
+  return (
+    <li className="rounded-md bg-gray-50 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs font-mono font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">
+            {p.projectKey}
+          </span>
+          <span className="text-xs text-gray-700 truncate">{p.projectName ?? p.projectKey}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {counts && (counts.open > 0 || counts.closed > 0) && (
+            <span className="text-xs text-gray-400">
+              <span className="text-emerald-600 font-medium">{counts.open.toLocaleString()}</span>
+              <span> open</span>
+              <span className="mx-0.5 text-gray-300">/</span>
+              <span>{counts.closed.toLocaleString()} closed</span>
+            </span>
+          )}
+          {projectUrl && (
+            <a
+              href={projectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1 rounded text-gray-400 hover:text-blue-600 transition-colors"
+              title="Open project in Jira"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function JiraProjectsPanel({ dataSourceId, syncing }: { dataSourceId: number; syncing: boolean }) {
   const { data: projects, isLoading, isError } = useQuery({
     queryKey: ['jira-projects', dataSourceId],
     queryFn: () => issuesApi.listTrackedJiraProjects(dataSourceId).then((r) => r.data),
@@ -348,12 +394,7 @@ function JiraProjectsPanel({ dataSourceId }: { dataSourceId: number }) {
   return (
     <ul className="space-y-1.5">
       {projects.map((p: TrackedJiraProjectDto) => (
-        <li key={p.id} className="flex items-center gap-3 rounded-md bg-gray-50 px-3 py-2">
-          <span className="text-xs font-mono font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-            {p.projectKey}
-          </span>
-          <span className="text-xs text-gray-700 truncate">{p.projectName ?? p.projectKey}</span>
-        </li>
+        <JiraProjectRow key={p.id} p={p} syncing={syncing} />
       ))}
     </ul>
   );
@@ -473,6 +514,7 @@ export function DataSourcesPage() {
           setSyncStatuses(prev => ({ ...prev, [id]: data }));
           if (!data.running) {
             qc.invalidateQueries({ queryKey: ['datasources'] });
+            qc.invalidateQueries({ queryKey: ['jira-issue-count'] });
           }
         } catch {
           // 404 = server restarted, lost in-memory state; treat as done.
@@ -758,7 +800,7 @@ export function DataSourcesPage() {
                   <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
                     Jira Projects
                   </p>
-                  <JiraProjectsPanel dataSourceId={src.id} />
+                  <JiraProjectsPanel dataSourceId={src.id} syncing={syncingIds.has(src.id)} />
                 </div>
               )}
             </Card>
