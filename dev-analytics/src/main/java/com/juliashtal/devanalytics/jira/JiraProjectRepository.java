@@ -19,4 +19,7 @@ public interface JiraProjectRepository extends JpaRepository<JiraProjectEntity, 
 
     @Query("SELECT j.id FROM JiraProjectEntity j WHERE j.dataSource.id IN :dataSourceIds")
     List<Long> findIdsByDataSourceIds(@Param("dataSourceIds") List<Long> dataSourceIds);
+
+    /** Lookup by Jira instance URL + project key — used to detect existing projects when a new Jira DS is created. */
+    Optional<JiraProjectEntity> findByDataSource_BaseUrlAndProjectKey(String baseUrl, String projectKey);
 }

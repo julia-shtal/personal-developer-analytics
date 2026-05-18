@@ -101,6 +101,7 @@ public class JiraCollector {
             log.debug("Jira page fetched: saved={}, startAt={}, total={}", saved, startAt, total);
         }
 
+        project.setLastScanAt(Instant.now());
         log.info("Jira collection complete: {} issues collected from {}, project: {}",
                 saved, baseUrl, project.getProjectKey());
         return saved;
