@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.git.service.GitRepositoryService;
 import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
+import com.juliashtal.devanalytics.jira.JiraProjectService;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
@@ -43,6 +44,7 @@ public class DataSourceService {
     private final GitHubRepositoryService gitHubRepositoryService;
     private final GitRepositoryEntityRepository gitRepoRepository;
     private final UserRepoRegistrationRepository userRepoRegRepository;
+    private final JiraProjectService jiraProjectService;
 
     public DataSourceConfig getDataSource(Long dataSourceId) {
         return repository.findById(dataSourceId)
@@ -77,9 +79,6 @@ public class DataSourceService {
         if (req.getApiToken() != null && !req.getApiToken().isBlank()) {
             cfg.setApiTokenEncrypted(tokenEncryptor.encrypt(req.getApiToken()));
         }
-        if (req.getProjectKey() != null && !req.getProjectKey().isBlank()) {
-            cfg.setProjectKey(req.getProjectKey().trim());
-        }
         cfg.setEnabled(true);
 
         if (req.getTeamId() != null) {
@@ -112,6 +111,13 @@ public class DataSourceService {
                 gitHubRepositoryService.registerGitHubRepo(userId, saved.getId(), req.getRepoFullName());
             } catch (Exception e) {
                 log.warn("Auto-registration of GitHub repo failed: {}", e.getMessage());
+            }
+        } else if (saved.getType() == DataSourceType.JIRA
+                && req.getProjectKey() != null && !req.getProjectKey().isBlank()) {
+            try {
+                jiraProjectService.addProject(saved, req.getProjectKey(), null);
+            } catch (Exception e) {
+                log.warn("Auto-creation of initial Jira project failed: {}", e.getMessage());
             }
         }
 
@@ -217,9 +223,6 @@ public class DataSourceService {
         }
         if (req.getEnabled() != null) {
             cfg.setEnabled(req.getEnabled());
-        }
-        if (req.getProjectKey() != null) {
-            cfg.setProjectKey(req.getProjectKey().isBlank() ? null : req.getProjectKey().trim());
         }
 
         return repository.save(cfg);

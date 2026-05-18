@@ -8,6 +8,7 @@ import com.juliashtal.devanalytics.exception.JiraException;
 import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.issue.model.JiraSearchResponse;
+import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ public class JiraCollector {
 
     private final RestTemplate restTemplate;
     private final IssueRepository issueRepository;
+    private final JiraProjectRepository jiraProjectRepository;
     private final SimpleTokenEncryptor tokenEncryptor;
     ObjectMapper objectMapper = new ObjectMapper();
 
@@ -42,8 +44,12 @@ public class JiraCollector {
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX", Locale.ROOT);
 
     @Transactional
-    public int collectIssues(DataSourceConfig config) {
-
+    public int collectIssues(JiraProjectEntity project) {
+        // Re-fetch so the entity is managed in this session's persistence context.
+        // The caller loaded `project` in a separate transaction; using a detached entity
+        // as a @ManyToOne target causes a DetachedObjectException on flush in Hibernate 6.
+        project = jiraProjectRepository.getReferenceById(project.getId());
+        DataSourceConfig config = project.getDataSource();
         String baseUrl = config.getBaseUrl();
         String searchUrl = baseUrl + "/rest/api/3/search/jql";
 
@@ -57,13 +63,14 @@ public class JiraCollector {
         String accountId = fetchCurrentUserAccountId(baseUrl, headers);
         log.info("Jira authenticated as accountId={}", accountId);
 
-        String jql = buildJql(config.getProjectKey(), accountId);
+        String jql = buildJql(project.getProjectKey(), accountId);
 
         int saved = 0;
         int startAt = 0;
-        int total = Integer.MAX_VALUE; // updated after first response
+        int total = Integer.MAX_VALUE;
 
-        log.info("Starting Jira issue collection from: {}, jql: {}", baseUrl, jql);
+        log.info("Starting Jira issue collection from: {}, project: {}, jql: {}",
+                baseUrl, project.getProjectKey(), jql);
         while (startAt < total) {
             URI uri = UriComponentsBuilder.fromUriString(searchUrl)
                     .queryParam("jql", jql)
@@ -86,7 +93,7 @@ public class JiraCollector {
             if (issues == null || issues.isEmpty()) break;
 
             for (JiraSearchResponse.JiraIssue ji : issues) {
-                upsertJiraIssue(config, ji);
+                upsertJiraIssue(project, ji);
                 saved++;
             }
 
@@ -94,7 +101,8 @@ public class JiraCollector {
             log.debug("Jira page fetched: saved={}, startAt={}, total={}", saved, startAt, total);
         }
 
-        log.info("Jira collection complete: {} issues collected from {}", saved, baseUrl);
+        log.info("Jira collection complete: {} issues collected from {}, project: {}",
+                saved, baseUrl, project.getProjectKey());
         return saved;
     }
 
@@ -145,14 +153,14 @@ public class JiraCollector {
         }
     }
 
-    private void upsertJiraIssue(DataSourceConfig config, JiraSearchResponse.JiraIssue jiraIssue) {
+    private void upsertJiraIssue(JiraProjectEntity project, JiraSearchResponse.JiraIssue jiraIssue) {
         String externalId = jiraIssue.getKey();
 
         IssueEntity issue = issueRepository
-                .findByDataSourceAndExternalId(config, externalId)
+                .findByJiraProjectAndExternalId(project, externalId)
                 .orElseGet(IssueEntity::new);
 
-        issue.setDataSource(config);
+        issue.setJiraProject(project);
         issue.setExternalId(externalId);
 
         JiraSearchResponse.Fields f = jiraIssue.getFields();
@@ -223,6 +231,4 @@ public class JiraCollector {
             return null;
         return ZonedDateTime.parse(date, JIRA_DATE_TIME).toInstant();
     }
-
 }
-

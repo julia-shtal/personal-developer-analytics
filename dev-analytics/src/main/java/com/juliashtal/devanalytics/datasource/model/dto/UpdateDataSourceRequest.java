@@ -9,7 +9,4 @@ public class UpdateDataSourceRequest {
     private String path;
     private String apiToken;
     private Boolean enabled;
-    // optional: update Jira project key (JIRA type only)
-    private String projectKey;
 }
-
