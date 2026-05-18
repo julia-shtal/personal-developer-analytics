@@ -14,5 +14,6 @@ public record DataSourceResponseDto(
         LocalDateTime lastSuccessSync,
         LocalDateTime createdAt,
         Long teamId,
-        boolean canDelete
+        boolean canDelete,
+        long repoCount
 ) {}
