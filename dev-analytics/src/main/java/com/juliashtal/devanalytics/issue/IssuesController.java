@@ -45,6 +45,14 @@ public class IssuesController {
         return issueService.countByRepository(repoId);
     }
 
+    @GetMapping("/jira/{projectId}/count")
+    @Operation(summary = "Open/closed issue count for a tracked Jira project")
+    public Map<String, Long> getJiraProjectIssueCount(@PathVariable Long projectId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        jiraProjectService.getProjectForUser(projectId, userId);
+        return issueService.countByJiraProject(projectId);
+    }
+
     @PostMapping("/jira/{projectId}/collect")
     @Operation(summary = "Trigger Jira issue collection for a tracked project")
     public ResponseEntity<String> collectJira(@PathVariable Long projectId) {

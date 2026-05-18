@@ -26,6 +26,8 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     Page<IssueEntity> findByJiraProject(JiraProjectEntity project, Pageable pageable);
 
     long countByRepository_IdAndState(Long repositoryId, String state);
+    long countByJiraProject_Id(Long projectId);
+    long countByJiraProject_IdAndClosedAtIsNotNull(Long projectId);
 
     // -------------------------------------------------------------------------
     // Team-repo variants: filter by explicit repo IDs, no author filter.

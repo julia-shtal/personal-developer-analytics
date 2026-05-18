@@ -7,6 +7,7 @@ import java.time.Instant;
 public record JiraProjectResponseDto(
         Long id,
         Long dataSourceId,
+        String dataSourceBaseUrl,
         String projectKey,
         String projectName,
         Instant lastScanAt,
@@ -16,6 +17,7 @@ public record JiraProjectResponseDto(
         return new JiraProjectResponseDto(
                 e.getId(),
                 e.getDataSource().getId(),
+                e.getDataSource().getBaseUrl(),
                 e.getProjectKey(),
                 e.getProjectName(),
                 e.getLastScanAt(),

@@ -16,12 +16,13 @@ public interface UserRepoRegistrationRepository extends JpaRepository<UserRepoRe
     @Query("SELECT urr.repository.id FROM UserRepoRegistration urr WHERE urr.user.id = :userId")
     List<Long> findRepoIdsByUserId(@Param("userId") Long userId);
 
-    @Query("SELECT urr.repository.id FROM UserRepoRegistration urr WHERE urr.user.id = :userId AND urr.dataSourceConfig.id = :dataSourceId")
+    @Query("SELECT urr.repository.id FROM UserRepoRegistration urr WHERE urr.user.id = :userId AND urr.repository.dataSourceConfig.id = :dataSourceId")
     List<Long> findRepoIdsByUserIdAndDataSourceId(@Param("userId") Long userId, @Param("dataSourceId") Long dataSourceId);
 
-    /** Returns distinct DataSourceConfigs the user is subscribed to (via repo registrations). */
-    @Query("SELECT DISTINCT urr.dataSourceConfig FROM UserRepoRegistration urr WHERE urr.user.id = :userId AND urr.dataSourceConfig IS NOT NULL")
+    /** Returns distinct DataSourceConfigs the user is subscribed to, resolved via the repo's datasource. */
+    @Query("SELECT DISTINCT urr.repository.dataSourceConfig FROM UserRepoRegistration urr WHERE urr.user.id = :userId")
     List<com.juliashtal.devanalytics.datasource.model.DataSourceConfig> findDataSourceConfigsByUserId(@Param("userId") Long userId);
 
-    boolean existsByUserIdAndDataSourceConfig_Id(Long userId, Long dataSourceConfigId);
+    @Query("SELECT COUNT(urr) > 0 FROM UserRepoRegistration urr WHERE urr.user.id = :userId AND urr.repository.dataSourceConfig.id = :dataSourceConfigId")
+    boolean existsByUserIdAndDataSourceConfig_Id(@Param("userId") Long userId, @Param("dataSourceConfigId") Long dataSourceConfigId);
 }

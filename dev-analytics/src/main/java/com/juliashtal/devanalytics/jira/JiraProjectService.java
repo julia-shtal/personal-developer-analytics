@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.jira;
 
+import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -137,6 +138,29 @@ public class JiraProjectService {
 
         userProjectRegistrationRepository.findByUserAndProject(user, project)
                 .ifPresent(userProjectRegistrationRepository::delete);
+    }
+
+    // -------------------------------------------------------------------------
+    // Subscription-based datasource access helpers (used by DataSourceService)
+    // -------------------------------------------------------------------------
+
+    /** Finds an existing tracked Jira project by Jira instance URL + project key. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<JiraProjectEntity> findByBaseUrlAndProjectKey(String baseUrl, String projectKey) {
+        return jiraProjectRepository.findByDataSource_BaseUrlAndProjectKey(
+                baseUrl, projectKey.trim().toUpperCase());
+    }
+
+    /** DataSourceConfigs the user can access via Jira project subscriptions. */
+    @Transactional(readOnly = true)
+    public List<DataSourceConfig> findSubscribedDataSourceConfigs(Long userId) {
+        return userProjectRegistrationRepository.findDataSourceConfigsByUserId(userId);
+    }
+
+    /** True when the user has at least one Jira project subscription under the given datasource. */
+    @Transactional(readOnly = true)
+    public boolean hasSubscriptionForDataSource(Long userId, Long dataSourceId) {
+        return userProjectRegistrationRepository.existsByUserIdAndDataSourceId(userId, dataSourceId);
     }
 
     // -------------------------------------------------------------------------
