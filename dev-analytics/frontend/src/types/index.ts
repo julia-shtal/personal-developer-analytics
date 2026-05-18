@@ -54,6 +54,7 @@ export interface DataSourceConfig {
   createdAt?: string;
   teamId?: number;
   canDelete: boolean;
+  repoCount: number;
 }
 
 export interface CreateDataSourceRequest {
