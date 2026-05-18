@@ -73,6 +73,15 @@ export interface JiraProjectDto {
   id: string;
 }
 
+export interface TrackedJiraProjectDto {
+  id: number;
+  dataSourceId: number;
+  projectKey: string;
+  projectName: string | null;
+  lastScanAt: string | null;
+  subscribed: boolean;
+}
+
 export interface RepoDto {
   id: number;
   name: string;

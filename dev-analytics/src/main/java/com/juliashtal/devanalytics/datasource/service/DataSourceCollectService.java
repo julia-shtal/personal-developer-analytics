@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.github.service.GitHubCollector;
 import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
 import com.juliashtal.devanalytics.github.service.GitHubPrCollector;
 import com.juliashtal.devanalytics.jira.JiraCollector;
+import com.juliashtal.devanalytics.jira.JiraProjectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class DataSourceCollectService {
     private final GitHubPrCollector prCollector;
     private final GitHubIssuesCollector issuesCollector;
     private final JiraCollector jiraCollector;
+    private final JiraProjectService jiraProjectService;
     private final DataSourceService dataSourceService;
     private final SyncJobTracker tracker;
 
@@ -108,14 +110,23 @@ public class DataSourceCollectService {
                 }
             }
             case JIRA -> {
-                try {
-                    if (jobState != null) tracker.setPhase(jobState, "jira issues", -1);
-                    int n = jiraCollector.collectIssues(cfg);
-                    total += n;
-                    summary.append("Jira: ").append(n).append(" issues. ");
-                } catch (Exception e) {
-                    log.warn("Jira collection failed for DS {}: {}", dataSourceId, e.getMessage());
-                    summary.append("Jira collection failed: ").append(e.getMessage());
+                var jiraProjects = jiraProjectService.listTrackedProjects(cfg);
+                if (jiraProjects.isEmpty()) {
+                    log.warn("JIRA datasource {} has no tracked projects — nothing to collect", dataSourceId);
+                } else {
+                    for (var project : jiraProjects) {
+                        try {
+                            if (jobState != null) tracker.setPhase(jobState, "jira issues", -1);
+                            int n = jiraCollector.collectIssues(project);
+                            total += n;
+                            summary.append("Jira[").append(project.getProjectKey()).append("]: ")
+                                   .append(n).append(" issues. ");
+                        } catch (Exception e) {
+                            log.warn("Jira collection failed for project {}: {}", project.getProjectKey(), e.getMessage());
+                            summary.append("Jira[").append(project.getProjectKey())
+                                   .append("] failed: ").append(e.getMessage()).append(" ");
+                        }
+                    }
                 }
             }
         }
