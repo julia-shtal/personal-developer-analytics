@@ -23,10 +23,10 @@ public class CreateDataSourceRequest {
     // token required for GitHub / Jira / GitHub Issues
     private String apiToken;
 
-    // optional: if set, the data source is team-scoped (GITHUB/JIRA/GITHUB_ISSUES only)
+    // optional: if set, the data source is team-scoped (GITHUB/JIRA only)
     private Long teamId;
 
-    // repo to auto-register after DS creation (GITHUB / GITHUB_ISSUES types)
+    // repo to auto-register after DS creation (GITHUB type only)
     private String repoFullName;
 
     // optional: Jira project key to scope collection to a single project (JIRA type)

@@ -41,7 +41,7 @@ export interface UpdateProfileRequest {
 
 // ─── Data Sources ─────────────────────────────────────────────────────────────
 
-export type DataSourceType = 'GIT_LOCAL' | 'GITHUB' | 'JIRA' | 'GITHUB_ISSUES';
+export type DataSourceType = 'GIT_LOCAL' | 'GITHUB' | 'JIRA';
 
 export interface DataSourceConfig {
   id: number;

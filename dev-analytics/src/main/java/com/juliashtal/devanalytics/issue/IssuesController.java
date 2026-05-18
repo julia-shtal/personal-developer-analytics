@@ -62,7 +62,7 @@ public class IssuesController {
             @PathVariable String repo
     ) {
         Long userId = SecurityUtils.getCurrentUserId();
-        DataSourceConfig cfg = getUserDataSource(userId, dataSourceId, DataSourceType.GITHUB_ISSUES);
+        DataSourceConfig cfg = getUserDataSource(userId, dataSourceId, DataSourceType.GITHUB);
         String fullName = owner + "/" + repo;
         int count = gitHubIssuesCollector.collectIssuesForRepo(cfg, fullName);
         return ResponseEntity.ok("Collected/updated " + count + " GitHub issues");
