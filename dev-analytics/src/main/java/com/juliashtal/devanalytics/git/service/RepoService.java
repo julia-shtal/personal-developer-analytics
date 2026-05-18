@@ -132,8 +132,7 @@ public class RepoService {
                     String repoUrl = null;
                     var dsCfg = r.getDataSourceConfig();
                     if (dsCfg != null && dsCfg.getBaseUrl() != null && r.getRepoFullName() != null
-                            && (dsCfg.getType() == DataSourceType.GITHUB
-                            || dsCfg.getType() == DataSourceType.GITHUB_ISSUES)) {
+                            && dsCfg.getType() == DataSourceType.GITHUB) {
                         repoUrl = toWebBaseUrl(dsCfg.getBaseUrl()) + "/" + r.getRepoFullName();
                     }
                     return new RepoDto(

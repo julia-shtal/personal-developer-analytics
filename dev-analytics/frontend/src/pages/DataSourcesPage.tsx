@@ -25,18 +25,16 @@ const TYPE_LABELS: Record<DataSourceType, string> = {
   GIT_LOCAL: 'Local Git',
   GITHUB: 'GitHub',
   JIRA: 'Jira',
-  GITHUB_ISSUES: 'GitHub Issues',
 };
 
-const TYPE_COLORS: Record<DataSourceType, 'gray' | 'violet' | 'blue' | 'amber'> = {
+const TYPE_COLORS: Record<DataSourceType, 'gray' | 'violet' | 'blue'> = {
   GIT_LOCAL: 'gray',
   GITHUB: 'violet',
   JIRA: 'blue',
-  GITHUB_ISSUES: 'amber',
 };
 
 function TypeIcon({ type }: { type: DataSourceType }) {
-  if (type === 'GITHUB' || type === 'GITHUB_ISSUES') return <GitBranch className="h-5 w-5" />;
+  if (type === 'GITHUB') return <GitBranch className="h-5 w-5" />;
   if (type === 'GIT_LOCAL') return <Layers className="h-5 w-5" />;
   return <Database className="h-5 w-5" />;
 }
@@ -45,8 +43,6 @@ const TYPE_OPTIONS = [
   { value: 'GIT_LOCAL', label: 'Local Git repository' },
   { value: 'GITHUB',    label: 'GitHub' },
   { value: 'JIRA',      label: 'Jira' },
-  // GITHUB_ISSUES is kept as a backend type for DB compatibility but is no longer
-  // a user-facing data source — issues are managed per-repository inside the GitHub source.
 ];
 
 // Types that need a base URL (the remote API address)
@@ -540,7 +536,7 @@ export function DataSourcesPage() {
                   options={TYPE_OPTIONS}
                   onChange={(e) => {
                     const t = e.target.value as DataSourceType;
-                    const defaultBaseUrl = (t === 'GITHUB' || t === 'GITHUB_ISSUES') ? 'https://api.github.com' : '';
+                    const defaultBaseUrl = t === 'GITHUB' ? 'https://api.github.com' : '';
                     setShowToken(false);
                     setForm({ ...form, type: t, baseUrl: defaultBaseUrl, path: '', repoFullName: '', projectKey: '' });
                   }}
