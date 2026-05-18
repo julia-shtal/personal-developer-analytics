@@ -60,7 +60,7 @@ public class DataSourceService {
         // If the GitHub repo is already registered in the system, do not create a new DS.
         // Instead, subscribe the user to the existing repo under its original DS so it appears
         // in their Data Sources list without a zombie duplicate.
-        if ((req.getType() == DataSourceType.GITHUB || req.getType() == DataSourceType.GITHUB_ISSUES)
+        if (req.getType() == DataSourceType.GITHUB
                 && req.getRepoFullName() != null && !req.getRepoFullName().isBlank()) {
             var existingRepo = gitRepoRepository.findByRepoFullName(req.getRepoFullName());
             if (existingRepo.isPresent()) {
@@ -104,8 +104,7 @@ public class DataSourceService {
                 // Non-fatal: DS is saved, repo registration failed (e.g. path issue)
                 log.warn("Auto-registration of local repo failed: {}", e.getMessage());
             }
-        } else if ((saved.getType() == DataSourceType.GITHUB
-                || saved.getType() == DataSourceType.GITHUB_ISSUES)
+        } else if (saved.getType() == DataSourceType.GITHUB
                 && req.getRepoFullName() != null && !req.getRepoFullName().isBlank()) {
             try {
                 gitHubRepositoryService.registerGitHubRepo(userId, saved.getId(), req.getRepoFullName());

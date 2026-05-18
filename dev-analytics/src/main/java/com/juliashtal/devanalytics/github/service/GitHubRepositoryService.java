@@ -69,8 +69,8 @@ public class GitHubRepositoryService {
         if (!cfg.getUser().getId().equals(user.getId())) {
             throw new IllegalArgumentException("DataSource does not belong to current user");
         }
-        if (cfg.getType() != DataSourceType.GITHUB && cfg.getType() != DataSourceType.GITHUB_ISSUES) {
-            throw new IllegalArgumentException("DataSource must be of type GITHUB or GITHUB_ISSUES");
+        if (cfg.getType() != DataSourceType.GITHUB) {
+            throw new IllegalArgumentException("DataSource must be of type GITHUB");
         }
 
         GitRepositoryEntity repo = new GitRepositoryEntity();

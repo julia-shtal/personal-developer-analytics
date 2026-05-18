@@ -97,18 +97,6 @@ public class DataSourceCollectService {
                     }
                 }
             }
-            case GITHUB_ISSUES -> {
-                for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
-                    try {
-                        if (jobState != null) tracker.setPhase(jobState, "issues", -1);
-                        int n = issuesCollector.collectIssuesForRepo(cfg, repo.getRepoFullName());
-                        total += n;
-                        summary.append(repo.getName()).append(": ").append(n).append(" issues. ");
-                    } catch (Exception e) {
-                        log.warn("Issues collection failed for repo {}: {}", repo.getId(), e.getMessage());
-                    }
-                }
-            }
             case JIRA -> {
                 var jiraProjects = jiraProjectService.listTrackedProjects(cfg);
                 if (jiraProjects.isEmpty()) {
