@@ -51,6 +51,15 @@ public class DataSourceService {
                 .orElseThrow(() -> new NoSuchElementException("DataSource not found: " + dataSourceId));
     }
 
+    /**
+     * Creates a new datasource for the user. Repo / project attachment is optional:
+     * <ul>
+     *   <li>GITHUB with {@code repoFullName} present → auto-attaches the repo (or subscribes if it already exists).</li>
+     *   <li>GITHUB without {@code repoFullName} → datasource saved with {@code repoCount = 0}; repos attached later via T2.2 endpoints.</li>
+     *   <li>JIRA with {@code projectKey} present → auto-creates/subscribes the initial Jira project.</li>
+     *   <li>JIRA without {@code projectKey} → datasource saved with no tracked projects.</li>
+     * </ul>
+     */
     @Transactional
     public DataSourceResponseDto create(Long userId, CreateDataSourceRequest req) {
         validator.validateCreate(req);
@@ -185,7 +194,7 @@ public class DataSourceService {
         return result;
     }
 
-    private static DataSourceResponseDto toDto(DataSourceConfig cfg, boolean canDelete) {
+    private DataSourceResponseDto toDto(DataSourceConfig cfg, boolean canDelete) {
         return new DataSourceResponseDto(
                 cfg.getId(),
                 cfg.getType(),
@@ -196,7 +205,8 @@ public class DataSourceService {
                 cfg.getLastSuccessSync(),
                 cfg.getCreatedAt(),
                 cfg.getTeam() != null ? cfg.getTeam().getId() : null,
-                canDelete
+                canDelete,
+                gitRepoRepository.countByDataSourceConfig(cfg)
         );
     }
 
