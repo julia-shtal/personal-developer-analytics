@@ -1,7 +1,9 @@
 package com.juliashtal.devanalytics.issue;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.issue.model.IssueEntity;
+import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,12 +12,18 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
+
+    // GitHub issue lookups (data_source_id not null)
     Optional<IssueEntity> findByDataSourceAndExternalId(DataSourceConfig source, String externalId);
     Page<IssueEntity> findByDataSource(DataSourceConfig source, Pageable pageable);
+    Page<IssueEntity> findByRepository(GitRepositoryEntity repository, Pageable pageable);
+
+    // Jira issue lookups (jira_project_id not null)
+    Optional<IssueEntity> findByJiraProjectAndExternalId(JiraProjectEntity project, String externalId);
+    Page<IssueEntity> findByJiraProject(JiraProjectEntity project, Pageable pageable);
 
     long countByRepository_IdAndState(Long repositoryId, String state);
 
@@ -71,4 +79,3 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
             @Param("from") Instant from,
             @Param("to") Instant to);
 }
-

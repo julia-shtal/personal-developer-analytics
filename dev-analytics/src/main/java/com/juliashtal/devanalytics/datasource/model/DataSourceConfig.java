@@ -44,10 +44,6 @@ public class DataSourceConfig {
     @Column(name = "api_token_encrypted")
     private String apiTokenEncrypted;
 
-    // optional: Jira project key to scope collection (e.g. "PDA", "PROJ")
-    @Column(name = "project_key", length = 64)
-    private String projectKey;
-
     private boolean enabled = true;
     private LocalDateTime lastSuccessSync;
     private LocalDateTime createdAt;

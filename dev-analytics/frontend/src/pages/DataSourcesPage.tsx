@@ -17,7 +17,7 @@ import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
-import type { DataSourceType, CreateDataSourceRequest, RepoDto, Team, JiraProjectDto } from '@/types';
+import type { DataSourceType, CreateDataSourceRequest, RepoDto, Team, TrackedJiraProjectDto } from '@/types';
 
 // ─── Type helpers ─────────────────────────────────────────────────────────────
 
@@ -341,22 +341,22 @@ function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; source
 function JiraProjectsPanel({ dataSourceId }: { dataSourceId: number }) {
   const { data: projects, isLoading, isError } = useQuery({
     queryKey: ['jira-projects', dataSourceId],
-    queryFn: () => issuesApi.listJiraProjects(dataSourceId).then((r) => r.data),
+    queryFn: () => issuesApi.listTrackedJiraProjects(dataSourceId).then((r) => r.data),
     retry: false,
   });
 
   if (isLoading) return <p className="text-xs text-gray-400 py-2">Loading projects…</p>;
   if (isError) return <p className="text-xs text-red-400 py-2">Could not load Jira projects.</p>;
-  if (!projects?.length) return <p className="text-xs text-gray-400 py-2">No projects found in this Jira account.</p>;
+  if (!projects?.length) return <p className="text-xs text-gray-400 py-2">No tracked Jira projects.</p>;
 
   return (
     <ul className="space-y-1.5">
-      {projects.map((p: JiraProjectDto) => (
+      {projects.map((p: TrackedJiraProjectDto) => (
         <li key={p.id} className="flex items-center gap-3 rounded-md bg-gray-50 px-3 py-2">
           <span className="text-xs font-mono font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-            {p.key}
+            {p.projectKey}
           </span>
-          <span className="text-xs text-gray-700 truncate">{p.name}</span>
+          <span className="text-xs text-gray-700 truncate">{p.projectName ?? p.projectKey}</span>
         </li>
       ))}
     </ul>
