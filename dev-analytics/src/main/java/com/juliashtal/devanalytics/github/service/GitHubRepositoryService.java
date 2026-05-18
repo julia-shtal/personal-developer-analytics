@@ -2,20 +2,35 @@ package com.juliashtal.devanalytics.github.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
+import com.juliashtal.devanalytics.exception.BadRequestException;
+import com.juliashtal.devanalytics.exception.ForbiddenException;
+import com.juliashtal.devanalytics.exception.GitHubException;
+import com.juliashtal.devanalytics.exception.NotFoundException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.github.model.dto.DiscoveredRepoDto;
+import com.juliashtal.devanalytics.github.model.dto.DiscoveryResult;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.kohsuke.github.GHRepository;
+import org.kohsuke.github.GitHub;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +41,7 @@ public class GitHubRepositoryService {
     private final DataSourceConfigRepository dataSourceRepository;
     private final UserRepository userRepository;
     private final UserRepoRegistrationRepository userRepoRegRepository;
+    private final GitHubClientFactory gitHubClientFactory;
 
     @Transactional
     public GitRepositoryEntity registerGitHubRepo(Long userId, Long dataSourceId, String fullName) {
@@ -77,5 +93,58 @@ public class GitHubRepositoryService {
         userRepoRegRepository.save(reg);
         log.info("Registered new GitHub repo: {} for userId={}", fullName, userId);
         return repo;
+    }
+
+    /**
+     * Discovers all GitHub repositories visible to the datasource's stored token.
+     * Each entry is annotated with {@code alreadyAttached=true} if the repo is already
+     * tracked under this datasource. Results are cached for 60 seconds per datasource
+     * to avoid re-hitting the GitHub API on every UI keypress.
+     *
+     * <p>If the rate limit is nearly exhausted during pagination, returns the collected
+     * repos so far and sets {@code truncated=true} on the result.</p>
+     */
+    @Cacheable(value = "github-discover-repos", key = "#dataSourceId")
+    public DiscoveryResult discoverRepos(Long userId, Long dataSourceId) {
+        DataSourceConfig cfg = dataSourceRepository.findById(dataSourceId)
+                .orElseThrow(() -> new NotFoundException("DataSource not found: " + dataSourceId));
+
+        if (!cfg.getUser().getId().equals(userId)) {
+            throw new ForbiddenException("Only the datasource owner can discover repositories");
+        }
+        if (cfg.getType() != DataSourceType.GITHUB) {
+            throw new BadRequestException("Only GITHUB datasources support repo discovery");
+        }
+
+        Set<String> attached = repoRepository.findAllByDataSourceConfig(cfg).stream()
+                .map(GitRepositoryEntity::getRepoFullName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        List<DiscoveredRepoDto> repos = new ArrayList<>();
+        boolean truncated = false;
+
+        GitHub github = gitHubClientFactory.createClient(cfg);
+        try {
+            for (GHRepository ghRepo : github.getMyself().listRepositories(100)) {
+                repos.add(new DiscoveredRepoDto(
+                        ghRepo.getFullName(),
+                        ghRepo.isPrivate(),
+                        ghRepo.getDefaultBranch(),
+                        attached.contains(ghRepo.getFullName())
+                ));
+            }
+        } catch (IOException e) {
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            if (msg.toLowerCase().contains("rate limit") || msg.contains("403") || msg.contains("429")) {
+                log.warn("GitHub rate limit hit during discovery for datasource={}", dataSourceId);
+                truncated = true;
+            } else {
+                throw new GitHubException("GitHub repo discovery failed: " + msg, e);
+            }
+        }
+
+        log.info("Discovered {} repos for datasource={}, truncated={}", repos.size(), dataSourceId, truncated);
+        return new DiscoveryResult(repos, truncated);
     }
 }
