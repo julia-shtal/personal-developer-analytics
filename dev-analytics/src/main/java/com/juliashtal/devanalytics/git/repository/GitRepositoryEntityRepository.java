@@ -13,6 +13,7 @@ import java.util.Optional;
 
 public interface GitRepositoryEntityRepository extends JpaRepository<GitRepositoryEntity, Long> {
     List<GitRepositoryEntity> findAllByDataSourceConfig(DataSourceConfig dataSourceConfig);
+    long countByDataSourceConfig(DataSourceConfig dataSourceConfig);
     Optional<GitRepositoryEntity> findByDataSourceConfigAndName(
             DataSourceConfig cfg, String name
     );
