@@ -4,7 +4,13 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.model.dto.DataSourceResponseDto;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.exception.BadRequestException;
+import com.juliashtal.devanalytics.exception.ConflictException;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
+import com.juliashtal.devanalytics.exception.NotFoundException;
+import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
+import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.git.service.GitRepositoryService;
@@ -264,6 +270,113 @@ public class DataSourceService {
     public void delete(Long userId, Long id) {
         DataSourceConfig cfg = loadForWrite(userId, id);
         repository.delete(cfg);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Repo attach / detach / list  (T2.2)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Attaches a GitHub repository to an existing datasource. Idempotent: if the repo
+     * is already attached to this DS, returns the existing {@link RepoDto} without creating a duplicate.
+     * Throws {@link ConflictException} (409) if the repo is already tracked by a different datasource.
+     *
+     * @return the attached repo; callers should distinguish 201 (new) vs 200 (existing) by checking
+     *         whether the returned id was newly created.
+     */
+    @Transactional
+    public RepoDto attachRepo(Long userId, Long dataSourceId, String repoFullName, boolean collectIssues) {
+        DataSourceConfig cfg = loadForWrite(userId, dataSourceId);
+        if (cfg.getType() != DataSourceType.GITHUB) {
+            throw new BadRequestException("Only GITHUB datasources support repo attachment");
+        }
+
+        // Idempotency: repo already attached to THIS datasource → return existing
+        var existing = gitRepoRepository.findByRepoFullName(repoFullName);
+        if (existing.isPresent()) {
+            GitRepositoryEntity repo = existing.get();
+            if (repo.getDataSourceConfig().getId().equals(dataSourceId)) {
+                return toRepoDto(repo, userId);
+            }
+            // Repo belongs to a different datasource — explicit attach cannot redirect to another DS.
+            throw new ConflictException(
+                    "Repository '" + repoFullName + "' is already tracked by another datasource (id=" +
+                    repo.getDataSourceConfig().getId() + "). Subscribe to it via the subscription endpoint.");
+        }
+
+        GitRepositoryEntity repo = new GitRepositoryEntity();
+        repo.setDataSourceConfig(cfg);
+        repo.setName(repoFullName);
+        repo.setRepoFullName(repoFullName);
+        repo.setCollectIssues(collectIssues);
+        repo = gitRepoRepository.save(repo);
+
+        UserRepoRegistration reg = new UserRepoRegistration();
+        reg.setUser(userRepository.getReferenceById(userId));
+        reg.setRepository(repo);
+        userRepoRegRepository.save(reg);
+
+        log.info("Attached repo {} to datasource {} for userId={}", repoFullName, dataSourceId, userId);
+        return toRepoDto(repo, userId);
+    }
+
+    /**
+     * Detaches a repository from a datasource. Throws {@link ConflictException} (409) when other
+     * users are still subscribed to the repo — they must unsubscribe first.
+     */
+    @Transactional
+    public void detachRepo(Long userId, Long dataSourceId, Long repoId) {
+        loadForWrite(userId, dataSourceId);
+
+        GitRepositoryEntity repo = gitRepoRepository.findById(repoId)
+                .orElseThrow(() -> new NotFoundException("Repository not found: " + repoId));
+        if (!repo.getDataSourceConfig().getId().equals(dataSourceId)) {
+            throw new ForbiddenException("Repository " + repoId + " does not belong to datasource " + dataSourceId);
+        }
+
+        long otherSubscribers = userRepoRegRepository.countSubscribersExcludingUser(repoId, userId);
+        if (otherSubscribers > 0) {
+            throw new ConflictException(
+                    "Repository has " + otherSubscribers + " active subscription(s). " +
+                    "All subscribers must unsubscribe before the repo can be detached.");
+        }
+
+        gitRepoRepository.delete(repo);
+        log.info("Detached repo {} from datasource {} by userId={}", repoId, dataSourceId, userId);
+    }
+
+    /** Lists all repositories attached to a datasource. Accessible to DS owners and subscribers. */
+    @Transactional(readOnly = true)
+    public List<RepoDto> listReposForDataSource(Long userId, Long dataSourceId) {
+        DataSourceConfig cfg = getForUser(userId, dataSourceId);
+        Set<Long> subscribedIds = new HashSet<>(userRepoRegRepository.findRepoIdsByUserId(userId));
+        return gitRepoRepository.findAllByDataSourceConfig(cfg).stream()
+                .map(r -> toRepoDtoWithSubscribed(r, subscribedIds))
+                .toList();
+    }
+
+    private RepoDto toRepoDto(GitRepositoryEntity r, Long userId) {
+        Set<Long> sub = new HashSet<>(userRepoRegRepository.findRepoIdsByUserId(userId));
+        return toRepoDtoWithSubscribed(r, sub);
+    }
+
+    private RepoDto toRepoDtoWithSubscribed(GitRepositoryEntity r, Set<Long> subscribedIds) {
+        String repoUrl = null;
+        var dsCfg = r.getDataSourceConfig();
+        if (dsCfg != null && dsCfg.getBaseUrl() != null && r.getRepoFullName() != null
+                && dsCfg.getType() == DataSourceType.GITHUB) {
+            repoUrl = githubWebUrl(dsCfg.getBaseUrl()) + "/" + r.getRepoFullName();
+        }
+        return new RepoDto(r.getId(), r.getName(), r.getRepoFullName(), r.getLocalPath(),
+                dsCfg != null ? dsCfg.getId() : null,
+                subscribedIds.contains(r.getId()),
+                repoUrl, r.isCollectIssues(), r.getIssuesLastSyncedAt());
+    }
+
+    private static String githubWebUrl(String apiBaseUrl) {
+        String url = apiBaseUrl.strip().replaceAll("/$", "");
+        if (url.equalsIgnoreCase("https://api.github.com")) return "https://github.com";
+        return url.replaceAll("/api/v3$", "");
     }
 
     /**
