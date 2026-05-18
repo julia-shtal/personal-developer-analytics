@@ -27,9 +27,11 @@ public class DataSourceValidator {
     }
 
     private void validateGitLocal(CreateDataSourceRequest req) {
+        // Mirrors DB chk_gitlocal_path: path IS NOT NULL for GIT_LOCAL.
         if (req.getPath() == null || req.getPath().isBlank()) {
             throw new IllegalArgumentException("Path is required for GIT_LOCAL");
         }
+        // Application-only: verify the path exists on the server filesystem.
         File f = new File(req.getPath());
         if (!f.exists() || !f.isDirectory()) {
             throw new IllegalArgumentException("Path does not exist or is not a directory: " + req.getPath());
@@ -37,9 +39,11 @@ public class DataSourceValidator {
     }
 
     private void validateHttp(CreateDataSourceRequest req) {
+        // Mirrors DB chk_remote_baseurl: base_url IS NOT NULL for non-GIT_LOCAL.
         if (req.getBaseUrl() == null || req.getBaseUrl().isBlank()) {
             throw new IllegalArgumentException("baseUrl is required for HTTP-based data sources");
         }
+        // Application-only: verify the URL is well-formed before storing it.
         try {
             new URL(req.getBaseUrl());
         } catch (MalformedURLException e) {
