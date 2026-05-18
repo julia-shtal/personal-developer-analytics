@@ -138,6 +138,19 @@ class JiraProjectServiceTest {
     }
 
     @Test
+    void findByBaseUrlAndProjectKey_delegates() {
+        JiraProjectEntity p = new JiraProjectEntity();
+        p.setProjectKey("PDA");
+        when(jiraProjectRepository.findByDataSource_BaseUrlAndProjectKey(
+                "https://work.atlassian.net", "PDA")).thenReturn(java.util.Optional.of(p));
+
+        var result = service.findByBaseUrlAndProjectKey("https://work.atlassian.net", "pda");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getProjectKey()).isEqualTo("PDA");
+    }
+
+    @Test
     void subscribeUser_newSubscription_saves() {
         JiraProjectEntity project = new JiraProjectEntity();
         project.setId(5L);

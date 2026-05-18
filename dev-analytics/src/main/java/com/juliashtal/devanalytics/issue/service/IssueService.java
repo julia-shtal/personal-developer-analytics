@@ -41,4 +41,10 @@ public class IssueService {
         long closed = repository.countByRepository_IdAndState(repositoryId, "closed");
         return Map.of("open", open, "closed", closed);
     }
+
+    public Map<String, Long> countByJiraProject(Long projectId) {
+        long total  = repository.countByJiraProject_Id(projectId);
+        long closed = repository.countByJiraProject_IdAndClosedAtIsNotNull(projectId);
+        return Map.of("open", total - closed, "closed", closed);
+    }
 }

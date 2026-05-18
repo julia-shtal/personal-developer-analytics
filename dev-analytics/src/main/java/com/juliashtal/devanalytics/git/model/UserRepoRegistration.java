@@ -1,6 +1,5 @@
 package com.juliashtal.devanalytics.git.model;
 
-import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.user.model.User;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -24,9 +23,4 @@ public class UserRepoRegistration {
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "repo_id")
     private GitRepositoryEntity repository;
-
-    /** The data source through which this subscription was created; null for manual subscriptions. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "data_source_id")
-    private DataSourceConfig dataSourceConfig;
 }

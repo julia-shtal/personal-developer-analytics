@@ -11,4 +11,6 @@ export const issuesApi = {
     api.get<JiraProjectDto[]>('/jira-projects/available', { params: { dataSourceId } }),
   getCount: (repoId: number) =>
     api.get<IssueCountDto>('/issues/count', { params: { repoId } }),
+  getJiraProjectCount: (projectId: number) =>
+    api.get<IssueCountDto>(`/issues/jira/${projectId}/count`),
 };

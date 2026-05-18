@@ -52,10 +52,26 @@ public class DataSourceService {
     }
 
     @Transactional
-    public DataSourceConfig create(Long userId, CreateDataSourceRequest req) {
+    public DataSourceResponseDto create(Long userId, CreateDataSourceRequest req) {
         validator.validateCreate(req);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
+
+        // If the Jira project already exists (same base URL + key), subscribe this user to it
+        // instead of creating a duplicate datasource — mirrors the GitHub repo subscription model.
+        if (req.getType() == DataSourceType.JIRA
+                && req.getProjectKey() != null && !req.getProjectKey().isBlank()
+                && req.getBaseUrl() != null) {
+            var existingProject = jiraProjectService.findByBaseUrlAndProjectKey(
+                    req.getBaseUrl(), req.getProjectKey());
+            if (existingProject.isPresent()) {
+                jiraProjectService.subscribeUser(existingProject.get().getId(), userId);
+                log.info("User {} subscribed to existing Jira project {} on {}",
+                        userId, req.getProjectKey(), req.getBaseUrl());
+                // Convert inside the transaction so lazy proxies are accessible.
+                return toDto(existingProject.get().getDataSource(), false);
+            }
+        }
 
         // If the GitHub repo is already registered in the system, do not create a new DS.
         // Instead, subscribe the user to the existing repo under its original DS so it appears
@@ -66,7 +82,8 @@ public class DataSourceService {
             if (existingRepo.isPresent()) {
                 Long existingDsId = existingRepo.get().getDataSourceConfig().getId();
                 gitHubRepositoryService.registerGitHubRepo(userId, existingDsId, req.getRepoFullName());
-                return existingRepo.get().getDataSourceConfig(); // No new DS created.
+                // Convert inside the transaction so lazy proxies are accessible.
+                return toDto(existingRepo.get().getDataSourceConfig(), false);
             }
         }
 
@@ -93,7 +110,6 @@ public class DataSourceService {
         // Auto-register a GitRepositoryEntity immediately so the user doesn't need
         // a separate step to link the data source to a repository.
         if (saved.getType() == DataSourceType.GIT_LOCAL) {
-            // For local repos the path is the repo directory — register it automatically.
             var localReq = new com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest();
             localReq.setDataSourceId(saved.getId());
             localReq.setName(saved.getName());
@@ -101,7 +117,6 @@ public class DataSourceService {
             try {
                 gitRepositoryService.registerLocalRepo(userId, localReq);
             } catch (Exception e) {
-                // Non-fatal: DS is saved, repo registration failed (e.g. path issue)
                 log.warn("Auto-registration of local repo failed: {}", e.getMessage());
             }
         } else if (saved.getType() == DataSourceType.GITHUB
@@ -120,7 +135,7 @@ public class DataSourceService {
             }
         }
 
-        return saved;
+        return toDto(saved, true);
     }
 
     @Transactional(readOnly = true)
@@ -152,11 +167,16 @@ public class DataSourceService {
             }
         }
 
-        // DSs the user subscribed to via an existing repo (not owned by them, not team-scoped).
+        // DSs the user subscribed to via a repo or Jira project (not owned, not team-scoped).
         // These appear as read-only entries: user can sync but cannot delete.
         Set<Long> addedDsIds = new HashSet<>();
         result.forEach(dto -> addedDsIds.add(dto.id()));
         for (DataSourceConfig cfg : userRepoRegRepository.findDataSourceConfigsByUserId(userId)) {
+            if (addedDsIds.add(cfg.getId())) {
+                result.add(toDto(cfg, false));
+            }
+        }
+        for (DataSourceConfig cfg : jiraProjectService.findSubscribedDataSourceConfigs(userId)) {
             if (addedDsIds.add(cfg.getId())) {
                 result.add(toDto(cfg, false));
             }
@@ -196,8 +216,11 @@ public class DataSourceService {
             return teamCfg;
         }
 
-        // Allow read access (e.g. for sync) if the user subscribed to a repo in this DS
+        // Allow read access (e.g. for sync) if the user subscribed to a repo or Jira project in this DS
         if (userRepoRegRepository.existsByUserIdAndDataSourceConfig_Id(userId, id)) {
+            return teamCfg;
+        }
+        if (jiraProjectService.hasSubscriptionForDataSource(userId, id)) {
             return teamCfg;
         }
 
