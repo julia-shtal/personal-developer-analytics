@@ -19,8 +19,9 @@ public class CacheConfig {
     public CacheManager cacheManager() {
         SimpleCacheManager manager = new SimpleCacheManager();
         manager.setCaches(List.of(
-                caffeineCache("ai_summaries",          6, TimeUnit.HOURS,   500),
-                caffeineCache("github-discover-repos", 60, TimeUnit.SECONDS, 200)
+                caffeineCache("ai_summaries",             6, TimeUnit.HOURS,   500),
+                caffeineCache("github-discover-repos",   60, TimeUnit.SECONDS, 200),
+                caffeineCache("jira-discover-projects",  60, TimeUnit.SECONDS, 200)
         ));
         return manager;
     }

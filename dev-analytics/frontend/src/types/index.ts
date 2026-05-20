@@ -96,6 +96,20 @@ export interface RepoDto {
   issuesLastSyncedAt?: string;
 }
 
+export interface DiscoveredRepoDto {
+  fullName: string;
+  /** Serialised as "private" by the backend */
+  private: boolean;
+  defaultBranch: string;
+  alreadyAttached: boolean;
+}
+
+export interface DiscoveredProjectDto {
+  projectKey: string;
+  projectName: string;
+  alreadyAttached: boolean;
+}
+
 export interface IssueCountDto {
   open: number;
   closed: number;
