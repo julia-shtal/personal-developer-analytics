@@ -85,6 +85,7 @@ public class GitHubIssuesCollector {
 
         issue.setDataSource(config);
         issue.setRepository(repo);
+        issue.setRepoName(repo.getRepoFullName());
         issue.setExternalId(externalId);
 
         issue.setTitle(gi.getTitle());
