@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.exception.ConflictException;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.exception.NotFoundException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
@@ -306,6 +307,7 @@ public class DataSourceService {
 
         GitRepositoryEntity repo = new GitRepositoryEntity();
         repo.setDataSourceConfig(cfg);
+        repo.setRepoType(RepoType.GITHUB);
         repo.setName(repoFullName);
         repo.setRepoFullName(repoFullName);
         repo.setCollectIssues(collectIssues);
@@ -363,8 +365,8 @@ public class DataSourceService {
     private RepoDto toRepoDtoWithSubscribed(GitRepositoryEntity r, Set<Long> subscribedIds) {
         String repoUrl = null;
         var dsCfg = r.getDataSourceConfig();
-        if (dsCfg != null && dsCfg.getBaseUrl() != null && r.getRepoFullName() != null
-                && dsCfg.getType() == DataSourceType.GITHUB) {
+        if (dsCfg != null && dsCfg.getBaseUrl() != null
+                && r.getRepoType() == RepoType.GITHUB) {
             repoUrl = githubWebUrl(dsCfg.getBaseUrl()) + "/" + r.getRepoFullName();
         }
         return new RepoDto(r.getId(), r.getName(), r.getRepoFullName(), r.getLocalPath(),
