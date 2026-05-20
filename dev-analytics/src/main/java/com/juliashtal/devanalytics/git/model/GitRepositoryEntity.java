@@ -8,6 +8,29 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 
 
+/**
+ * Represents a single Git repository tracked by the platform.
+ *
+ * <h3>Content-Addressed Access Model (ADR-004)</h3>
+ * <p>The platform uses a <em>canonical-row</em> model for GitHub repositories:
+ * <ul>
+ *   <li><strong>One canonical commit history per upstream repository.</strong>
+ *       {@code repo_full_name} carries a global {@code UNIQUE} constraint so the
+ *       same {@code owner/repo} is stored exactly once, regardless of how many
+ *       users track it. This mirrors Git's content-addressed object store —
+ *       identical content has one identity.</li>
+ *   <li><strong>Cross-user access via {@link UserRepoRegistration}, not row duplication.</strong>
+ *       When a second user wants to track a repository that is already registered under
+ *       another user's datasource, the attach endpoint inserts a
+ *       {@code user_repo_registrations} row instead of duplicating
+ *       {@code git_repositories} or {@code git_commits}.</li>
+ *   <li><strong>{@code git_commits.hash UNIQUE} enforces deduplication at the storage layer.</strong>
+ *       Even if the canonical-row check were bypassed, duplicate commits cannot be
+ *       inserted — consistent with how Git identifies objects by their SHA-1 hash.</li>
+ * </ul>
+ *
+ * <p>See {@code docs/adr/ADR-004-cross-ds-repo-sharing.md} for the full decision record.
+ */
 @Data
 @Entity
 @Table(
@@ -42,10 +65,12 @@ public class GitRepositoryEntity {
     @Column(nullable = false)
     private RepoType repoType;
 
-    // Globally unique "owner/repo" identifier for GitHub repos (null for local repos).
-    // The UNIQUE constraint is intentional (see ADR-004): one canonical row per upstream repo
-    // prevents duplicate commit ingestion. Cross-datasource sharing is handled via
-    // UserRepoRegistration subscriptions, not by duplicating this row.
+    /**
+     * Globally unique {@code "owner/repo"} identifier for GitHub repos; {@code null} for local repos.
+     * The {@code UNIQUE} constraint is intentional (ADR-004): one canonical row per upstream
+     * repository prevents duplicate commit ingestion. Cross-datasource sharing is handled via
+     * {@link UserRepoRegistration} subscriptions — never by duplicating this row.
+     */
     @Column(unique = true)
     private String repoFullName;
 

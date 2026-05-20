@@ -31,5 +31,20 @@ public interface GitRepositoryEntityRepository extends JpaRepository<GitReposito
      */
     @Query("SELECT r FROM GitRepositoryEntity r JOIN FETCH r.dataSourceConfig WHERE r.id IN :ids")
     List<GitRepositoryEntity> findAllByIdWithDataSourceConfig(@Param("ids") Collection<Long> ids);
+
+    // ── user_accessible_repos view queries (T4.3) ─────────────────────────────
+
+    /** All repo IDs the user can access across owned, subscribed, and team paths. */
+    @Query(value = "SELECT DISTINCT repo_id FROM user_accessible_repos WHERE user_id = :userId",
+           nativeQuery = true)
+    List<Long> findAccessibleRepoIds(@Param("userId") Long userId);
+
+    /** Repo IDs accessible to the user that belong to a specific datasource. */
+    @Query(value = """
+           SELECT DISTINCT repo_id FROM user_accessible_repos
+           WHERE user_id = :userId AND data_source_id = :dataSourceId
+           """, nativeQuery = true)
+    List<Long> findAccessibleRepoIdsByDataSource(@Param("userId") Long userId,
+                                                 @Param("dataSourceId") Long dataSourceId);
 }
 
