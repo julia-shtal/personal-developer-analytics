@@ -4,23 +4,32 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.io.Serializable;
+
 /**
- * ADR-005 option C: maps a Jira project to a Git repository so that Jira
- * issues count toward that repository's metric aggregations (T4.2 wires this up).
+ * Link table between a Jira project and a Git repository.
+ * Enables the metric engine to count Jira issues toward the mapped repository's
+ * issue metrics (ADR-005 Option C; table created in V32).
  */
 @Data
 @Entity
 @Table(name = "jira_project_repo_mappings")
-@IdClass(JiraProjectRepoMappingId.class)
+@IdClass(JiraProjectRepoMapping.PK.class)
 public class JiraProjectRepoMapping {
 
     @Id
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "jira_project_id")
     private JiraProjectEntity jiraProject;
 
     @Id
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "repository_id")
     private GitRepositoryEntity repository;
+
+    @Data
+    public static class PK implements Serializable {
+        private Long jiraProject;
+        private Long repository;
+    }
 }
