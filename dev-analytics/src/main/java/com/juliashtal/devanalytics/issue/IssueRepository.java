@@ -32,50 +32,58 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     // -------------------------------------------------------------------------
     // Team-repo variants: filter by explicit repo IDs, no author filter.
     // Issues are project-level; all team members share them.
+    //
+    // ADR-005 Option C: COALESCE(i.repository_id, rm.repository_id) routes both
+    // GitHub issues (direct repository_id FK) and Jira issues (via
+    // jira_project_repo_mappings) through the same repo-scoped aggregation.
+    // Native SQL is used because JPQL cannot express the LEFT JOIN + COALESCE
+    // pattern across nullable FKs from two different sources cleanly.
     // -------------------------------------------------------------------------
 
-    @Query("""
-    select date(i.createdAt) as day,
-           r.id              as repoId,
-           count(i.id)       as createdCount
-    from IssueEntity i
-    join i.repository r
-    where r.id IN :repoIds
-      and i.createdAt between :from and :to
-    group by date(i.createdAt), r.id
-    order by day, repoId
-    """)
+    @Query(value = """
+    SELECT date(i.created_at)                                        AS day,
+           COALESCE(i.repository_id, rm.repository_id)              AS repoId,
+           count(i.id)                                               AS createdCount
+    FROM   issues i
+    LEFT   JOIN jira_project_repo_mappings rm ON rm.jira_project_id = i.jira_project_id
+    WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
+      AND  i.created_at BETWEEN :from AND :to
+    GROUP  BY date(i.created_at), COALESCE(i.repository_id, rm.repository_id)
+    ORDER  BY day, repoId
+    """, nativeQuery = true)
     List<Object[]> aggregateIssuesCreatedDailyByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);
 
-    @Query("""
-    select date(i.closedAt) as day,
-           r.id             as repoId,
-           count(i.id)      as closedCount
-    from IssueEntity i
-    join i.repository r
-    where r.id IN :repoIds
-      and i.closedAt is not null
-      and i.closedAt between :from and :to
-    group by date(i.closedAt), r.id
-    order by day, repoId
-    """)
+    @Query(value = """
+    SELECT date(i.closed_at)                                         AS day,
+           COALESCE(i.repository_id, rm.repository_id)              AS repoId,
+           count(i.id)                                               AS closedCount
+    FROM   issues i
+    LEFT   JOIN jira_project_repo_mappings rm ON rm.jira_project_id = i.jira_project_id
+    WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
+      AND  i.closed_at IS NOT NULL
+      AND  i.closed_at BETWEEN :from AND :to
+    GROUP  BY date(i.closed_at), COALESCE(i.repository_id, rm.repository_id)
+    ORDER  BY day, repoId
+    """, nativeQuery = true)
     List<Object[]> aggregateIssuesClosedDailyByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);
 
-    @Query("""
-    select r.id, i.createdAt, i.closedAt
-    from IssueEntity i
-    join i.repository r
-    where r.id IN :repoIds
-      and i.createdAt is not null
-      and i.closedAt is not null
-      and i.closedAt between :from and :to
-    """)
+    @Query(value = """
+    SELECT COALESCE(i.repository_id, rm.repository_id) AS repoId,
+           i.created_at                                AS createdAt,
+           i.closed_at                                 AS closedAt
+    FROM   issues i
+    LEFT   JOIN jira_project_repo_mappings rm ON rm.jira_project_id = i.jira_project_id
+    WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
+      AND  i.created_at IS NOT NULL
+      AND  i.closed_at IS NOT NULL
+      AND  i.closed_at BETWEEN :from AND :to
+    """, nativeQuery = true)
     List<Object[]> findIssueLeadTimesByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,

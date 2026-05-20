@@ -5,8 +5,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.exception.JiraException;
-import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.issue.IssueRepository;
+import com.juliashtal.devanalytics.issue.model.IssueEntity;
+import com.juliashtal.devanalytics.issue.model.IssueSource;
 import com.juliashtal.devanalytics.issue.model.JiraSearchResponse;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
@@ -162,6 +163,8 @@ public class JiraCollector {
                 .orElseGet(IssueEntity::new);
 
         issue.setJiraProject(project);
+        issue.setSource(IssueSource.JIRA);
+        issue.setSourceContext(project.getProjectKey());
         issue.setExternalId(externalId);
 
         JiraSearchResponse.Fields f = jiraIssue.getFields();

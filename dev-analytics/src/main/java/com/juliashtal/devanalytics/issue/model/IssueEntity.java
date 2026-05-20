@@ -32,11 +32,19 @@ public class IssueEntity {
     @Column(name = "external_id", nullable = false)
     private String externalId;   // JIRA: "KEY-123"; GitHub: "owner/repo#123"
 
+    // Explicit source discriminator — set on every save path (see ADR-005).
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private IssueSource source;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "repository_id")
     private GitRepositoryEntity repository;
 
-    private String repoName;
+    // Snapshot label: repo full name for GITHUB, project key for JIRA.
+    // Named source_context (not repo_name) because Jira issues aren't repo-scoped.
+    @Column(name = "source_context")
+    private String sourceContext;
 
     @Column(nullable = false)
     private String title;
