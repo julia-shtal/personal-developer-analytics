@@ -7,6 +7,7 @@ import lombok.Data;
 import java.time.Instant;
 import java.time.LocalDateTime;
 
+
 @Data
 @Entity
 @Table(
@@ -35,7 +36,16 @@ public class GitRepositoryEntity {
     @Column(nullable = true)
     private String localPath;
 
-    // for GitHub repos: "owner/repo" — globally unique, used for idempotent registration
+    // Explicit type discriminator — set on every save path; never inferred from null checks.
+    // See ADR-003 for the decision to use a discriminator column over split tables.
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private RepoType repoType;
+
+    // Globally unique "owner/repo" identifier for GitHub repos (null for local repos).
+    // The UNIQUE constraint is intentional (see ADR-004): one canonical row per upstream repo
+    // prevents duplicate commit ingestion. Cross-datasource sharing is handled via
+    // UserRepoRegistration subscriptions, not by duplicating this row.
     @Column(unique = true)
     private String repoFullName;
 

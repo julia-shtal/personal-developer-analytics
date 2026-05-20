@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
@@ -131,8 +132,8 @@ public class RepoService {
                 .map(r -> {
                     String repoUrl = null;
                     var dsCfg = r.getDataSourceConfig();
-                    if (dsCfg != null && dsCfg.getBaseUrl() != null && r.getRepoFullName() != null
-                            && dsCfg.getType() == DataSourceType.GITHUB) {
+                    if (dsCfg != null && dsCfg.getBaseUrl() != null
+                            && r.getRepoType() == RepoType.GITHUB) {
                         repoUrl = toWebBaseUrl(dsCfg.getBaseUrl()) + "/" + r.getRepoFullName();
                     }
                     return new RepoDto(
