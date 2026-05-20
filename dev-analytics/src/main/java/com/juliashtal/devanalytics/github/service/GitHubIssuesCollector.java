@@ -4,8 +4,9 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.exception.GitHubException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.issue.IssueRepository;
+import com.juliashtal.devanalytics.issue.model.IssueEntity;
+import com.juliashtal.devanalytics.issue.model.IssueSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.kohsuke.github.*;
@@ -85,7 +86,8 @@ public class GitHubIssuesCollector {
 
         issue.setDataSource(config);
         issue.setRepository(repo);
-        issue.setRepoName(repo.getRepoFullName());
+        issue.setSource(IssueSource.GITHUB);
+        issue.setSourceContext(repo.getRepoFullName());
         issue.setExternalId(externalId);
 
         issue.setTitle(gi.getTitle());
