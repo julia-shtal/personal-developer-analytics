@@ -9,6 +9,8 @@ import {
 import { datasourcesApi, type SyncStatus } from '@/api/datasources';
 import { issuesApi } from '@/api/issues';
 import { reposApi } from '@/api/repos';
+import { DiscoverReposModal } from './DiscoverReposModal';
+import { DiscoverProjectsModal } from './DiscoverProjectsModal';
 import { teamsApi } from '@/api/teams';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -249,10 +251,13 @@ function RepoIssuesSection({ repo, isGitHub }: { repo: RepoDto; isGitHub: boolea
 function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; sourceType: DataSourceType }) {
   const qc = useQueryClient();
   const isGitHub = sourceType === 'GITHUB';
+  const [showModal, setShowModal] = useState(false);
+  const [confirmDetachId, setConfirmDetachId] = useState<number | null>(null);
+  const [detachError, setDetachError] = useState<string | null>(null);
 
   const { data: repos, isLoading } = useQuery({
     queryKey: ['repos', dataSourceId],
-    queryFn: () => reposApi.list(dataSourceId).then((r) => r.data),
+    queryFn: () => datasourcesApi.repos.list(dataSourceId).then((r) => r.data),
   });
 
   const subscribeMutation = useMutation({
@@ -271,70 +276,156 @@ function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; source
     },
   });
 
+  const detachMutation = useMutation({
+    mutationFn: (repoId: number) => datasourcesApi.repos.detach(dataSourceId, repoId),
+    onSuccess: () => {
+      setConfirmDetachId(null);
+      setDetachError(null);
+      qc.invalidateQueries({ queryKey: ['repos', dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['datasources'] });
+    },
+    onError: (err) => {
+      setConfirmDetachId(null);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setDetachError(msg ?? 'Failed to remove repository.');
+    },
+  });
+
   if (isLoading) return <p className="text-xs text-gray-400 py-2">Loading repos…</p>;
-  if (!repos?.length) return <p className="text-xs text-gray-400 py-2">No repositories registered under this data source.</p>;
 
   return (
-    <ul className="space-y-1.5">
-      {repos.map((repo: RepoDto) => (
-        <li key={repo.id} className="rounded-md bg-gray-50 px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <BookOpen className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-              <span className="text-xs font-medium text-gray-800 truncate">
-                {repo.repoFullName ?? repo.name}
-              </span>
-              {repo.subscribed && (
-                <Badge color="violet" className="text-[10px] px-1.5 py-0">subscribed</Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {repo.subscribed ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => unsubscribeMutation.mutate(repo.id)}
-                  loading={unsubscribeMutation.isPending}
-                  className="flex-shrink-0 text-violet-500 hover:text-red-600 text-xs"
-                  title="Unsubscribe"
-                >
-                  <UserMinus className="h-3.5 w-3.5" />
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => subscribeMutation.mutate(repo.id)}
-                  loading={subscribeMutation.isPending}
-                  className="flex-shrink-0 text-gray-400 hover:text-violet-600 text-xs"
-                  title="Subscribe"
-                >
-                  <UserCheck className="h-3.5 w-3.5" />
-                </Button>
-              )}
-              {repo.repoUrl && (
-                <a
-                  href={repo.repoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1 rounded text-gray-400 hover:text-violet-600 transition-colors"
-                  title="Open in browser"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              )}
-            </div>
-          </div>
-          <RepoIssuesSection repo={repo} isGitHub={isGitHub} />
-        </li>
-      ))}
-    </ul>
+    <>
+      {isGitHub && (
+        <div className="flex justify-end mb-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowModal(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Add repository
+          </Button>
+        </div>
+      )}
+
+      {detachError && (
+        <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-2">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+          {detachError}
+        </div>
+      )}
+
+      {!repos?.length ? (
+        <p className="text-xs text-gray-400 py-2">
+          {isGitHub
+            ? 'No repositories attached. Use "Add repository" to get started.'
+            : 'No repositories registered under this data source.'}
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {repos.map((repo: RepoDto) => (
+            <li key={repo.id} className="rounded-md bg-gray-50 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <BookOpen className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                  <span className="text-xs font-medium text-gray-800 truncate">
+                    {repo.repoFullName ?? repo.name}
+                  </span>
+                  {repo.subscribed && (
+                    <Badge color="violet" className="text-[10px] px-1.5 py-0">subscribed</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {repo.subscribed ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => unsubscribeMutation.mutate(repo.id)}
+                      loading={unsubscribeMutation.isPending}
+                      className="flex-shrink-0 text-violet-500 hover:text-red-600 text-xs"
+                      title="Unsubscribe"
+                    >
+                      <UserMinus className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => subscribeMutation.mutate(repo.id)}
+                      loading={subscribeMutation.isPending}
+                      className="flex-shrink-0 text-gray-400 hover:text-violet-600 text-xs"
+                      title="Subscribe"
+                    >
+                      <UserCheck className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {repo.repoUrl && (
+                    <a
+                      href={repo.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 rounded text-gray-400 hover:text-violet-600 transition-colors"
+                      title="Open in browser"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                  {confirmDetachId === repo.id ? (
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] text-red-500">Remove?</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => detachMutation.mutate(repo.id)}
+                        loading={detachMutation.isPending}
+                        className="text-red-600 hover:text-red-700 text-[11px] px-1.5"
+                      >
+                        Yes
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmDetachId(null)}
+                        className="text-gray-400 text-[11px] px-1.5"
+                      >
+                        No
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setDetachError(null); setConfirmDetachId(repo.id); }}
+                      className="text-gray-400 hover:text-red-500"
+                      title="Remove repository"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <RepoIssuesSection repo={repo} isGitHub={isGitHub} />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {showModal && (
+        <DiscoverReposModal dsId={dataSourceId} onClose={() => setShowModal(false)} />
+      )}
+    </>
   );
 }
 
 // ─── Jira projects sub-panel ──────────────────────────────────────────────────
 
-function JiraProjectRow({ p, syncing }: { p: TrackedJiraProjectDto; syncing: boolean }) {
+function JiraProjectRow({
+  p, syncing, onRequestDetach, isConfirming, onConfirmDetach, onCancelDetach, isDetaching,
+}: {
+  p: TrackedJiraProjectDto;
+  syncing: boolean;
+  onRequestDetach: () => void;
+  isConfirming: boolean;
+  onConfirmDetach: () => void;
+  onCancelDetach: () => void;
+  isDetaching: boolean;
+}) {
   const { data: counts } = useQuery({
     queryKey: ['jira-issue-count', p.id],
     queryFn: () => issuesApi.getJiraProjectCount(p.id).then((r) => r.data),
@@ -354,9 +445,9 @@ function JiraProjectRow({ p, syncing }: { p: TrackedJiraProjectDto; syncing: boo
           </span>
           <span className="text-xs text-gray-700 truncate">{p.projectName ?? p.projectKey}</span>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {counts && (counts.open > 0 || counts.closed > 0) && (
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-400 mr-1">
               <span className="text-emerald-600 font-medium">{counts.open.toLocaleString()}</span>
               <span> open</span>
               <span className="mx-0.5 text-gray-300">/</span>
@@ -374,6 +465,38 @@ function JiraProjectRow({ p, syncing }: { p: TrackedJiraProjectDto; syncing: boo
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           )}
+          {isConfirming ? (
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-red-500">Remove?</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onConfirmDetach}
+                loading={isDetaching}
+                className="text-red-600 hover:text-red-700 text-[11px] px-1.5"
+              >
+                Yes
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onCancelDetach}
+                className="text-gray-400 text-[11px] px-1.5"
+              >
+                No
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRequestDetach}
+              className="text-gray-400 hover:text-red-500"
+              title="Remove project"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
     </li>
@@ -381,22 +504,75 @@ function JiraProjectRow({ p, syncing }: { p: TrackedJiraProjectDto; syncing: boo
 }
 
 function JiraProjectsPanel({ dataSourceId, syncing }: { dataSourceId: number; syncing: boolean }) {
+  const qc = useQueryClient();
+  const [showModal, setShowModal] = useState(false);
+  const [confirmDetachId, setConfirmDetachId] = useState<number | null>(null);
+  const [detachError, setDetachError] = useState<string | null>(null);
+
   const { data: projects, isLoading, isError } = useQuery({
     queryKey: ['jira-projects', dataSourceId],
-    queryFn: () => issuesApi.listTrackedJiraProjects(dataSourceId).then((r) => r.data),
+    queryFn: () => datasourcesApi.projects.list(dataSourceId).then((r) => r.data),
     retry: false,
+  });
+
+  const detachMutation = useMutation({
+    mutationFn: (projectId: number) => datasourcesApi.projects.detach(dataSourceId, projectId),
+    onSuccess: () => {
+      setConfirmDetachId(null);
+      setDetachError(null);
+      qc.invalidateQueries({ queryKey: ['jira-projects', dataSourceId] });
+    },
+    onError: (err) => {
+      setConfirmDetachId(null);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setDetachError(msg ?? 'Failed to remove project.');
+    },
   });
 
   if (isLoading) return <p className="text-xs text-gray-400 py-2">Loading projects…</p>;
   if (isError) return <p className="text-xs text-red-400 py-2">Could not load Jira projects.</p>;
-  if (!projects?.length) return <p className="text-xs text-gray-400 py-2">No tracked Jira projects.</p>;
 
   return (
-    <ul className="space-y-1.5">
-      {projects.map((p: TrackedJiraProjectDto) => (
-        <JiraProjectRow key={p.id} p={p} syncing={syncing} />
-      ))}
-    </ul>
+    <>
+      <div className="flex justify-end mb-2">
+        <Button variant="secondary" size="sm" onClick={() => setShowModal(true)}>
+          <Plus className="h-3.5 w-3.5" />
+          Add project
+        </Button>
+      </div>
+
+      {detachError && (
+        <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-2">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+          {detachError}
+        </div>
+      )}
+
+      {!projects?.length ? (
+        <p className="text-xs text-gray-400 py-2">
+          No tracked Jira projects. Use "Add project" to get started.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {projects.map((p: TrackedJiraProjectDto) => (
+            <JiraProjectRow
+              key={p.id}
+              p={p}
+              syncing={syncing}
+              onRequestDetach={() => { setDetachError(null); setConfirmDetachId(p.id); }}
+              isConfirming={confirmDetachId === p.id}
+              onConfirmDetach={() => detachMutation.mutate(p.id)}
+              onCancelDetach={() => setConfirmDetachId(null)}
+              isDetaching={detachMutation.isPending && confirmDetachId === p.id}
+            />
+          ))}
+        </ul>
+      )}
+
+      {showModal && (
+        <DiscoverProjectsModal dsId={dataSourceId} onClose={() => setShowModal(false)} />
+      )}
+    </>
   );
 }
 

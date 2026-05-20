@@ -1,5 +1,5 @@
 import api from '@/lib/api';
-import type { DataSourceConfig, CreateDataSourceRequest } from '@/types';
+import type { DataSourceConfig, CreateDataSourceRequest, RepoDto, DiscoveredRepoDto, TrackedJiraProjectDto, DiscoveredProjectDto } from '@/types';
 
 export interface UpdateDataSourceRequest {
   name?: string;
@@ -42,4 +42,26 @@ export const datasourcesApi = {
   collect: (id: number) => api.post<void>(`/datasources/${id}/collect`),
   collectStatus: (id: number) => api.get<SyncStatus>(`/datasources/${id}/collect/status`),
   activeCollectStatuses: () => api.get<Record<string, SyncStatus>>('/datasources/collect/status/active'),
+
+  repos: {
+    list: (dsId: number) =>
+      api.get<RepoDto[]>(`/datasources/${dsId}/repos`),
+    attach: (dsId: number, repoFullName: string, collectIssues = false) =>
+      api.post<RepoDto>(`/datasources/${dsId}/repos`, { repoFullName, collectIssues }),
+    detach: (dsId: number, repoId: number) =>
+      api.delete(`/datasources/${dsId}/repos/${repoId}`),
+    discover: (dsId: number) =>
+      api.get<DiscoveredRepoDto[]>(`/datasources/${dsId}/repos/discover-repos`),
+  },
+
+  projects: {
+    list: (dsId: number) =>
+      api.get<TrackedJiraProjectDto[]>(`/datasources/${dsId}/projects`),
+    attach: (dsId: number, projectKey: string, projectName?: string) =>
+      api.post<TrackedJiraProjectDto>(`/datasources/${dsId}/projects`, { projectKey, projectName }),
+    detach: (dsId: number, projectId: number) =>
+      api.delete(`/datasources/${dsId}/projects/${projectId}`),
+    discover: (dsId: number) =>
+      api.get<DiscoveredProjectDto[]>(`/datasources/${dsId}/projects/discover-projects`),
+  },
 };
