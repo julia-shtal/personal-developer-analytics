@@ -1,8 +1,5 @@
 package com.juliashtal.devanalytics.git.service;
 
-import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
-import com.juliashtal.devanalytics.datasource.model.DataSourceType;
-import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
@@ -10,9 +7,7 @@ import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.security.SecurityUtils;
-import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
-import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,8 +20,6 @@ public class RepoService {
 
     private final GitRepositoryEntityRepository gitRepoRepository;
     private final UserRepoRegistrationRepository userRepoRegRepository;
-    private final DataSourceConfigRepository dataSourceConfigRepository;
-    private final TeamRepository teamRepository;
     private final UserRepository userRepository;
 
     public GitRepositoryEntity getById(Long repoId) {
@@ -37,40 +30,17 @@ public class RepoService {
     public List<RepoDto> listAccessible(Long dataSourceId) {
         Long userId = SecurityUtils.getCurrentUserId();
 
+        // Single view query replaces the three-path merge (owned + subscribed + team).
+        // See V38 migration and ADR-004 for the view design.
+        List<Long> repoIds = dataSourceId != null
+                ? gitRepoRepository.findAccessibleRepoIdsByDataSource(userId, dataSourceId)
+                : gitRepoRepository.findAccessibleRepoIds(userId);
+
+        if (repoIds.isEmpty()) return List.of();
+
         Set<Long> subscribedIds = new HashSet<>(userRepoRegRepository.findRepoIdsByUserId(userId));
-
-        // Collect repos from own data sources + team data sources
-        List<GitRepositoryEntity> repos = new ArrayList<>();
-        Set<Long> seenRepoIds = new HashSet<>();
-
-        for (DataSourceConfig cfg : dataSourceConfigRepository.findAllByUserId(userId)) {
-            if (dataSourceId != null && !cfg.getId().equals(dataSourceId)) continue;
-            for (GitRepositoryEntity repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
-                if (seenRepoIds.add(repo.getId())) repos.add(repo);
-            }
-        }
-
-        Set<Long> visitedTeamIds = new HashSet<>();
-        List<Team> teams = new ArrayList<>();
-        teams.addAll(teamRepository.findByMembersId(userId));
-        teams.addAll(teamRepository.findByManagerId(userId));
-        for (Team team : teams) {
-            if (!visitedTeamIds.add(team.getId())) continue;
-            for (DataSourceConfig cfg : dataSourceConfigRepository.findAllByTeam(team)) {
-                if (dataSourceId != null && !cfg.getId().equals(dataSourceId)) continue;
-                for (GitRepositoryEntity repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
-                    if (seenRepoIds.add(repo.getId())) repos.add(repo);
-                }
-            }
-        }
-
-        Set<Long> unseenSubscribed = filterUnseenSubscribed(dataSourceId, userId, seenRepoIds, subscribedIds);
-        if (!unseenSubscribed.isEmpty()) {
-            for (GitRepositoryEntity repo : gitRepoRepository.findAllByIdWithDataSourceConfig(unseenSubscribed)) {
-                if (seenRepoIds.add(repo.getId())) repos.add(repo);
-            }
-        }
-       return getDtos(repos, subscribedIds);
+        List<GitRepositoryEntity> repos = gitRepoRepository.findAllByIdWithDataSourceConfig(repoIds);
+        return getDtos(repos, subscribedIds);
     }
 
     public void subscribe(Long repoId) {
@@ -151,25 +121,4 @@ public class RepoService {
                 .toList();
     }
 
-    private Set<Long> filterUnseenSubscribed(Long dataSourceId, Long userId, Set<Long> seenRepoIds, Set<Long> subscribedIds) {
-        // Include repos the user is subscribed to that weren't surfaced by the data-source loops.
-        // This covers the case where registerGitHubRepo found an existing repo under *another*
-        // user's data source: a UserRepoRegistration was created (with data_source_id set to the
-        // user's own data source), but the repo's dataSourceConfig still points to the original
-        // owner's data source — so findAllByDataSourceConfig above returns nothing for the current
-        // user's config.
-        // When filtering by a specific data source, only include repos whose subscription was
-        // created through that exact data source to prevent repos from other data sources bleeding
-        // across.
-        Set<Long> unseenSubscribed;
-        if (dataSourceId != null) {
-            unseenSubscribed = new HashSet<>(
-                    userRepoRegRepository.findRepoIdsByUserIdAndDataSourceId(userId, dataSourceId));
-            unseenSubscribed.removeAll(seenRepoIds);
-        } else {
-            unseenSubscribed = new HashSet<>(subscribedIds);
-            unseenSubscribed.removeAll(seenRepoIds);
-        }
-        return unseenSubscribed;
-    }
 }
