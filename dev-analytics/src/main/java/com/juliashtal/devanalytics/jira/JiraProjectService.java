@@ -1,21 +1,27 @@
 package com.juliashtal.devanalytics.jira;
 
-import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.datasource.model.DataSourceType;
+import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.exception.BadRequestException;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.exception.JiraException;
+import com.juliashtal.devanalytics.exception.NotFoundException;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.jira.model.UserProjectRegistration;
+import com.juliashtal.devanalytics.jira.model.dto.DiscoveredProjectDto;
+import com.juliashtal.devanalytics.jira.model.dto.JiraProjectResponseDto;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +32,8 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +46,7 @@ public class JiraProjectService {
     private final JiraProjectRepository jiraProjectRepository;
     private final UserProjectRegistrationRepository userProjectRegistrationRepository;
     private final UserRepository userRepository;
+    private final DataSourceConfigRepository dataSourceConfigRepository;
 
     // -------------------------------------------------------------------------
     // Local project management
@@ -161,6 +170,86 @@ public class JiraProjectService {
     @Transactional(readOnly = true)
     public boolean hasSubscriptionForDataSource(Long userId, Long dataSourceId) {
         return userProjectRegistrationRepository.existsByUserIdAndDataSourceId(userId, dataSourceId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Controller-facing methods (datasource/{id}/projects endpoints)
+    // -------------------------------------------------------------------------
+
+    /** Lists tracked projects for a datasource. Owner and subscribed users can call this. */
+    @Transactional(readOnly = true)
+    public List<JiraProjectResponseDto> listProjectsForDataSource(Long userId, Long dataSourceId) {
+        DataSourceConfig cfg = resolveJiraDs(userId, dataSourceId);
+        User user = userRepository.getReferenceById(userId);
+        return jiraProjectRepository.findAllByDataSource(cfg).stream()
+                .map(p -> JiraProjectResponseDto.from(p, isSubscribed(user, p)))
+                .toList();
+    }
+
+    /**
+     * Attaches a Jira project to a datasource (owner only, idempotent).
+     * Auto-subscribes the caller so they can see the project's metrics immediately.
+     */
+    @Transactional
+    public JiraProjectResponseDto attachProject(Long userId, Long dataSourceId, String projectKey, String projectName) {
+        DataSourceConfig cfg = resolveOwnerJiraDs(userId, dataSourceId);
+        JiraProjectEntity project = addProject(cfg, projectKey, projectName);
+        subscribeUser(project.getId(), userId);
+        return JiraProjectResponseDto.from(project, true);
+    }
+
+    /** Removes a tracked Jira project from a datasource (owner only). Cascades issues via FK. */
+    @Transactional
+    public void detachProject(Long userId, Long dataSourceId, Long projectId) {
+        DataSourceConfig cfg = resolveOwnerJiraDs(userId, dataSourceId);
+        JiraProjectEntity project = jiraProjectRepository.findById(projectId)
+                .orElseThrow(() -> new NotFoundException("Jira project not found: " + projectId));
+        if (!project.getDataSource().getId().equals(cfg.getId())) {
+            throw new BadRequestException("Project " + projectId + " does not belong to datasource " + dataSourceId);
+        }
+        jiraProjectRepository.delete(project);
+    }
+
+    /**
+     * Lists all Jira projects visible to the datasource's stored token, annotated with
+     * {@code alreadyAttached=true} when the project is already tracked under this datasource.
+     * Result is cached 60 s to avoid hammering the Jira API on every UI interaction.
+     */
+    @Cacheable(value = "jira-discover-projects", key = "#dataSourceId")
+    public List<DiscoveredProjectDto> discoverProjectsFromJira(Long userId, Long dataSourceId) {
+        DataSourceConfig cfg = resolveOwnerJiraDs(userId, dataSourceId);
+        Set<String> attached = jiraProjectRepository.findAllByDataSource(cfg).stream()
+                .map(JiraProjectEntity::getProjectKey)
+                .collect(Collectors.toSet());
+        return listProjects(cfg).stream()
+                .map(p -> new DiscoveredProjectDto(p.getKey(), p.getName(), attached.contains(p.getKey())))
+                .toList();
+    }
+
+    private DataSourceConfig resolveJiraDs(Long userId, Long dataSourceId) {
+        DataSourceConfig cfg = dataSourceConfigRepository.findById(dataSourceId)
+                .orElseThrow(() -> new NotFoundException("DataSource not found: " + dataSourceId));
+        if (cfg.getType() != DataSourceType.JIRA) {
+            throw new BadRequestException("Only JIRA datasources support project management");
+        }
+        boolean isOwner = cfg.getUser().getId().equals(userId);
+        boolean hasSubscription = userProjectRegistrationRepository.existsByUserIdAndDataSourceId(userId, dataSourceId);
+        if (!isOwner && !hasSubscription) {
+            throw new ForbiddenException("Access denied to datasource: " + dataSourceId);
+        }
+        return cfg;
+    }
+
+    private DataSourceConfig resolveOwnerJiraDs(Long userId, Long dataSourceId) {
+        DataSourceConfig cfg = dataSourceConfigRepository.findById(dataSourceId)
+                .orElseThrow(() -> new NotFoundException("DataSource not found: " + dataSourceId));
+        if (cfg.getType() != DataSourceType.JIRA) {
+            throw new BadRequestException("Only JIRA datasources support project management");
+        }
+        if (!cfg.getUser().getId().equals(userId)) {
+            throw new ForbiddenException("Only the datasource owner can manage Jira projects");
+        }
+        return cfg;
     }
 
     // -------------------------------------------------------------------------

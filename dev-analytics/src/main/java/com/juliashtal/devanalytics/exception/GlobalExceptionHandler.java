@@ -102,6 +102,17 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.FORBIDDEN, "Forbidden", "You do not have permission to access this resource", request);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // 409 Conflict
+    // ─────────────────────────────────────────────────────────────
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiError> handleConflict(
+            ConflictException ex, HttpServletRequest request) {
+        log.warn("Conflict on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, "Conflict", ex.getMessage(), request);
+    }
+
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiError> handleForbidden(
             ForbiddenException ex, HttpServletRequest request) {

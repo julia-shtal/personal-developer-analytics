@@ -13,6 +13,10 @@ public interface UserRepoRegistrationRepository extends JpaRepository<UserRepoRe
 
     java.util.Optional<UserRepoRegistration> findByUserIdAndRepositoryId(Long userId, Long repositoryId);
 
+    /** Number of subscribers to a repo other than the given user. Used to block detach when subscriptions exist. */
+    @Query("SELECT COUNT(urr) FROM UserRepoRegistration urr WHERE urr.repository.id = :repoId AND urr.user.id <> :excludeUserId")
+    long countSubscribersExcludingUser(@Param("repoId") Long repoId, @Param("excludeUserId") Long excludeUserId);
+
     @Query("SELECT urr.repository.id FROM UserRepoRegistration urr WHERE urr.user.id = :userId")
     List<Long> findRepoIdsByUserId(@Param("userId") Long userId);
 
