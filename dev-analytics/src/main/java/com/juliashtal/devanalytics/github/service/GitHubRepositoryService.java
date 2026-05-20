@@ -7,6 +7,7 @@ import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.exception.GitHubException;
 import com.juliashtal.devanalytics.exception.NotFoundException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
@@ -80,6 +81,7 @@ public class GitHubRepositoryService {
 
         GitRepositoryEntity repo = new GitRepositoryEntity();
         repo.setDataSourceConfig(cfg);
+        repo.setRepoType(RepoType.GITHUB);
         repo.setName(fullName);
         repo.setRepoFullName(fullName);
         repo.setLocalPath(null);

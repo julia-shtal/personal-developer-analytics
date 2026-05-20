@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
@@ -51,6 +52,7 @@ public class GitRepositoryService {
 
         GitRepositoryEntity repo = new GitRepositoryEntity();
         repo.setDataSourceConfig(dataSource);
+        repo.setRepoType(RepoType.LOCAL);
         repo.setName(req.getName());
         repo.setLocalPath(normalizedPath);
         repo.setLastFetchedCommitHash(null);

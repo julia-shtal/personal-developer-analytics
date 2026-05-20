@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.github.service;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
@@ -56,7 +57,7 @@ public class CommitStatsEnrichmentScheduler {
             try {
                 String apiBase = resolveApiBase(repo.getDataSourceConfig().getBaseUrl());
                 String token = clientFactory.getDecryptedToken(repo.getDataSourceConfig());
-                String repoFullName = repo.getRepoFullName() != null
+                String repoFullName = repo.getRepoType() == RepoType.GITHUB
                         ? repo.getRepoFullName()
                         : repo.getName();
 
