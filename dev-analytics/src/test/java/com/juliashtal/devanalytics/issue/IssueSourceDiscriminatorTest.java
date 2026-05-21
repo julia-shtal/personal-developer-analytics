@@ -87,7 +87,7 @@ class IssueSourceDiscriminatorTest {
                 eq(HttpMethod.GET), any(), eq(String.class)))
             .thenReturn(ResponseEntity.ok(oneIssue));
 
-        lenient().when(issueRepository.findByJiraProjectAndExternalId(any(), any()))
+        lenient().when(issueRepository.findByJiraProjectAndSourceIssueKey(any(), any()))
             .thenReturn(Optional.empty());
         lenient().when(issueRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }

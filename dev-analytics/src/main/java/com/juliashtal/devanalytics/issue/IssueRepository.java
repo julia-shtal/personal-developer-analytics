@@ -19,12 +19,12 @@ import java.util.Optional;
 public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
 
     // GitHub issue lookups (data_source_id not null)
-    Optional<IssueEntity> findByDataSourceAndExternalId(DataSourceConfig source, String externalId);
+    Optional<IssueEntity> findByDataSourceAndSourceIssueKey(DataSourceConfig source, String sourceIssueKey);
     Page<IssueEntity> findByDataSource(DataSourceConfig source, Pageable pageable);
     Page<IssueEntity> findByRepository(GitRepositoryEntity repository, Pageable pageable);
 
     // Jira issue lookups (jira_project_id not null)
-    Optional<IssueEntity> findByJiraProjectAndExternalId(JiraProjectEntity project, String externalId);
+    Optional<IssueEntity> findByJiraProjectAndSourceIssueKey(JiraProjectEntity project, String sourceIssueKey);
     Page<IssueEntity> findByJiraProject(JiraProjectEntity project, Pageable pageable);
 
     long countByRepository_IdAndState(Long repositoryId, String state);

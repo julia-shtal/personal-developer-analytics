@@ -18,7 +18,8 @@ public class MetricsSummaryDto {
     private LocalDate to;
     /** PERSONAL, REPOSITORY, or TEAM */
     private String scope;
-    private String repoName;
+    /** Snapshot-in-time scope label: repo full name, Jira project key, or team name. */
+    private String contextRepoName;
     private String overview;
     private List<String> insights;
     private List<String> recommendations;
