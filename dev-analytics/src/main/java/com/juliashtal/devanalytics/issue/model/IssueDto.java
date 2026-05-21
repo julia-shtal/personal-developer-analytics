@@ -4,7 +4,7 @@ import java.time.Instant;
 
 public record IssueDto(
         Long id,
-        String externalId,
+        String sourceIssueKey,
         String title,
         String description,
         String state,
@@ -18,7 +18,7 @@ public record IssueDto(
     public static IssueDto fromEntity(IssueEntity e) {
         return new IssueDto(
                 e.getId(),
-                e.getExternalId(),
+                e.getSourceIssueKey(),
                 e.getTitle(),
                 e.getDescription(),
                 e.getState(),

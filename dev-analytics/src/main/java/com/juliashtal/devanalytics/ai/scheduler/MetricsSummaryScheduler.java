@@ -55,7 +55,7 @@ public class MetricsSummaryScheduler {
         entity.setPeriodFrom(dto.getFrom());
         entity.setPeriodTo(dto.getTo());
         entity.setScope(dto.getScope());
-        entity.setRepoName(dto.getRepoName());
+        entity.setContextRepoName(dto.getContextRepoName());
         entity.setOverview(dto.getOverview());
         entity.setModelName(dto.getModelName());
         entity.setRawModelOutput(dto.getRawModelOutput());
