@@ -73,19 +73,34 @@ public class DataSourceService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
 
-        // If the Jira project already exists (same base URL + key), subscribe this user to it
-        // instead of creating a duplicate datasource — mirrors the GitHub repo subscription model.
-        if (req.getType() == DataSourceType.JIRA
-                && req.getProjectKey() != null && !req.getProjectKey().isBlank()
-                && req.getBaseUrl() != null) {
-            var existingProject = jiraProjectService.findByBaseUrlAndProjectKey(
-                    req.getBaseUrl(), req.getProjectKey());
-            if (existingProject.isPresent()) {
-                jiraProjectService.subscribeUser(existingProject.get().getId(), userId);
-                log.info("User {} subscribed to existing Jira project {} on {}",
-                        userId, req.getProjectKey(), req.getBaseUrl());
-                // Convert inside the transaction so lazy proxies are accessible.
-                return toDto(existingProject.get().getDataSource(), false);
+        // If a Jira DS for this base URL already exists, subscribe instead of creating a duplicate.
+        // Checked at the instance level (baseUrl) rather than per-project, so it works even when
+        // the caller leaves projectKey blank.
+        if (req.getType() == DataSourceType.JIRA && req.getBaseUrl() != null) {
+            var existingProjects = jiraProjectService.findProjectsByBaseUrl(req.getBaseUrl());
+            if (!existingProjects.isEmpty()) {
+                DataSourceConfig canonicalDs = existingProjects.get(0).getDataSource();
+                String normalizedKey = req.getProjectKey() != null
+                        ? req.getProjectKey().trim().toUpperCase() : null;
+
+                if (normalizedKey != null && !normalizedKey.isBlank()) {
+                    // Caller specified a project key — subscribe to that project if tracked,
+                    // otherwise subscribe to all (user can add the missing project later).
+                    existingProjects.stream()
+                            .filter(p -> p.getProjectKey().equals(normalizedKey))
+                            .findFirst()
+                            .ifPresentOrElse(
+                                    p -> jiraProjectService.subscribeUser(p.getId(), userId),
+                                    () -> existingProjects.forEach(
+                                            p -> jiraProjectService.subscribeUser(p.getId(), userId)));
+                } else {
+                    // No project key — subscribe to all tracked projects for this Jira instance.
+                    existingProjects.forEach(p -> jiraProjectService.subscribeUser(p.getId(), userId));
+                }
+
+                log.info("User {} subscribed to existing Jira DS {} (baseUrl: {})",
+                        userId, canonicalDs.getId(), req.getBaseUrl());
+                return toDto(canonicalDs, false);
             }
         }
 
@@ -145,7 +160,17 @@ public class DataSourceService {
         } else if (saved.getType() == DataSourceType.JIRA
                 && req.getProjectKey() != null && !req.getProjectKey().isBlank()) {
             try {
-                jiraProjectService.addProject(saved, req.getProjectKey(), null);
+                var project = jiraProjectService.addProject(saved, req.getProjectKey(), null);
+                if (!project.getDataSource().getId().equals(saved.getId())) {
+                    // addProject found a canonical row under a different datasource — the pre-check
+                    // above was bypassed (e.g. the caller omitted projectKey, or a URL normalization
+                    // edge case slipped through). Delete the empty DS we just created, subscribe the
+                    // user to the canonical project, and return the canonical DS so the caller sees
+                    // the existing sync state instead of an empty new record.
+                    jiraProjectService.subscribeUser(project.getId(), userId);
+                    repository.delete(saved);
+                    return toDto(project.getDataSource(), false);
+                }
             } catch (Exception e) {
                 log.warn("Auto-creation of initial Jira project failed: {}", e.getMessage());
             }
@@ -292,17 +317,28 @@ public class DataSourceService {
             throw new BadRequestException("Only GITHUB datasources support repo attachment");
         }
 
-        // Idempotency: repo already attached to THIS datasource → return existing
         var existing = gitRepoRepository.findByRepoFullName(repoFullName);
         if (existing.isPresent()) {
             GitRepositoryEntity repo = existing.get();
             if (repo.getDataSourceConfig().getId().equals(dataSourceId)) {
+                // Same DS — idempotent return.
                 return toRepoDto(repo, userId);
             }
-            // Repo belongs to a different datasource — explicit attach cannot redirect to another DS.
-            throw new ConflictException(
-                    "Repository '" + repoFullName + "' is already tracked by another datasource (id=" +
-                    repo.getDataSourceConfig().getId() + "). Subscribe to it via the subscription endpoint.");
+            // Repo is canonical under a different DS. Subscribe the user and clean up the
+            // calling DS if it has no canonical repos of its own (orphaned empty DS).
+            if (userRepoRegRepository.findByUserIdAndRepositoryId(userId, repo.getId()).isEmpty()) {
+                UserRepoRegistration reg = new UserRepoRegistration();
+                reg.setUser(userRepository.getReferenceById(userId));
+                reg.setRepository(repo);
+                userRepoRegRepository.save(reg);
+                log.info("User {} subscribed to existing repo {} (canonical DS={})",
+                        userId, repoFullName, repo.getDataSourceConfig().getId());
+            }
+            if (gitRepoRepository.countByDataSourceConfig(cfg) == 0) {
+                log.info("Deleting empty orphaned GitHub DS {} after cross-DS attach", cfg.getId());
+                repository.delete(cfg);
+            }
+            return toRepoDto(repo, userId);
         }
 
         GitRepositoryEntity repo = new GitRepositoryEntity();
