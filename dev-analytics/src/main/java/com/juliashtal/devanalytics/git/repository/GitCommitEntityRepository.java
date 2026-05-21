@@ -3,6 +3,10 @@ package com.juliashtal.devanalytics.git.repository;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
+import com.juliashtal.devanalytics.metrics.model.CommitDetailProjection;
+import com.juliashtal.devanalytics.metrics.model.DailyChurnProjection;
+import com.juliashtal.devanalytics.metrics.model.DailyCommitsProjection;
+import com.juliashtal.devanalytics.metrics.model.RepoCountProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -33,7 +37,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     group by date(c.authorDate), r.id
     order by day, repoId
     """)
-    List<Object[]> aggregateChurnDailyByRepoIds(
+    List<DailyChurnProjection> aggregateChurnDailyByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);
@@ -59,7 +63,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     group by date(c.authorDate), r.id
     order by day, repoId
     """)
-    List<Object[]> aggregateCommitsDailyByRepoIds(
+    List<DailyCommitsProjection> aggregateCommitsDailyByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);
@@ -82,7 +86,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     group by date(c.authorDate), r.id
     order by day, repoId
     """)
-    List<Object[]> aggregateCommitsDailyByRepoIdsAndAuthorEmail(
+    List<DailyCommitsProjection> aggregateCommitsDailyByRepoIdsAndAuthorEmail(
             @Param("repoIds") List<Long> repoIds,
             @Param("authorEmail") String authorEmail,
             @Param("from") Instant from,
@@ -101,7 +105,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     group by date(c.authorDate), r.id
     order by day, repoId
     """)
-    List<Object[]> aggregateChurnDailyByRepoIdsAndAuthorEmail(
+    List<DailyChurnProjection> aggregateChurnDailyByRepoIdsAndAuthorEmail(
             @Param("repoIds") List<Long> repoIds,
             @Param("authorEmail") String authorEmail,
             @Param("from") Instant from,
@@ -126,13 +130,16 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
      * that depend on real diff stats (additions/deletions).
      */
     @Query("""
-    select c.authorDate, c.additions, c.deletions, c.statsStatus
+    select c.authorDate   as authorDate,
+           c.additions    as additions,
+           c.deletions    as deletions,
+           c.statsStatus  as statsStatus
     from GitCommitEntity c
     where c.repository.id IN :repoIds
       and c.authorEmail = :authorEmail
       and c.authorDate between :from and :to
     """)
-    List<Object[]> findCommitDetailsByRepoIdsAndAuthorEmail(
+    List<CommitDetailProjection> findCommitDetailsByRepoIdsAndAuthorEmail(
             @Param("repoIds") List<Long> repoIds,
             @Param("authorEmail") String authorEmail,
             @Param("from") Instant from,
@@ -143,13 +150,14 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
      * Used as the denominator for knowledge silo score.
      */
     @Query("""
-    select c.repository.id, count(c.id)
+    select c.repository.id as repoId,
+           count(c.id)     as count
     from GitCommitEntity c
     where c.repository.id IN :repoIds
       and c.authorDate between :from and :to
     group by c.repository.id
     """)
-    List<Object[]> countTotalCommitsByRepoIds(
+    List<RepoCountProjection> countTotalCommitsByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);
@@ -159,14 +167,15 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
      * Used as the numerator for knowledge silo score.
      */
     @Query("""
-    select c.repository.id, count(c.id)
+    select c.repository.id as repoId,
+           count(c.id)     as count
     from GitCommitEntity c
     where c.repository.id IN :repoIds
       and c.authorEmail = :authorEmail
       and c.authorDate between :from and :to
     group by c.repository.id
     """)
-    List<Object[]> countCommitsByRepoIdsAndAuthorEmail(
+    List<RepoCountProjection> countCommitsByRepoIdsAndAuthorEmail(
             @Param("repoIds") List<Long> repoIds,
             @Param("authorEmail") String authorEmail,
             @Param("from") Instant from,
