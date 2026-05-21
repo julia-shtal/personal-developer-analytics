@@ -156,16 +156,16 @@ public class JiraCollector {
     }
 
     private void upsertJiraIssue(JiraProjectEntity project, JiraSearchResponse.JiraIssue jiraIssue) {
-        String externalId = jiraIssue.getKey();
+        String sourceIssueKey = jiraIssue.getKey();
 
         IssueEntity issue = issueRepository
-                .findByJiraProjectAndExternalId(project, externalId)
+                .findByJiraProjectAndSourceIssueKey(project, sourceIssueKey)
                 .orElseGet(IssueEntity::new);
 
         issue.setJiraProject(project);
         issue.setSource(IssueSource.JIRA);
         issue.setSourceContext(project.getProjectKey());
-        issue.setExternalId(externalId);
+        issue.setSourceIssueKey(sourceIssueKey);
 
         JiraSearchResponse.Fields f = jiraIssue.getFields();
         if (f != null) {

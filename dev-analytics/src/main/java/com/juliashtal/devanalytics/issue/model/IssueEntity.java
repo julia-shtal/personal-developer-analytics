@@ -29,8 +29,9 @@ public class IssueEntity {
     @JoinColumn(name = "jira_project_id")
     private JiraProjectEntity jiraProject;
 
-    @Column(name = "external_id", nullable = false)
-    private String externalId;   // JIRA: "KEY-123"; GitHub: "owner/repo#123"
+    /** Issue key as it appears in the upstream system. GitHub: {@code owner/repo#42}; Jira: {@code PDA-123}. */
+    @Column(name = "source_issue_key", nullable = false)
+    private String sourceIssueKey;
 
     // Explicit source discriminator — set on every save path (see ADR-005).
     @Enumerated(EnumType.STRING)

@@ -35,7 +35,9 @@ public class MetricSummaryEntity {
     @Column(nullable = false, length = 32)
     private String scope;
 
-    private String repoName;
+    /** Snapshot-in-time scope label: repo full name, Jira project key, or team name. */
+    @Column(name = "context_repo_name")
+    private String contextRepoName;
 
     @Column(columnDefinition = "text")
     private String overview;

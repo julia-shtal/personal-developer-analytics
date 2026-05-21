@@ -78,17 +78,17 @@ public class GitHubIssuesCollector {
     private IssueEntity buildIssueEntity(DataSourceConfig config,
                                          GitRepositoryEntity repo,
                                          GHIssue gi) throws IOException {
-        String externalId = repo.getRepoFullName() + "#" + gi.getNumber();
+        String sourceIssueKey = repo.getRepoFullName() + "#" + gi.getNumber();
 
         IssueEntity issue = issueRepository
-                .findByDataSourceAndExternalId(config, externalId)
+                .findByDataSourceAndSourceIssueKey(config, sourceIssueKey)
                 .orElseGet(IssueEntity::new);
 
         issue.setDataSource(config);
         issue.setRepository(repo);
         issue.setSource(IssueSource.GITHUB);
         issue.setSourceContext(repo.getRepoFullName());
-        issue.setExternalId(externalId);
+        issue.setSourceIssueKey(sourceIssueKey);
 
         issue.setTitle(gi.getTitle());
         issue.setDescription(gi.getBody());
