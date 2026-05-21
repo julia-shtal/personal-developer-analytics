@@ -4,6 +4,8 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
+import com.juliashtal.devanalytics.metrics.model.DailyCountProjection;
+import com.juliashtal.devanalytics.metrics.model.IssueLeadTimeProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -43,7 +45,7 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     @Query(value = """
     SELECT date(i.created_at)                                        AS day,
            COALESCE(i.repository_id, rm.repository_id)              AS repoId,
-           count(i.id)                                               AS createdCount
+           count(i.id)                                               AS count
     FROM   issues i
     LEFT   JOIN jira_project_repo_mappings rm ON rm.jira_project_id = i.jira_project_id
     WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
@@ -51,7 +53,7 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     GROUP  BY date(i.created_at), COALESCE(i.repository_id, rm.repository_id)
     ORDER  BY day, repoId
     """, nativeQuery = true)
-    List<Object[]> aggregateIssuesCreatedDailyByRepoIds(
+    List<DailyCountProjection> aggregateIssuesCreatedDailyByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);
@@ -59,7 +61,7 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     @Query(value = """
     SELECT date(i.closed_at)                                         AS day,
            COALESCE(i.repository_id, rm.repository_id)              AS repoId,
-           count(i.id)                                               AS closedCount
+           count(i.id)                                               AS count
     FROM   issues i
     LEFT   JOIN jira_project_repo_mappings rm ON rm.jira_project_id = i.jira_project_id
     WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
@@ -68,7 +70,7 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     GROUP  BY date(i.closed_at), COALESCE(i.repository_id, rm.repository_id)
     ORDER  BY day, repoId
     """, nativeQuery = true)
-    List<Object[]> aggregateIssuesClosedDailyByRepoIds(
+    List<DailyCountProjection> aggregateIssuesClosedDailyByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);
@@ -84,7 +86,7 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
       AND  i.closed_at IS NOT NULL
       AND  i.closed_at BETWEEN :from AND :to
     """, nativeQuery = true)
-    List<Object[]> findIssueLeadTimesByRepoIds(
+    List<IssueLeadTimeProjection> findIssueLeadTimesByRepoIds(
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);
