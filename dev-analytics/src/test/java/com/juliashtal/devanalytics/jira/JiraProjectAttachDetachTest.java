@@ -104,7 +104,9 @@ class JiraProjectAttachDetachTest {
     void attachProject_newProject_createsAndSubscribes() {
         JiraProjectEntity saved = project("PROJ");
         saved.setId(PROJECT_ID);
-        when(jiraProjectRepository.findByDataSourceAndProjectKey(jiraDs, "PROJ")).thenReturn(Optional.empty());
+        // Global canonical lookup finds nothing → create path.
+        when(jiraProjectRepository.findByBaseUrlNormalizedAndProjectKey(
+                "https://mycompany.atlassian.net", "PROJ")).thenReturn(Optional.empty());
         when(jiraProjectRepository.save(any())).thenReturn(saved);
         // subscribeUser re-fetches by id
         when(jiraProjectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(saved));
@@ -116,13 +118,16 @@ class JiraProjectAttachDetachTest {
         assertThat(dto.projectKey()).isEqualTo("PROJ");
         assertThat(dto.subscribed()).isTrue();
         verify(userProjectRegistrationRepository).save(any(UserProjectRegistration.class));
+        verify(dataSourceConfigRepository, never()).delete(any());
     }
 
     @Test
     void attachProject_idempotent_returnsExisting() {
         JiraProjectEntity existing = project("PROJ");
         existing.setId(PROJECT_ID);
-        when(jiraProjectRepository.findByDataSourceAndProjectKey(jiraDs, "PROJ")).thenReturn(Optional.of(existing));
+        // Global canonical lookup finds the same-DS row → idempotent path.
+        when(jiraProjectRepository.findByBaseUrlNormalizedAndProjectKey(
+                "https://mycompany.atlassian.net", "PROJ")).thenReturn(Optional.of(existing));
         // subscribeUser re-fetches by id
         when(jiraProjectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(existing));
         when(userRepository.getReferenceById(USER_ID)).thenReturn(owner);
@@ -132,6 +137,66 @@ class JiraProjectAttachDetachTest {
 
         assertThat(dto.projectKey()).isEqualTo("PROJ");
         verify(jiraProjectRepository, never()).save(any());
+        verify(dataSourceConfigRepository, never()).delete(any());
+    }
+
+    @Test
+    void attachProject_crossDs_emptyCallingDs_deletesOrphanAndSubscribes() {
+        DataSourceConfig canonicalDs = new DataSourceConfig();
+        canonicalDs.setId(999L);
+        canonicalDs.setType(DataSourceType.JIRA);
+        User canonicalOwner = new User();
+        canonicalOwner.setId(77L);
+        canonicalDs.setUser(canonicalOwner);
+
+        JiraProjectEntity canonical = new JiraProjectEntity();
+        canonical.setId(PROJECT_ID);
+        canonical.setDataSource(canonicalDs);  // belongs to a DIFFERENT DS
+        canonical.setProjectKey("PROJ");
+        canonical.setProjectName("Project PROJ");
+
+        when(jiraProjectRepository.findByBaseUrlNormalizedAndProjectKey(
+                "https://mycompany.atlassian.net", "PROJ")).thenReturn(Optional.of(canonical));
+        when(jiraProjectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(canonical));
+        when(userRepository.getReferenceById(USER_ID)).thenReturn(owner);
+        when(userProjectRegistrationRepository.existsByUserAndProject(owner, canonical)).thenReturn(false);
+        // Calling DS is empty — should be deleted.
+        when(jiraProjectRepository.findAllByDataSource(jiraDs)).thenReturn(List.of());
+
+        JiraProjectResponseDto dto = service.attachProject(USER_ID, DS_ID, "PROJ", null);
+
+        assertThat(dto.projectKey()).isEqualTo("PROJ");
+        assertThat(dto.dataSourceId()).isEqualTo(999L);
+        verify(userProjectRegistrationRepository).save(any(UserProjectRegistration.class));
+        verify(dataSourceConfigRepository).delete(jiraDs);
+    }
+
+    @Test
+    void attachProject_crossDs_nonEmptyCallingDs_keepsCallingDs() {
+        DataSourceConfig canonicalDs = new DataSourceConfig();
+        canonicalDs.setId(999L);
+        canonicalDs.setType(DataSourceType.JIRA);
+        User canonicalOwner = new User();
+        canonicalOwner.setId(77L);
+        canonicalDs.setUser(canonicalOwner);
+
+        JiraProjectEntity canonical = new JiraProjectEntity();
+        canonical.setId(PROJECT_ID);
+        canonical.setDataSource(canonicalDs);
+        canonical.setProjectKey("PROJ");
+
+        when(jiraProjectRepository.findByBaseUrlNormalizedAndProjectKey(
+                "https://mycompany.atlassian.net", "PROJ")).thenReturn(Optional.of(canonical));
+        when(jiraProjectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(canonical));
+        when(userRepository.getReferenceById(USER_ID)).thenReturn(owner);
+        when(userProjectRegistrationRepository.existsByUserAndProject(owner, canonical)).thenReturn(false);
+        // Calling DS has other projects → do NOT delete it.
+        JiraProjectEntity otherProject = project("OTHER");
+        when(jiraProjectRepository.findAllByDataSource(jiraDs)).thenReturn(List.of(otherProject));
+
+        service.attachProject(USER_ID, DS_ID, "PROJ", null);
+
+        verify(dataSourceConfigRepository, never()).delete(any());
     }
 
     @Test

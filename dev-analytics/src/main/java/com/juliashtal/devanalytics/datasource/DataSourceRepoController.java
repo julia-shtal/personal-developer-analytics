@@ -11,7 +11,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -37,18 +36,18 @@ public class DataSourceRepoController {
     }
 
     @PostMapping
-    @Operation(summary = "Attach a repository to a GITHUB datasource (idempotent)")
+    @Operation(summary = "Attach a repository to a GITHUB datasource (idempotent). "
+            + "Returns 201 for a new canonical attach. "
+            + "Returns 200 when the repo is canonical under a different datasource — the user has been "
+            + "subscribed and the calling datasource deleted if it was empty. "
+            + "Callers should check dto.dataSourceId and refresh the datasource list when it differs from {id}.")
     public ResponseEntity<RepoDto> attach(
             @PathVariable Long id,
             @RequestBody @Valid AttachRepoRequest req) {
         Long userId = SecurityUtils.getCurrentUserId();
-        List<RepoDto> before = dataSourceService.listReposForDataSource(userId, id);
-        boolean alreadyPresent = before.stream()
-                .anyMatch(r -> req.repoFullName().equalsIgnoreCase(r.repoFullName()));
-
         RepoDto dto = dataSourceService.attachRepo(userId, id, req.repoFullName(), req.collectIssues());
-
-        if (alreadyPresent) {
+        if (!id.equals(dto.dataSourceId())) {
+            // Cross-DS: repo is canonical under dto.dataSourceId(); calling DS may have been deleted.
             return ResponseEntity.ok(dto);
         }
         return ResponseEntity
