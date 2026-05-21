@@ -60,11 +60,14 @@ class UserRepoRegistrationTest {
     // ── DataSourceService.create subscribes to existing Jira project instead of duplicating ──
 
     @Test
-    void create_jiraWithExistingProject_subscribesAndReturnExistingDs() {
+    void create_jiraWithExistingBaseUrl_subscribesAndReturnsExistingDs() {
         long userId = 1L;
         com.juliashtal.devanalytics.datasource.model.DataSourceConfig existingDs =
                 new com.juliashtal.devanalytics.datasource.model.DataSourceConfig();
         existingDs.setId(99L);
+        existingDs.setType(com.juliashtal.devanalytics.datasource.model.DataSourceType.JIRA);
+        existingDs.setName("User1 Jira");
+        existingDs.setBaseUrl("https://work.atlassian.net");
 
         com.juliashtal.devanalytics.jira.model.JiraProjectEntity existingProject =
                 new com.juliashtal.devanalytics.jira.model.JiraProjectEntity();
@@ -79,10 +82,12 @@ class UserRepoRegistrationTest {
         req.setProjectKey("PDA");
         req.setApiToken("user:token");
 
-        when(jiraProjectService.findByBaseUrlAndProjectKey("https://work.atlassian.net", "PDA"))
-                .thenReturn(java.util.Optional.of(existingProject));
+        // New pre-check: looks up by baseUrl (not just by projectKey).
+        when(jiraProjectService.findProjectsByBaseUrl("https://work.atlassian.net"))
+                .thenReturn(java.util.List.of(existingProject));
         when(userRepository.findById(userId))
                 .thenReturn(java.util.Optional.of(new com.juliashtal.devanalytics.user.model.User()));
+        when(gitRepoRepository.countByDataSourceConfig(existingDs)).thenReturn(0L);
 
         com.juliashtal.devanalytics.datasource.model.dto.DataSourceResponseDto result =
                 dataSourceService.create(userId, req);

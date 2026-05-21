@@ -47,11 +47,13 @@ class JiraProjectServiceTest {
         ds = new DataSourceConfig();
         ds.setId(10L);
         ds.setUser(owner);
+        ds.setBaseUrl("https://work.atlassian.net");
     }
 
     @Test
     void addProject_newKey_createsAndReturns() {
-        when(jiraProjectRepository.findByDataSourceAndProjectKey(ds, "PROJ")).thenReturn(Optional.empty());
+        when(jiraProjectRepository.findByBaseUrlNormalizedAndProjectKey(
+                "https://work.atlassian.net", "PROJ")).thenReturn(Optional.empty());
         when(jiraProjectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         JiraProjectEntity result = service.addProject(ds, "proj", "My Project");
@@ -62,10 +64,12 @@ class JiraProjectServiceTest {
     }
 
     @Test
-    void addProject_existingKey_returnsExisting() {
+    void addProject_existingKeySameDs_returnsExisting() {
         JiraProjectEntity existing = new JiraProjectEntity();
         existing.setProjectKey("PROJ");
-        when(jiraProjectRepository.findByDataSourceAndProjectKey(ds, "PROJ")).thenReturn(Optional.of(existing));
+        existing.setDataSource(ds);
+        when(jiraProjectRepository.findByBaseUrlNormalizedAndProjectKey(
+                "https://work.atlassian.net", "PROJ")).thenReturn(Optional.of(existing));
 
         JiraProjectEntity result = service.addProject(ds, "PROJ", null);
 
@@ -138,13 +142,14 @@ class JiraProjectServiceTest {
     }
 
     @Test
-    void findByBaseUrlAndProjectKey_delegates() {
+    void findByBaseUrlAndProjectKey_normalizesUrlBeforeLookup() {
         JiraProjectEntity p = new JiraProjectEntity();
         p.setProjectKey("PDA");
-        when(jiraProjectRepository.findByDataSource_BaseUrlAndProjectKey(
+        // Service must normalize the URL (lowercase, strip trailing slash) before querying.
+        when(jiraProjectRepository.findByBaseUrlNormalizedAndProjectKey(
                 "https://work.atlassian.net", "PDA")).thenReturn(java.util.Optional.of(p));
 
-        var result = service.findByBaseUrlAndProjectKey("https://work.atlassian.net", "pda");
+        var result = service.findByBaseUrlAndProjectKey("https://work.atlassian.net/", "pda");
 
         assertThat(result).isPresent();
         assertThat(result.get().getProjectKey()).isEqualTo("PDA");

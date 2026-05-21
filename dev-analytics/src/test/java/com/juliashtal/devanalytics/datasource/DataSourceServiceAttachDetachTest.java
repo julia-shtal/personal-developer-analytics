@@ -10,6 +10,7 @@ import com.juliashtal.devanalytics.exception.ConflictException;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.exception.NotFoundException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
@@ -100,16 +101,75 @@ class DataSourceServiceAttachDetachTest {
     }
 
     @Test
-    void attachRepo_underAnotherDs_throws409() {
-        DataSourceConfig otherDs = new DataSourceConfig();
-        otherDs.setId(99L);
-        GitRepositoryEntity existingElsewhere = repo(5L, "owner/repo", 99L);
-        existingElsewhere.setDataSourceConfig(otherDs);
-        when(gitRepoRepository.findByRepoFullName("owner/repo")).thenReturn(Optional.of(existingElsewhere));
+    void attachRepo_crossDs_emptyCallingDs_subscribesAndDeletesOrphan() {
+        DataSourceConfig canonicalDs = new DataSourceConfig();
+        canonicalDs.setId(99L);
+        canonicalDs.setType(DataSourceType.GITHUB);
+        canonicalDs.setBaseUrl("https://api.github.com");
 
-        assertThatThrownBy(() -> service.attachRepo(USER_ID, DS_ID, "owner/repo", false))
-                .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("already tracked by another datasource");
+        GitRepositoryEntity canonical = repo(5L, "owner/repo", 99L);
+        canonical.setDataSourceConfig(canonicalDs);
+
+        when(gitRepoRepository.findByRepoFullName("owner/repo")).thenReturn(Optional.of(canonical));
+        when(userRepoRegRepository.findByUserIdAndRepositoryId(USER_ID, 5L))
+                .thenReturn(java.util.Optional.empty());
+        when(userRepository.getReferenceById(USER_ID)).thenReturn(owner);
+        // Calling DS has no canonical repos of its own → should be deleted.
+        when(gitRepoRepository.countByDataSourceConfig(githubDs)).thenReturn(0L);
+        when(userRepoRegRepository.findRepoIdsByUserId(USER_ID)).thenReturn(java.util.List.of(5L));
+
+        RepoDto result = service.attachRepo(USER_ID, DS_ID, "owner/repo", false);
+
+        assertThat(result.id()).isEqualTo(5L);
+        assertThat(result.dataSourceId()).isEqualTo(99L);
+        verify(userRepoRegRepository).save(any(UserRepoRegistration.class));
+        verify(repository).delete(githubDs);
+    }
+
+    @Test
+    void attachRepo_crossDs_nonEmptyCallingDs_subscribesWithoutDeletingDs() {
+        DataSourceConfig canonicalDs = new DataSourceConfig();
+        canonicalDs.setId(99L);
+        canonicalDs.setType(DataSourceType.GITHUB);
+        canonicalDs.setBaseUrl("https://api.github.com");
+
+        GitRepositoryEntity canonical = repo(5L, "owner/repo", 99L);
+        canonical.setDataSourceConfig(canonicalDs);
+
+        when(gitRepoRepository.findByRepoFullName("owner/repo")).thenReturn(Optional.of(canonical));
+        when(userRepoRegRepository.findByUserIdAndRepositoryId(USER_ID, 5L))
+                .thenReturn(java.util.Optional.empty());
+        when(userRepository.getReferenceById(USER_ID)).thenReturn(owner);
+        // Calling DS has other repos → must NOT be deleted.
+        when(gitRepoRepository.countByDataSourceConfig(githubDs)).thenReturn(2L);
+        when(userRepoRegRepository.findRepoIdsByUserId(USER_ID)).thenReturn(java.util.List.of(5L));
+
+        service.attachRepo(USER_ID, DS_ID, "owner/repo", false);
+
+        verify(userRepoRegRepository).save(any(UserRepoRegistration.class));
+        verify(repository, never()).delete(any(DataSourceConfig.class));
+    }
+
+    @Test
+    void attachRepo_crossDs_alreadySubscribed_idempotent() {
+        DataSourceConfig canonicalDs = new DataSourceConfig();
+        canonicalDs.setId(99L);
+        canonicalDs.setType(DataSourceType.GITHUB);
+        canonicalDs.setBaseUrl("https://api.github.com");
+
+        GitRepositoryEntity canonical = repo(5L, "owner/repo", 99L);
+        canonical.setDataSourceConfig(canonicalDs);
+
+        when(gitRepoRepository.findByRepoFullName("owner/repo")).thenReturn(Optional.of(canonical));
+        // Already subscribed — no new registration.
+        when(userRepoRegRepository.findByUserIdAndRepositoryId(USER_ID, 5L))
+                .thenReturn(java.util.Optional.of(new UserRepoRegistration()));
+        when(gitRepoRepository.countByDataSourceConfig(githubDs)).thenReturn(0L);
+        when(userRepoRegRepository.findRepoIdsByUserId(USER_ID)).thenReturn(java.util.List.of(5L));
+
+        service.attachRepo(USER_ID, DS_ID, "owner/repo", false);
+
+        verify(userRepoRegRepository, never()).save(any(UserRepoRegistration.class));
     }
 
     @Test

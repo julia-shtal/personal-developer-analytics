@@ -32,6 +32,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -52,22 +53,44 @@ public class JiraProjectService {
     // Local project management
     // -------------------------------------------------------------------------
 
+    /**
+     * Returns the canonical {@link JiraProjectEntity} for the given datasource + project key,
+     * creating one if it does not yet exist. Three-branch logic mirrors the GitHub attach path
+     * (ADR-004 / ADR-002):
+     * <ol>
+     *   <li>Canonical row already exists under <em>this</em> datasource → return it (idempotent).</li>
+     *   <li>Canonical row exists under a <em>different</em> datasource → return the existing row
+     *       without inserting. Caller is responsible for subscribing the user.</li>
+     *   <li>No canonical row → create a new row under this datasource.</li>
+     * </ol>
+     */
     @Transactional
     public JiraProjectEntity addProject(DataSourceConfig dataSource, String projectKey, String projectName) {
-        String normalizedKey = projectKey.trim().toUpperCase();
-        return jiraProjectRepository
-                .findByDataSourceAndProjectKey(dataSource, normalizedKey)
-                .orElseGet(() -> {
-                    String resolvedName = projectName;
-                    if (resolvedName == null) {
-                        resolvedName = resolveProjectName(dataSource, normalizedKey);
-                    }
-                    JiraProjectEntity project = new JiraProjectEntity();
-                    project.setDataSource(dataSource);
-                    project.setProjectKey(normalizedKey);
-                    project.setProjectName(resolvedName);
-                    return jiraProjectRepository.save(project);
-                });
+        String normalizedKey  = projectKey.trim().toUpperCase();
+        String normalizedBase = JiraUrl.normalize(dataSource.getBaseUrl());
+
+        // Global lookup: honours the UNIQUE(base_url_normalized, project_key) constraint.
+        Optional<JiraProjectEntity> existing =
+                jiraProjectRepository.findByBaseUrlNormalizedAndProjectKey(normalizedBase, normalizedKey);
+
+        if (existing.isPresent()) {
+            JiraProjectEntity project = existing.get();
+            if (!project.getDataSource().getId().equals(dataSource.getId())) {
+                log.info("Jira project {}:{} already registered under datasource {} — returning canonical row",
+                        normalizedBase, normalizedKey, project.getDataSource().getId());
+            }
+            return project;
+        }
+
+        String resolvedName = projectName;
+        if (resolvedName == null) {
+            resolvedName = resolveProjectName(dataSource, normalizedKey);
+        }
+        JiraProjectEntity project = new JiraProjectEntity();
+        project.setDataSource(dataSource);
+        project.setProjectKey(normalizedKey);
+        project.setProjectName(resolvedName);
+        return jiraProjectRepository.save(project);
     }
 
     private String resolveProjectName(DataSourceConfig dataSource, String projectKey) {
@@ -156,8 +179,18 @@ public class JiraProjectService {
     /** Finds an existing tracked Jira project by Jira instance URL + project key. */
     @Transactional(readOnly = true)
     public java.util.Optional<JiraProjectEntity> findByBaseUrlAndProjectKey(String baseUrl, String projectKey) {
-        return jiraProjectRepository.findByDataSource_BaseUrlAndProjectKey(
-                baseUrl, projectKey.trim().toUpperCase());
+        return jiraProjectRepository.findByBaseUrlNormalizedAndProjectKey(
+                JiraUrl.normalize(baseUrl), projectKey.trim().toUpperCase());
+    }
+
+    /**
+     * Returns all tracked projects for a given Jira instance (any project key).
+     * Used by {@code DataSourceService.create} to detect whether a DS for this Jira base URL
+     * already exists before allowing a duplicate to be created.
+     */
+    @Transactional(readOnly = true)
+    public List<JiraProjectEntity> findProjectsByBaseUrl(String baseUrl) {
+        return jiraProjectRepository.findAllByBaseUrlNormalized(JiraUrl.normalize(baseUrl));
     }
 
     /** DataSourceConfigs the user can access via Jira project subscriptions. */
@@ -189,12 +222,29 @@ public class JiraProjectService {
     /**
      * Attaches a Jira project to a datasource (owner only, idempotent).
      * Auto-subscribes the caller so they can see the project's metrics immediately.
+     *
+     * <p>Cross-DS case: if the canonical row for {@code (baseUrl, projectKey)} already belongs
+     * to a different datasource, the user is subscribed to that canonical project and the calling
+     * datasource is deleted if it has no canonical projects of its own (i.e. it was just created
+     * and would otherwise become an empty orphan). The returned DTO reflects the canonical project,
+     * whose {@code dataSourceId} may differ from the requested {@code dataSourceId}. Callers should
+     * check this field and refresh their datasource list when they differ.
      */
     @Transactional
     public JiraProjectResponseDto attachProject(Long userId, Long dataSourceId, String projectKey, String projectName) {
         DataSourceConfig cfg = resolveOwnerJiraDs(userId, dataSourceId);
         JiraProjectEntity project = addProject(cfg, projectKey, projectName);
         subscribeUser(project.getId(), userId);
+
+        if (!project.getDataSource().getId().equals(cfg.getId())
+                && jiraProjectRepository.findAllByDataSource(cfg).isEmpty()) {
+            // The canonical project lives under another DS and the calling DS is now empty —
+            // delete the orphaned DS so the user's list shows only the canonical one.
+            log.info("Deleting empty orphaned Jira DS {} after cross-DS attach to canonical DS {}",
+                    cfg.getId(), project.getDataSource().getId());
+            dataSourceConfigRepository.delete(cfg);
+        }
+
         return JiraProjectResponseDto.from(project, true);
     }
 

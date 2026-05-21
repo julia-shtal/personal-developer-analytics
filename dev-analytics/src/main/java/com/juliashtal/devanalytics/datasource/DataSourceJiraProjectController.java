@@ -33,12 +33,21 @@ public class DataSourceJiraProjectController {
     }
 
     @PostMapping
-    @Operation(summary = "Attach a Jira project to a datasource (owner only, idempotent)")
+    @Operation(summary = "Attach a Jira project to a datasource (owner only, idempotent). "
+            + "Returns 201 when a new canonical row is created under this datasource. "
+            + "Returns 200 when the project is canonical under a different datasource — the user "
+            + "has been subscribed and the calling datasource deleted if it was empty. "
+            + "Callers should check dto.dataSourceId and refresh the datasource list when it "
+            + "differs from the requested {id}.")
     public ResponseEntity<JiraProjectResponseDto> attach(
             @PathVariable Long id,
             @RequestBody @Valid AttachProjectRequest req) {
         Long userId = SecurityUtils.getCurrentUserId();
         JiraProjectResponseDto dto = jiraProjectService.attachProject(userId, id, req.projectKey(), req.projectName());
+        if (!id.equals(dto.dataSourceId())) {
+            // Cross-DS: project is canonical under dto.dataSourceId(); calling DS may have been deleted.
+            return ResponseEntity.ok(dto);
+        }
         return ResponseEntity
                 .created(URI.create("/api/datasources/" + id + "/projects/" + dto.id()))
                 .body(dto);
