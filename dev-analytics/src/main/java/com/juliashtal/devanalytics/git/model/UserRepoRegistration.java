@@ -29,7 +29,7 @@ import lombok.Data;
 @Entity
 @Table(
         name = "user_repo_registrations",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "repo_id"})
+        uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "repository_id"})
 )
 public class UserRepoRegistration {
 
@@ -42,6 +42,6 @@ public class UserRepoRegistration {
     private User user;
 
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
-    @JoinColumn(name = "repo_id")
+    @JoinColumn(name = "repository_id")
     private GitRepositoryEntity repository;
 }
