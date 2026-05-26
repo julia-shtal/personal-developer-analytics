@@ -23,7 +23,8 @@ export function Tooltip({ children, content }: TooltipProps) {
             background: 'var(--fg)', color: 'var(--bg)',
             padding: '6px 10px', borderRadius: 6,
             fontFamily: 'var(--font-mono)', fontSize: 10.5,
-            whiteSpace: 'nowrap', zIndex: 50, pointerEvents: 'none',
+            whiteSpace: 'normal', maxWidth: 260, lineHeight: 1.45,
+            textAlign: 'left', zIndex: 50, pointerEvents: 'none',
           }}
         >
           {content}

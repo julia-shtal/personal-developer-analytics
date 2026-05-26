@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Sparkles, RefreshCw, Shield, AlertCircle, Copy, Check } from 'lucide-react';
-import { Card, CardHeader, CardBody } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Shield, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
+import { Chip } from '@/components/ui/Chip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { aiApi } from '@/api/ai';
+import { AI } from '@/components/icons';
 import type { MetricsSummaryDto } from '@/types/ai';
 import type { DateRange } from '@/types';
 
@@ -23,11 +24,34 @@ function timeAgo(date: Date): string {
 
 function summaryToText(s: MetricsSummaryDto): string {
   const lines: string[] = [];
-  if (s.overview) lines.push('Overview\n' + s.overview);
-  if (s.insights.length) lines.push('Insights\n' + s.insights.map((i) => `• ${i}`).join('\n'));
-  if (s.recommendations.length) lines.push('Recommendations\n' + s.recommendations.map((r) => `• ${r}`).join('\n'));
-  return lines.join('\n\n');
+  if (s.headline) lines.push(s.headline);
+  if (s.overview) lines.push('\nOverview\n' + s.overview);
+  if (s.insights.length) {
+    lines.push('\nKey Insights\n' + s.insights.map((i) => `• ${i.text}`).join('\n'));
+  }
+  if (s.recommendations.length) {
+    lines.push('\nRecommendations\n' + s.recommendations.map((r) => `• ${r}`).join('\n'));
+  }
+  return lines.join('');
 }
+
+const KIND_COLOR: Record<string, string> = {
+  positive: 'var(--emerald)',
+  risk: 'var(--coral)',
+  note: 'var(--amber)',
+};
+
+const KIND_CHIP: Record<string, 'emerald' | 'coral' | 'amber'> = {
+  positive: 'emerald',
+  risk: 'coral',
+  note: 'amber',
+};
+
+const KIND_SYM: Record<string, string> = {
+  positive: '+',
+  risk: '!',
+  note: '~',
+};
 
 export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
   const qc = useQueryClient();
@@ -40,10 +64,10 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
   const [generatedForRange, setGeneratedForRange] = useState<DateRange | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Restore from React Query cache when range changes or on first mount
   useEffect(() => {
     const cached = qc.getQueryData<{ summary: MetricsSummaryDto; generatedAt: number; range: DateRange }>(cacheKey);
     if (cached) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSummary(cached.summary);
       setGeneratedAt(new Date(cached.generatedAt));
       setGeneratedForRange(cached.range);
@@ -86,173 +110,154 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
   }
 
   return (
-    <Card>
-      <CardHeader className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-violet-500" />
-            <h2 className="text-sm font-semibold text-gray-900">AI Summary</h2>
+    <div className="card" style={{ padding: 24 }}>
+
+      {/* ── Top row ── */}
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+          <div className="row gap-2" style={{ color: 'var(--violet-strong)', marginBottom: 8, flexWrap: 'wrap' }}>
+            <AI width={16} height={16} />
+            <span className="t-label" style={{ color: 'var(--violet-strong)', letterSpacing: '0.08em' }}>AI SUMMARY</span>
+            <span className="tick">·</span>
+            <span className="t-label" style={{ fontSize: 10.5 }}>Automatic overview for the selected period</span>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">Automatic overview for the selected period</p>
+          {summary?.headline && (
+            <h3 className="t-h2" style={{ fontSize: 22, lineHeight: 1.25, maxWidth: 760 }}>
+              {summary.headline}
+            </h3>
+          )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+        <div className="row gap-2" style={{ flexShrink: 0 }}>
           {isLoading && (
-            <span className="animate-pulse bg-violet-50 text-violet-600 text-xs px-2 py-0.5 rounded-full font-medium">
-              Generating...
-            </span>
+            <Chip color="violet">Generating…</Chip>
           )}
           {summary && !isLoading && (
-            <span
-              className={
-                isOutdated
-                  ? 'bg-amber-50 text-amber-600 text-xs px-2 py-0.5 rounded-full font-medium'
-                  : 'bg-emerald-50 text-emerald-600 text-xs px-2 py-0.5 rounded-full font-medium'
-              }
-            >
+            <Chip color={isOutdated ? 'amber' : 'emerald'} dot>
               {isOutdated ? 'Outdated' : 'Fresh'}
-            </span>
+            </Chip>
           )}
           {summary && !isLoading && (
             <button
+              className="btn btn-sm btn-icon"
               onClick={copyToClipboard}
-              className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
               title="Copy to clipboard"
+              aria-label="Copy summary to clipboard"
             >
-              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? <Check width={12} height={12} /> : <Copy width={12} height={12} />}
             </button>
           )}
-          <Button variant="secondary" size="sm" loading={isLoading} onClick={generate}>
-            {summary ? (
-              <>
-                <RefreshCw className="h-3.5 w-3.5" />
-                Regenerate
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-3.5 w-3.5" />
-                Generate
-              </>
-            )}
-          </Button>
+          <button className="btn btn-sm" onClick={generate} disabled={isLoading} aria-label={summary ? 'Regenerate AI summary' : 'Generate AI summary'}>
+            <RefreshCw width={12} height={12} />
+            {summary ? 'Regenerate' : 'Generate'}
+          </button>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardBody>
-        {/* Loading skeleton */}
-        {isLoading && (
-          <div className="space-y-5">
-            <div>
-              <div className="h-2.5 w-16 bg-gray-100 rounded animate-pulse mb-3" />
-              <div className="space-y-2">
-                <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: '90%' }} />
-                <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: '75%' }} />
+      {/* ── Loading skeleton ── */}
+      {isLoading && (
+        <div className="col gap-4">
+          {[90, 75, 60, 85, 70].map((w, i) => (
+            <div key={i} style={{ height: 12, width: `${w}%`, background: 'var(--bg-2)', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+          ))}
+        </div>
+      )}
+
+      {/* ── Error state ── */}
+      {error && !isLoading && (
+        <div style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber)', borderRadius: 8, padding: '12px 16px' }}>
+          <p className="t-body" style={{ color: 'var(--amber-strong)', marginBottom: 8 }}>{error}</p>
+          <button className="btn btn-sm" onClick={generate}>Retry</button>
+        </div>
+      )}
+
+      {/* ── Empty state ── */}
+      {!summary && !isLoading && !error && (
+        <div style={{ padding: '32px 0', textAlign: 'center' }}>
+          <Sparkles style={{ width: 32, height: 32, color: 'var(--line)', margin: '0 auto 12px' }} />
+          <p className="t-muted" style={{ marginBottom: 16 }}>No summary generated for this period</p>
+          <button className="btn btn-sm btn-accent" onClick={generate}>
+            <Sparkles width={12} height={12} />
+            Generate AI Summary
+          </button>
+        </div>
+      )}
+
+      {/* ── Summary content ── */}
+      {summary && !isLoading && (
+        <>
+          {/* Overview */}
+          <div style={{ marginTop: 16 }}>
+            <div className="t-eyebrow" style={{ marginBottom: 6 }}>overview</div>
+            <p className="t-body" style={{ maxWidth: 920, lineHeight: 1.6 }}>
+              {summary.overview}
+            </p>
+          </div>
+
+          {/* Key insights */}
+          {summary.insights.length > 0 && (
+            <div style={{ marginTop: 22 }}>
+              <div className="t-eyebrow" style={{ marginBottom: 10 }}>key insights</div>
+              <div className="col gap-2">
+                {summary.insights.map((insight, i) => {
+                  const color = KIND_COLOR[insight.kind] ?? KIND_COLOR.note;
+                  const chipColor = KIND_CHIP[insight.kind] ?? KIND_CHIP.note;
+                  const sym = KIND_SYM[insight.kind] ?? KIND_SYM.note;
+                  return (
+                    <div key={i} className="row gap-3" style={{ alignItems: 'flex-start', padding: '6px 0' }}>
+                      <span style={{
+                        fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600,
+                        color,
+                        width: 18, lineHeight: 1.45, flexShrink: 0,
+                      }}>{sym}</span>
+                      <p className="t-body" style={{ margin: 0, lineHeight: 1.55, flex: 1 }}>
+                        {insight.text}
+                      </p>
+                      {insight.metric && <Chip color={chipColor}>{insight.metric}</Chip>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            <div>
-              <div className="h-2.5 w-20 bg-gray-100 rounded animate-pulse mb-3" />
-              <div className="space-y-2">
-                {[85, 70, 90, 65, 80].map((w, i) => (
-                  <div key={i} className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: `${w}%` }} />
+          )}
+
+          {/* Recommendations */}
+          {summary.recommendations.length > 0 && (
+            <div style={{ marginTop: 22 }}>
+              <div className="t-eyebrow" style={{ marginBottom: 10 }}>recommendations</div>
+              <div className="col gap-2">
+                {summary.recommendations.map((rec, i) => (
+                  <div key={i} className="row gap-3" style={{ alignItems: 'flex-start', padding: '6px 0' }}>
+                    <span className="chip-dot" style={{ color: 'var(--violet)', marginTop: 7, flexShrink: 0 }} />
+                    <p className="t-body" style={{ margin: 0, lineHeight: 1.55 }}>{rec}</p>
+                  </div>
                 ))}
               </div>
             </div>
-            <div>
-              <div className="h-2.5 w-24 bg-gray-100 rounded animate-pulse mb-3" />
-              <div className="space-y-2">
-                {[75, 60, 70].map((w, i) => (
-                  <div key={i} className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: `${w}%` }} />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Error state */}
-        {error && !isLoading && (
-          <div className="bg-amber-50 rounded-lg px-4 py-3 border border-amber-200 flex flex-col gap-2">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <span className="text-sm text-amber-700">{error}</span>
-            </div>
-            <Button variant="ghost" size="sm" onClick={generate} className="self-start">
-              Retry
-            </Button>
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!summary && !isLoading && !error && (
-          <div className="py-8 text-center">
-            <Sparkles className="h-8 w-8 text-violet-200 mx-auto" />
-            <p className="text-sm text-gray-400 mt-3">No summary generated for this period</p>
-            <Button variant="primary" size="sm" onClick={generate} className="mt-4">
-              <Sparkles className="h-3.5 w-3.5" />
-              Generate AI Summary
-            </Button>
-          </div>
-        )}
-
-        {/* Summary content */}
-        {summary && !isLoading && (
-          <div className="space-y-5">
-            {/* Overview */}
-            <div>
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                Overview
-              </div>
-              <p className="text-sm text-gray-700 leading-relaxed">{summary.overview}</p>
-            </div>
-
-            {/* Key Insights */}
-            {summary.insights.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                  Key Insights
-                </div>
-                <ul className="space-y-2">
-                  {summary.insights.map((insight, i) => (
-                    <li key={i} className="flex items-start gap-2.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0 mt-1.5" />
-                      <span className="text-sm text-gray-700">{insight}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          {/* Footer */}
+          <div className="row gap-2" style={{ marginTop: 22, paddingTop: 14, borderTop: '1px solid var(--line-2)', color: 'var(--fg-3)', flexWrap: 'wrap' }}>
+            <Shield width={12} height={12} />
+            <span className="t-label" style={{ fontSize: 10.5 }}>Generated locally from metrics only</span>
+            <span className="tick">·</span>
+            <span className="t-label" style={{ fontSize: 10.5 }}>{summary.modelName} via Ollama</span>
+            {generatedAt && (
+              <>
+                <span className="tick">·</span>
+                <span className="t-label" style={{ fontSize: 10.5 }}>{timeAgo(generatedAt)}</span>
+              </>
             )}
-
-            {/* Recommendations */}
-            {summary.recommendations.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                  Recommendations
-                </div>
-                <ul className="space-y-2">
-                  {summary.recommendations.map((rec, i) => (
-                    <li key={i} className="flex items-start gap-2.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 mt-1.5" />
-                      <span className="text-sm text-gray-700">{rec}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Footer */}
-            <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-x-2 gap-y-1">
-              <Shield className="h-3.5 w-3.5 text-gray-300" />
-              <span className="text-xs text-gray-400">Generated locally from metrics only</span>
-              <span className="text-gray-200">·</span>
-              <span className="text-xs text-gray-400">{summary.modelName} via Ollama</span>
-              {generatedAt && (
-                <>
-                  <span className="text-gray-200">·</span>
-                  <span className="text-xs text-gray-400">{timeAgo(generatedAt)}</span>
-                </>
-              )}
-            </div>
+            <span style={{ flex: 1 }} />
+            {/* TODO(ai-follow-up): Chat endpoint needed for "Ask follow-up". Deferred to future sprint. */}
+            <Tooltip content="Chat coming soon">
+              <button className="btn btn-sm btn-accent" style={{ opacity: 0.6, cursor: 'not-allowed' }} aria-label="Ask follow-up (coming soon)" disabled>
+                <Sparkles width={12} height={12} />
+                Ask follow-up
+              </button>
+            </Tooltip>
           </div>
-        )}
-      </CardBody>
-    </Card>
+        </>
+      )}
+    </div>
   );
 }
