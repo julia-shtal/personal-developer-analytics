@@ -1,27 +1,25 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { clsx } from 'clsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Plus, Trash2, Database, GitBranch, Layers, AlertCircle,
-  ChevronDown, ChevronRight, BookOpen, ExternalLink, UserCheck, UserMinus, Play,
-  Eye, EyeOff, MessageSquare,
+  Plus, Trash2, ChevronDown, ChevronRight,
+  ExternalLink, UserCheck, UserMinus, Play,
+  Eye, EyeOff, MessageSquare, AlertCircle, X,
+  GitFork,
 } from 'lucide-react';
+import { clsx } from 'clsx';
 import { datasourcesApi, type SyncStatus } from '@/api/datasources';
 import { issuesApi } from '@/api/issues';
 import { reposApi } from '@/api/repos';
 import { DiscoverReposModal } from './DiscoverReposModal';
 import { DiscoverProjectsModal } from './DiscoverProjectsModal';
 import { teamsApi } from '@/api/teams';
-import { Card, CardHeader, CardBody } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
-import { Badge } from '@/components/ui/Badge';
+import { Chip } from '@/components/ui/Chip';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
+import { Jira, Folder, Branch } from '@/components/icons';
 import type { DataSourceType, CreateDataSourceRequest, RepoDto, Team, TrackedJiraProjectDto } from '@/types';
 
-// ─── Type helpers ─────────────────────────────────────────────────────────────
+// ─── Type helpers ──────────────────────────────────────────────────────────────
 
 const TYPE_LABELS: Record<DataSourceType, string> = {
   GIT_LOCAL: 'Local Git',
@@ -29,34 +27,42 @@ const TYPE_LABELS: Record<DataSourceType, string> = {
   JIRA: 'Jira',
 };
 
-const TYPE_COLORS: Record<DataSourceType, 'gray' | 'violet' | 'blue'> = {
-  GIT_LOCAL: 'gray',
+const TYPE_CHIP_COLORS: Record<DataSourceType, 'violet' | 'cyan' | 'amber'> = {
   GITHUB: 'violet',
-  JIRA: 'blue',
+  JIRA: 'cyan',
+  GIT_LOCAL: 'amber',
 };
 
-function TypeIcon({ type }: { type: DataSourceType }) {
-  if (type === 'GITHUB') return <GitBranch className="h-5 w-5" />;
-  if (type === 'GIT_LOCAL') return <Layers className="h-5 w-5" />;
-  return <Database className="h-5 w-5" />;
-}
+const TYPE_ACCENT: Record<DataSourceType, string> = {
+  GITHUB: 'var(--violet)',
+  JIRA: 'var(--cyan)',
+  GIT_LOCAL: 'var(--amber)',
+};
 
-const TYPE_OPTIONS = [
-  { value: 'GIT_LOCAL', label: 'Local Git repository' },
-  { value: 'GITHUB',    label: 'GitHub' },
-  { value: 'JIRA',      label: 'Jira' },
-];
+const TYPE_ACCENT_BG: Record<DataSourceType, string> = {
+  GITHUB: 'var(--violet-bg)',
+  JIRA: 'var(--cyan-bg)',
+  GIT_LOCAL: 'var(--amber-bg)',
+};
 
-// Types that need a base URL (the remote API address)
+const TYPE_DESCS: Record<DataSourceType, string> = {
+  GITHUB: 'API · token',
+  JIRA: 'cloud · token',
+  GIT_LOCAL: 'filesystem',
+};
+
 const NEEDS_BASEURL: DataSourceType[] = ['GITHUB', 'JIRA'];
-// Types that need a local filesystem path
 const NEEDS_PATH: DataSourceType[] = ['GIT_LOCAL'];
-// Types that need an API token
 const NEEDS_TOKEN: DataSourceType[] = ['GITHUB', 'JIRA'];
-// Types that support repoFullName auto-registration
 const NEEDS_REPO_FULLNAME: DataSourceType[] = ['GITHUB'];
 
-// ─── Sync progress display ────────────────────────────────────────────────────
+function TypeIcon({ type, size = 18 }: { type: DataSourceType; size?: number }) {
+  if (type === 'GITHUB') return <GitFork width={size} height={size} />;
+  if (type === 'JIRA') return <Jira width={size} height={size} />;
+  return <Folder width={size} height={size} />;
+}
+
+// ─── Sync progress display ─────────────────────────────────────────────────────
 
 function fmtSeconds(s: number): string {
   if (s < 60) return `${s}s`;
@@ -74,7 +80,7 @@ function fmtEta(eta: number | null): string {
 
 function SyncProgressLine({ status }: { status: SyncStatus | undefined }) {
   if (!status || status.phase === 'starting') {
-    return <span className="text-xs text-violet-500 animate-pulse">Syncing — starting…</span>;
+    return <span className="t-label" style={{ color: 'var(--violet)', fontSize: 11 }}>Syncing — starting…</span>;
   }
 
   const isKnownPhase = status.phase && status.phase !== 'starting';
@@ -83,39 +89,28 @@ function SyncProgressLine({ status }: { status: SyncStatus | undefined }) {
       ? `${status.phase} (phase ${status.phaseNumber}/${status.totalPhases})`
       : status.phase
     : null;
-
   const countStr = status.phaseProcessed > 0
     ? status.phaseTotal > 0
       ? `${status.phaseProcessed.toLocaleString()} / ~${status.phaseTotal.toLocaleString()}`
       : status.phaseProcessed.toLocaleString()
     : null;
-
-  // Prefer overall ETA (which accounts for future phases), fall back to phase ETA.
   const etaStr = fmtEta(status.overallEtaSeconds ?? status.phaseEtaSeconds);
-
-  // Completed phases history — shown as "commits: 5,432 (2m 10s)"
+  const elapsed = status.elapsedSeconds > 0 ? fmtSeconds(status.elapsedSeconds) : null;
+  const mainLine = [phaseLabel, countStr].filter(Boolean).join(' — ');
+  const timeLine = etaStr || (elapsed ? `${elapsed} elapsed` : '');
   const history = status.completedPhases.map(p =>
     `${p.name}: ${p.itemsSaved.toLocaleString()} (${fmtSeconds(p.durationSeconds)})`
   ).join(' → ');
 
-  const elapsed = status.elapsedSeconds > 0 ? fmtSeconds(status.elapsedSeconds) : null;
-
-  const mainLine = [phaseLabel, countStr].filter(Boolean).join(' — ');
-  const timeLine = etaStr || (elapsed ? `${elapsed} elapsed` : '');
-
   return (
-    <span className="text-xs text-violet-500 animate-pulse">
+    <span className="t-label" style={{ color: 'var(--violet)', fontSize: 11 }}>
       {`Syncing: ${mainLine}${timeLine ? ` (${timeLine})` : ''}`}
-      {history && (
-        <span className="block text-xs text-gray-400 mt-0.5 not-italic" style={{ animationName: 'none' }}>
-          Done: {history}
-        </span>
-      )}
+      {history && <span style={{ display: 'block', color: 'var(--fg-3)', marginTop: 2 }}>Done: {history}</span>}
     </span>
   );
 }
 
-// ─── Sync age formatter ───────────────────────────────────────────────────────
+// ─── Sync age formatter ────────────────────────────────────────────────────────
 
 function formatSyncAge(dateStr?: string): string {
   if (!dateStr) return 'Never synced';
@@ -129,31 +124,38 @@ function formatSyncAge(dateStr?: string): string {
   return `${Math.floor(diffH / 24)}d ago`;
 }
 
-function syncDotClass(dateStr?: string): string {
-  if (!dateStr) return 'bg-red-400';
+function syncDotVariant(dateStr?: string): 'live' | 'warn' | 'fail' {
+  if (!dateStr) return 'fail';
   const diffH = (Date.now() - new Date(dateStr).getTime()) / 3600000;
-  if (diffH < 24) return 'bg-emerald-400';
-  if (diffH < 168) return 'bg-amber-400'; // 7 days
-  return 'bg-red-400';
+  if (diffH < 24) return 'live';
+  if (diffH < 168) return 'warn';
+  return 'fail';
 }
 
 function SyncStatusLine({ dateStr }: { dateStr?: string }) {
+  const variant = syncDotVariant(dateStr);
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={clsx('inline-block w-1.5 h-1.5 rounded-full flex-shrink-0', syncDotClass(dateStr))} />
-      {dateStr ? `Synced ${formatSyncAge(dateStr)}` : 'Never synced'}
+    <span className="row gap-2">
+      <span className={`dot dot-${variant}`} />
+      <span className="t-label" style={{ fontSize: 11 }}>
+        {dateStr
+          ? variant === 'warn'
+            ? `last sync ${formatSyncAge(dateStr)} — overdue`
+            : `synced ${formatSyncAge(dateStr)}`
+          : 'never synced — check token'}
+      </span>
     </span>
   );
 }
 
-// ─── Repos sub-panel ──────────────────────────────────────────────────────────
+// ─── Repos sub-panel ───────────────────────────────────────────────────────────
 
 function RepoIssuesSection({ repo, isGitHub }: { repo: RepoDto; isGitHub: boolean }) {
   const qc = useQueryClient();
   const [enabled, setEnabled] = useState(repo.collectIssues);
 
-  // Keep local state in sync when the server value changes (e.g. after refetch).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEnabled(repo.collectIssues);
   }, [repo.collectIssues]);
 
@@ -161,8 +163,6 @@ function RepoIssuesSection({ repo, isGitHub }: { repo: RepoDto; isGitHub: boolea
     queryKey: ['issue-count', repo.id],
     queryFn: () => issuesApi.getCount(repo.id).then((r) => r.data),
     enabled: isGitHub && enabled,
-    // Poll while issues are enabled but haven't been synced yet, so the count
-    // updates automatically once the async collection finishes.
     refetchInterval: enabled && !repo.issuesLastSyncedAt ? 5_000 : false,
   });
 
@@ -172,14 +172,12 @@ function RepoIssuesSection({ repo, isGitHub }: { repo: RepoDto; isGitHub: boolea
       qc.invalidateQueries({ queryKey: ['repos'] });
       qc.invalidateQueries({ queryKey: ['issue-count', repo.id] });
     },
-    onError: () => setEnabled(repo.collectIssues), // roll back on failure
+    onError: () => setEnabled(repo.collectIssues),
   });
 
   if (!isGitHub) return null;
 
-  // `owner/repo` → `https://github.com/owner/repo/issues`
   const issuesUrl = repo.repoUrl ? `${repo.repoUrl}/issues` : undefined;
-  // True when tracking just started and no sync has completed yet.
   const isInitialSync = enabled && !repo.issuesLastSyncedAt;
 
   function handleToggle() {
@@ -189,29 +187,25 @@ function RepoIssuesSection({ repo, isGitHub }: { repo: RepoDto; isGitHub: boolea
   }
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between gap-3">
-      {/* Left: icon + label + count / status */}
-      <div className="flex items-center gap-1.5 text-xs min-w-0">
-        <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
-        <span className="text-gray-500">Issues</span>
-
+    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <div className="row gap-2" style={{ fontSize: 11, color: 'var(--fg-3)', minWidth: 0 }}>
+        <MessageSquare width={12} height={12} style={{ flexShrink: 0 }} />
+        <span>Issues</span>
         {enabled && (
           isInitialSync && !counts ? (
-            <span className="text-violet-400 animate-pulse">— syncing…</span>
+            <span style={{ color: 'var(--violet)' }}>— syncing…</span>
           ) : counts ? (
-            <span className="text-gray-400">
-              {'— '}
-              <span className="text-emerald-600 font-medium">{counts.open.toLocaleString()}</span>
-              <span> open</span>
-              <span className="mx-0.5 text-gray-300">/</span>
-              <span>{counts.closed.toLocaleString()} closed</span>
+            <span>
+              —{' '}
+              <span style={{ color: 'var(--emerald)', fontWeight: 500 }}>{counts.open.toLocaleString()}</span>
+              {' '}open
+              <span style={{ color: 'var(--line)', margin: '0 3px' }}>/</span>
+              {counts.closed.toLocaleString()} closed
             </span>
           ) : null
         )}
       </div>
-
-      {/* Right: issues link + toggle switch */}
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="row gap-1" style={{ flexShrink: 0 }}>
         <button
           role="switch"
           aria-checked={enabled}
@@ -220,27 +214,16 @@ function RepoIssuesSection({ repo, isGitHub }: { repo: RepoDto; isGitHub: boolea
           disabled={toggleMutation.isPending}
           className={clsx(
             'relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent',
-            'transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1',
+            'transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1',
             enabled ? 'bg-violet-500' : 'bg-gray-200',
             toggleMutation.isPending && 'opacity-50 cursor-not-allowed'
           )}
         >
-          <span
-            className={clsx(
-              'inline-block h-3 w-3 transform rounded-full bg-white shadow transition duration-200',
-              enabled ? 'translate-x-3' : 'translate-x-0'
-            )}
-          />
+          <span className={clsx('inline-block h-3 w-3 transform rounded-full bg-white shadow transition duration-200', enabled ? 'translate-x-3' : 'translate-x-0')} />
         </button>
         {issuesUrl && (
-          <a
-            href={issuesUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-1 rounded text-gray-400 hover:text-violet-600 transition-colors"
-            title="Open issues in browser"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
+          <a href={issuesUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-icon" title="Open issues" aria-label="Open issues in browser">
+            <ExternalLink width={11} height={11} />
           </a>
         )}
       </div>
@@ -291,129 +274,78 @@ function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; source
     },
   });
 
-  if (isLoading) return <p className="text-xs text-gray-400 py-2">Loading repos…</p>;
+  if (isLoading) return <p className="t-label" style={{ padding: '8px 0' }}>Loading repos…</p>;
 
   return (
     <>
       {isGitHub && (
-        <div className="flex justify-end mb-2">
-          <Button variant="secondary" size="sm" onClick={() => setShowModal(true)}>
-            <Plus className="h-3.5 w-3.5" />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button className="btn btn-sm" onClick={() => setShowModal(true)}>
+            <Plus width={12} height={12} />
             Add repository
-          </Button>
+          </button>
         </div>
       )}
 
       {detachError && (
-        <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-2">
-          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+        <div className="row gap-2" style={{ fontSize: 11, color: 'var(--coral-strong)', background: 'var(--coral-bg)', borderRadius: 6, padding: '8px 12px', marginBottom: 8 }}>
+          <AlertCircle width={12} height={12} style={{ flexShrink: 0 }} />
           {detachError}
         </div>
       )}
 
       {!repos?.length ? (
-        <p className="text-xs text-gray-400 py-2">
-          {isGitHub
-            ? 'No repositories attached. Use "Add repository" to get started.'
-            : 'No repositories registered under this data source.'}
+        <p className="t-label" style={{ padding: '8px 0' }}>
+          {isGitHub ? 'No repositories attached. Use "Add repository" to get started.' : 'No repositories registered under this data source.'}
         </p>
       ) : (
-        <ul className="space-y-1.5">
+        <div className="col gap-2">
           {repos.map((repo: RepoDto) => (
-            <li key={repo.id} className="rounded-md bg-gray-50 px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <BookOpen className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                  <span className="text-xs font-medium text-gray-800 truncate">
-                    {repo.repoFullName ?? repo.name}
-                  </span>
-                  {repo.subscribed && (
-                    <Badge color="violet" className="text-[10px] px-1.5 py-0">subscribed</Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {repo.subscribed ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => unsubscribeMutation.mutate(repo.id)}
-                      loading={unsubscribeMutation.isPending}
-                      className="flex-shrink-0 text-violet-500 hover:text-red-600 text-xs"
-                      title="Unsubscribe"
-                    >
-                      <UserMinus className="h-3.5 w-3.5" />
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => subscribeMutation.mutate(repo.id)}
-                      loading={subscribeMutation.isPending}
-                      className="flex-shrink-0 text-gray-400 hover:text-violet-600 text-xs"
-                      title="Subscribe"
-                    >
-                      <UserCheck className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                  {repo.repoUrl && (
-                    <a
-                      href={repo.repoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1 rounded text-gray-400 hover:text-violet-600 transition-colors"
-                      title="Open in browser"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  )}
-                  {confirmDetachId === repo.id ? (
-                    <div className="flex items-center gap-1">
-                      <span className="text-[11px] text-red-500">Remove?</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => detachMutation.mutate(repo.id)}
-                        loading={detachMutation.isPending}
-                        className="text-red-600 hover:text-red-700 text-[11px] px-1.5"
-                      >
-                        Yes
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setConfirmDetachId(null)}
-                        className="text-gray-400 text-[11px] px-1.5"
-                      >
-                        No
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setDetachError(null); setConfirmDetachId(repo.id); }}
-                      className="text-gray-400 hover:text-red-500"
-                      title="Remove repository"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
+            <div key={repo.id} className="row" style={{ background: 'var(--bg-card)', border: '1px solid var(--line-2)', padding: '10px 12px', borderRadius: 6, gap: 10 }}>
+              <Branch width={14} height={14} style={{ color: 'var(--fg-3)', flexShrink: 0 }} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {repo.repoFullName ?? repo.name}
+              </span>
+              {repo.subscribed && <Chip color="violet">subscribed</Chip>}
+              <div className="row gap-1" style={{ flexShrink: 0 }}>
+                {repo.subscribed ? (
+                  <button className="btn btn-sm btn-icon" onClick={() => unsubscribeMutation.mutate(repo.id)} title="Unsubscribe" aria-label="Unsubscribe">
+                    <UserMinus width={12} height={12} />
+                  </button>
+                ) : (
+                  <button className="btn btn-sm btn-icon" onClick={() => subscribeMutation.mutate(repo.id)} title="Subscribe" aria-label="Subscribe">
+                    <UserCheck width={12} height={12} />
+                  </button>
+                )}
+                {repo.repoUrl && (
+                  <a href={repo.repoUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-icon" title="Open in browser" aria-label="Open repository">
+                    <ExternalLink width={11} height={11} />
+                  </a>
+                )}
+                {confirmDetachId === repo.id ? (
+                  <div className="row gap-1">
+                    <span className="t-label" style={{ color: 'var(--coral)', fontSize: 11 }}>Remove?</span>
+                    <button className="btn btn-sm" style={{ color: 'var(--coral)' }} onClick={() => detachMutation.mutate(repo.id)}>Yes</button>
+                    <button className="btn btn-sm" onClick={() => setConfirmDetachId(null)}>No</button>
+                  </div>
+                ) : (
+                  <button className="btn btn-sm btn-icon" onClick={() => { setDetachError(null); setConfirmDetachId(repo.id); }} title="Remove repository" aria-label="Remove repository">
+                    <Trash2 width={12} height={12} />
+                  </button>
+                )}
               </div>
               <RepoIssuesSection repo={repo} isGitHub={isGitHub} />
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
 
-      {showModal && (
-        <DiscoverReposModal dsId={dataSourceId} onClose={() => setShowModal(false)} />
-      )}
+      {showModal && <DiscoverReposModal dsId={dataSourceId} onClose={() => setShowModal(false)} />}
     </>
   );
 }
 
-// ─── Jira projects sub-panel ──────────────────────────────────────────────────
+// ─── Jira projects sub-panel ───────────────────────────────────────────────────
 
 function JiraProjectRow({
   p, syncing, onRequestDetach, isConfirming, onConfirmDetach, onCancelDetach, isDetaching,
@@ -432,74 +364,43 @@ function JiraProjectRow({
     refetchInterval: syncing ? 3_000 : false,
   });
 
-  const projectUrl = p.dataSourceBaseUrl
-    ? `${p.dataSourceBaseUrl}/browse/${p.projectKey}`
-    : undefined;
+  const projectUrl = p.dataSourceBaseUrl ? `${p.dataSourceBaseUrl}/browse/${p.projectKey}` : undefined;
 
   return (
-    <li className="rounded-md bg-gray-50 px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-mono font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">
-            {p.projectKey}
-          </span>
-          <span className="text-xs text-gray-700 truncate">{p.projectName ?? p.projectKey}</span>
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {counts && (counts.open > 0 || counts.closed > 0) && (
-            <span className="text-xs text-gray-400 mr-1">
-              <span className="text-emerald-600 font-medium">{counts.open.toLocaleString()}</span>
-              <span> open</span>
-              <span className="mx-0.5 text-gray-300">/</span>
-              <span>{counts.closed.toLocaleString()} closed</span>
-            </span>
-          )}
-          {projectUrl && (
-            <a
-              href={projectUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-1 rounded text-gray-400 hover:text-blue-600 transition-colors"
-              title="Open project in Jira"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          )}
-          {isConfirming ? (
-            <div className="flex items-center gap-1">
-              <span className="text-[11px] text-red-500">Remove?</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onConfirmDetach}
-                loading={isDetaching}
-                className="text-red-600 hover:text-red-700 text-[11px] px-1.5"
-              >
-                Yes
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onCancelDetach}
-                className="text-gray-400 text-[11px] px-1.5"
-              >
-                No
-              </Button>
-            </div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRequestDetach}
-              className="text-gray-400 hover:text-red-500"
-              title="Remove project"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
+    <div className="row" style={{ background: 'var(--bg-card)', border: '1px solid var(--line-2)', padding: '10px 12px', borderRadius: 6, gap: 10 }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--cyan)', background: 'var(--cyan-bg)', padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
+        {p.projectKey}
+      </span>
+      <span style={{ fontSize: 12, color: 'var(--fg)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {p.projectName ?? p.projectKey}
+      </span>
+      {counts && (counts.open > 0 || counts.closed > 0) && (
+        <span className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+          <span style={{ color: 'var(--emerald)', fontWeight: 500 }}>{counts.open.toLocaleString()}</span>
+          <span style={{ color: 'var(--line)', margin: '0 2px' }}>/</span>
+          {counts.closed.toLocaleString()}
+          <span className="t-label" style={{ marginLeft: 4 }}>issues</span>
+        </span>
+      )}
+      <div className="row gap-1" style={{ flexShrink: 0 }}>
+        {projectUrl && (
+          <a href={projectUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-icon" title="Open project" aria-label="Open Jira project">
+            <ExternalLink width={11} height={11} />
+          </a>
+        )}
+        {isConfirming ? (
+          <div className="row gap-1">
+            <span className="t-label" style={{ color: 'var(--coral)', fontSize: 11 }}>Remove?</span>
+            <button className="btn btn-sm" style={{ color: 'var(--coral)' }} onClick={onConfirmDetach} disabled={isDetaching}>Yes</button>
+            <button className="btn btn-sm" onClick={onCancelDetach}>No</button>
+          </div>
+        ) : (
+          <button className="btn btn-sm btn-icon" onClick={onRequestDetach} title="Remove project" aria-label="Remove project">
+            <Trash2 width={12} height={12} />
+          </button>
+        )}
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -529,31 +430,29 @@ function JiraProjectsPanel({ dataSourceId, syncing }: { dataSourceId: number; sy
     },
   });
 
-  if (isLoading) return <p className="text-xs text-gray-400 py-2">Loading projects…</p>;
-  if (isError) return <p className="text-xs text-red-400 py-2">Could not load Jira projects.</p>;
+  if (isLoading) return <p className="t-label" style={{ padding: '8px 0' }}>Loading projects…</p>;
+  if (isError) return <p className="t-label" style={{ padding: '8px 0', color: 'var(--coral)' }}>Could not load Jira projects.</p>;
 
   return (
     <>
-      <div className="flex justify-end mb-2">
-        <Button variant="secondary" size="sm" onClick={() => setShowModal(true)}>
-          <Plus className="h-3.5 w-3.5" />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <button className="btn btn-sm" onClick={() => setShowModal(true)}>
+          <Plus width={12} height={12} />
           Add project
-        </Button>
+        </button>
       </div>
 
       {detachError && (
-        <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-2">
-          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+        <div className="row gap-2" style={{ fontSize: 11, color: 'var(--coral-strong)', background: 'var(--coral-bg)', borderRadius: 6, padding: '8px 12px', marginBottom: 8 }}>
+          <AlertCircle width={12} height={12} style={{ flexShrink: 0 }} />
           {detachError}
         </div>
       )}
 
       {!projects?.length ? (
-        <p className="text-xs text-gray-400 py-2">
-          No tracked Jira projects. Use "Add project" to get started.
-        </p>
+        <p className="t-label" style={{ padding: '8px 0' }}>No tracked Jira projects. Use "Add project" to get started.</p>
       ) : (
-        <ul className="space-y-1.5">
+        <div className="col gap-2">
           {projects.map((p: TrackedJiraProjectDto) => (
             <JiraProjectRow
               key={p.id}
@@ -566,17 +465,15 @@ function JiraProjectsPanel({ dataSourceId, syncing }: { dataSourceId: number; sy
               isDetaching={detachMutation.isPending && confirmDetachId === p.id}
             />
           ))}
-        </ul>
+        </div>
       )}
 
-      {showModal && (
-        <DiscoverProjectsModal dsId={dataSourceId} onClose={() => setShowModal(false)} />
-      )}
+      {showModal && <DiscoverProjectsModal dsId={dataSourceId} onClose={() => setShowModal(false)} />}
     </>
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Main page ─────────────────────────────────────────────────────────────────
 
 type FormState = {
   type: DataSourceType;
@@ -606,12 +503,16 @@ export function DataSourcesPage() {
   const [formError, setFormError] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-  // Live sync status per data-source ID, populated by the polling loop.
   const [syncStatuses, setSyncStatuses] = useState<Record<number, SyncStatus>>({});
 
   const { data: sources, isLoading } = useQuery({
     queryKey: ['datasources'],
     queryFn: () => datasourcesApi.list().then((r) => r.data),
+  });
+
+  const { data: allRepos } = useQuery({
+    queryKey: ['repos-all'],
+    queryFn: () => reposApi.list().then((r) => r.data),
   });
 
   const { data: availableTeams } = useQuery<Team[]>({
@@ -624,6 +525,7 @@ export function DataSourcesPage() {
     mutationFn: (req: CreateDataSourceRequest) => datasourcesApi.create(req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['datasources'] });
+      qc.invalidateQueries({ queryKey: ['repos-all'] });
       setShowForm(false);
       setShowToken(false);
       setForm({ type: 'GITHUB', name: '', baseUrl: 'https://api.github.com', path: '', apiToken: '', teamId: '', repoFullName: '', projectKey: '' });
@@ -642,7 +544,6 @@ export function DataSourcesPage() {
   const collectMutation = useMutation({
     mutationFn: (id: number) => datasourcesApi.collect(id),
     onSuccess: (_, id) => {
-      // Seed a "starting" status so the UI reacts immediately (202 returns fast).
       setSyncStatuses(prev => ({
         ...prev,
         [id]: {
@@ -656,15 +557,12 @@ export function DataSourcesPage() {
     },
   });
 
-  // Derived: IDs that are actively syncing.
   const syncingIds = new Set(
     Object.entries(syncStatuses)
       .filter(([, s]) => s.running)
       .map(([id]) => Number(id))
   );
 
-  // On mount: restore any in-progress jobs from the server so navigation
-  // doesn't lose progress state.
   useEffect(() => {
     datasourcesApi.activeCollectStatuses().then(({ data }) => {
       if (Object.keys(data).length > 0) {
@@ -676,11 +574,9 @@ export function DataSourcesPage() {
           return merged;
         });
       }
-    }).catch(() => { /* server may not have any active jobs */ });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    }).catch(() => {});
   }, []);
 
-  // Poll every 3 s for every actively-syncing source.
   useEffect(() => {
     if (syncingIds.size === 0) return;
     const timer = setInterval(async () => {
@@ -693,7 +589,6 @@ export function DataSourcesPage() {
             qc.invalidateQueries({ queryKey: ['jira-issue-count'] });
           }
         } catch {
-          // 404 = server restarted, lost in-memory state; treat as done.
           setSyncStatuses(prev => { const n = { ...prev }; delete n[id]; return n; });
           qc.invalidateQueries({ queryKey: ['datasources'] });
         }
@@ -719,119 +614,158 @@ export function DataSourcesPage() {
   function toggleExpanded(id: number) {
     setExpandedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   }
 
   if (isLoading) return <PageSpinner />;
 
+  const sourceCount = sources?.length ?? 0;
+  const repoCount = allRepos?.length ?? 0;
+
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Data Sources</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Connect your repositories and trackers</p>
+    <div className="page fade-in">
+
+      {/* ── Hero ──────────────────────────────────────────── */}
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28, gap: 20, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 400px', minWidth: 0 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 10 }}>── Sources</div>
+          <h1 className="t-h1">
+            <em>{sourceCount} {sourceCount === 1 ? 'source' : 'sources'}</em>
+            {repoCount > 0 && <>, <em>{repoCount} repos</em></>}
+            {' '}feed the metrics.
+          </h1>
         </div>
-        <Button onClick={() => setShowForm((v) => !v)} size="sm">
-          <Plus className="h-4 w-4" />
-          Add source
-        </Button>
+        <button className="btn btn-accent" onClick={() => setShowForm((v) => !v)} style={{ flexShrink: 0 }}>
+          <Plus width={13} height={13} />
+          connect source
+        </button>
       </div>
 
-      {/* Add form */}
+      {/* ── New source form ───────────────────────────────── */}
       {showForm && (
-        <Card>
-          <CardHeader>
-            <h2 className="text-sm font-semibold text-gray-900">New data source</h2>
-          </CardHeader>
-          <CardBody>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Select
-                  label="Type"
-                  value={form.type}
-                  options={TYPE_OPTIONS}
-                  onChange={(e) => {
-                    const t = e.target.value as DataSourceType;
+        <div className="card" style={{ padding: 22, marginBottom: 20 }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+            <div className="t-h2" style={{ fontSize: 20 }}>New source</div>
+            <button className="btn btn-ghost btn-icon" onClick={() => setShowForm(false)} aria-label="Close form">
+              <X width={14} height={14} />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            {/* Type picker */}
+            <div className="t-eyebrow" style={{ marginBottom: 10 }}>type</div>
+            <div className="row gap-3" style={{ marginBottom: 18, flexWrap: 'wrap' }}>
+              {(['GITHUB', 'JIRA', 'GIT_LOCAL'] as DataSourceType[]).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className="col gap-2"
+                  onClick={() => {
                     const defaultBaseUrl = t === 'GITHUB' ? 'https://api.github.com' : '';
                     setShowToken(false);
                     setForm({ ...form, type: t, baseUrl: defaultBaseUrl, path: '', repoFullName: '', projectKey: '' });
                   }}
-                />
-                <Input
-                  label="Name"
+                  style={{
+                    padding: 14,
+                    background: form.type === t ? 'var(--bg-2)' : 'var(--bg-card)',
+                    border: `1px solid ${form.type === t ? 'var(--accent)' : 'var(--line)'}`,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    width: 150,
+                    textAlign: 'left',
+                  }}
+                >
+                  <span style={{ color: TYPE_ACCENT[t] }}><TypeIcon type={t} size={18} /></span>
+                  <span style={{ fontWeight: 500, fontSize: 13, color: 'var(--fg)' }}>{TYPE_LABELS[t]}</span>
+                  <span className="t-label" style={{ fontSize: 10 }}>{TYPE_DESCS[t]}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Form fields */}
+            <div className="col gap-3" style={{ maxWidth: 600 }}>
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 6 }}>name</div>
+                <input
+                  className="input"
+                  placeholder="e.g. Work GitHub"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. Work GitHub, Personal Jira"
                   required
                 />
               </div>
 
               {NEEDS_BASEURL.includes(form.type) && (
-                <Input
-                  label="Base URL"
-                  value={form.baseUrl}
-                  onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
-                  placeholder={
-                    form.type === 'JIRA'
-                      ? 'https://yourcompany.atlassian.net'
-                      : 'https://api.github.com'
-                  }
-                  required
-                />
+                <div>
+                  <div className="t-eyebrow" style={{ marginBottom: 6 }}>base url</div>
+                  <input
+                    className="input"
+                    value={form.baseUrl}
+                    onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+                    placeholder={form.type === 'JIRA' ? 'https://yourcompany.atlassian.net' : 'https://api.github.com'}
+                    required
+                  />
+                </div>
               )}
 
               {NEEDS_PATH.includes(form.type) && (
-                <Input
-                  label="Repository path"
-                  value={form.path}
-                  onChange={(e) => setForm({ ...form, path: e.target.value })}
-                  placeholder="C:\Projects\my-repo or /home/user/my-project"
-                  required
-                />
+                <div>
+                  <div className="t-eyebrow" style={{ marginBottom: 6 }}>repository path</div>
+                  <input
+                    className="input"
+                    value={form.path}
+                    onChange={(e) => setForm({ ...form, path: e.target.value })}
+                    placeholder="C:\Projects\my-repo or /home/user/my-project"
+                    required
+                  />
+                </div>
               )}
 
               {NEEDS_TOKEN.includes(form.type) && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-gray-700">API token</label>
-                  <div className="relative">
+                <div>
+                  <div className="t-eyebrow" style={{ marginBottom: 6 }}>api token</div>
+                  <div style={{ position: 'relative' }}>
                     <input
+                      className="input"
                       type={showToken ? 'text' : 'password'}
                       value={form.apiToken}
                       onChange={(e) => setForm({ ...form, apiToken: e.target.value })}
                       placeholder="••••••••••••"
-                      className="block w-full px-3 py-2 pr-10 text-sm rounded-lg border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors duration-150"
+                      style={{ paddingRight: 40 }}
                     />
                     <button
                       type="button"
                       onClick={() => setShowToken((v) => !v)}
-                      className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 transition-colors"
+                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-3)', padding: 0 }}
                       tabIndex={-1}
                       aria-label={showToken ? 'Hide token' : 'Show token'}
                     >
-                      {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showToken ? <EyeOff width={14} height={14} /> : <Eye width={14} height={14} />}
                     </button>
                   </div>
+                  <div className="t-label" style={{ marginTop: 4, fontSize: 10.5 }}>stored encrypted · never logged</div>
                 </div>
               )}
 
               {NEEDS_REPO_FULLNAME.includes(form.type) && (
-                <Input
-                  label="GitHub repository (owner/repo)"
-                  value={form.repoFullName}
-                  onChange={(e) => setForm({ ...form, repoFullName: e.target.value })}
-                  placeholder="e.g. acme/backend-api"
-                />
+                <div>
+                  <div className="t-eyebrow" style={{ marginBottom: 6 }}>github repository <span className="t-label" style={{ fontSize: 10 }}>(optional — owner/repo)</span></div>
+                  <input
+                    className="input"
+                    value={form.repoFullName}
+                    onChange={(e) => setForm({ ...form, repoFullName: e.target.value })}
+                    placeholder="e.g. acme/backend-api"
+                  />
+                </div>
               )}
 
               {form.type === 'JIRA' && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-gray-700">
-                    Jira project key{' '}
-                    <span className="text-xs text-gray-400 font-normal">(optional — leave blank to collect all projects)</span>
-                  </label>
-                  <Input
+                <div>
+                  <div className="t-eyebrow" style={{ marginBottom: 6 }}>jira project key <span className="t-label" style={{ fontSize: 10 }}>(optional)</span></div>
+                  <input
+                    className="input"
                     value={form.projectKey}
                     onChange={(e) => setForm({ ...form, projectKey: e.target.value.toUpperCase() })}
                     placeholder="e.g. PDA, PROJ"
@@ -841,13 +775,11 @@ export function DataSourcesPage() {
 
               {(isManager || isAdmin) && availableTeams && availableTeams.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Assign to team <span className="text-xs text-gray-400 font-normal">(optional)</span>
-                  </label>
+                  <div className="t-eyebrow" style={{ marginBottom: 6 }}>assign to team <span className="t-label" style={{ fontSize: 10 }}>(optional)</span></div>
                   <select
+                    className="input"
                     value={form.teamId}
                     onChange={(e) => setForm({ ...form, teamId: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
                   >
                     <option value="">Personal (no team)</option>
                     {availableTeams.map((t) => (
@@ -858,131 +790,126 @@ export function DataSourcesPage() {
               )}
 
               {formError && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <div className="row gap-2" style={{ fontSize: 12, color: 'var(--coral-strong)', background: 'var(--coral-bg)', borderRadius: 6, padding: '10px 14px' }}>
+                  <AlertCircle width={14} height={14} style={{ flexShrink: 0 }} />
                   {formError}
                 </div>
               )}
 
-              <div className="flex gap-2 pt-1">
-                <Button type="submit" loading={createMutation.isPending}>Save</Button>
-                <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>Cancel</Button>
+              <div className="row gap-2" style={{ marginTop: 8 }}>
+                <button type="submit" className="btn btn-accent" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? 'Saving…' : 'save & connect'}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>cancel</button>
               </div>
-            </form>
-          </CardBody>
-        </Card>
-      )}
-
-      {/* Sources list */}
-      {sources?.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
-          <Database className="h-10 w-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No data sources yet. Add one to start collecting metrics.</p>
+            </div>
+          </form>
         </div>
       )}
 
-      <div className="space-y-3">
+      {/* ── Empty state ─────────────────────────────────────── */}
+      {sourceCount === 0 && (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
+          <p className="t-body">No data sources yet. Connect one to start collecting metrics.</p>
+        </div>
+      )}
+
+      {/* ── Sources list ────────────────────────────────────── */}
+      <div className="col gap-3" style={{ marginBottom: 24 }}>
         {sources?.map((src) => {
-          const expanded = expandedIds.has(src.id);
+          const isExpanded = expandedIds.has(src.id);
+          const chipColor = TYPE_CHIP_COLORS[src.type];
           const displayUrl = src.baseUrl ?? src.path;
+          const isSyncing = syncingIds.has(src.id);
+
           return (
-            <Card key={src.id} className="hover:shadow-sm transition-shadow">
-              {/* Header row */}
-              <div className="flex items-center gap-4 px-5 py-4">
-                <div className="flex-shrink-0 p-2.5 rounded-lg bg-gray-50 text-gray-500">
-                  <TypeIcon type={src.type} />
+            <div key={src.id} className="card">
+              <div
+                className="row"
+                style={{ padding: '16px 18px', gap: 14, cursor: 'pointer', alignItems: 'center' }}
+                onClick={() => toggleExpanded(src.id)}
+              >
+                {/* Type icon square */}
+                <div style={{
+                  width: 40, height: 40, borderRadius: 8,
+                  background: TYPE_ACCENT_BG[src.type],
+                  color: TYPE_ACCENT[src.type],
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <TypeIcon type={src.type} size={18} />
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-gray-900">{src.name}</p>
-                    <Badge color={TYPE_COLORS[src.type]}>{TYPE_LABELS[src.type]}</Badge>
-                    {src.teamId && (
-                      <Badge color="blue">Team</Badge>
-                    )}
+                {/* Name + meta */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="row gap-2" style={{ flexWrap: 'wrap', marginBottom: 4 }}>
+                    <span style={{ fontWeight: 500, fontSize: 14, color: 'var(--fg)' }}>{src.name}</span>
+                    <Chip color={chipColor}>{TYPE_LABELS[src.type]}</Chip>
+                    {src.teamId && <Chip>team</Chip>}
                   </div>
                   {displayUrl && (
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">{displayUrl}</p>
+                    <div className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {displayUrl}
+                    </div>
                   )}
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {syncingIds.has(src.id) ? (
+                  <div>
+                    {isSyncing ? (
                       <SyncProgressLine status={syncStatuses[src.id]} />
                     ) : (
                       <SyncStatusLine dateStr={src.lastSuccessSync} />
                     )}
-                  </p>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {/* Collect button */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                {/* Actions */}
+                <div className="row gap-1" style={{ flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="btn btn-sm btn-icon"
+                    title={isSyncing ? 'Sync in progress' : 'Collect data'}
+                    aria-label="Collect data"
+                    disabled={isSyncing}
                     onClick={() => collectMutation.mutate(src.id)}
-                    loading={
-                      (collectMutation.isPending && collectMutation.variables === src.id) ||
-                      syncingIds.has(src.id)
-                    }
-                    disabled={syncingIds.has(src.id)}
-                    className="text-gray-400 hover:text-violet-600"
-                    title={syncingIds.has(src.id) ? 'Sync in progress' : 'Collect data'}
                   >
-                    <Play className="h-4 w-4" />
-                  </Button>
-
-                  {/* Expand/collapse repos */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleExpanded(src.id)}
-                    className="text-gray-400 hover:text-gray-700"
-                    title={expanded ? 'Hide repositories' : 'Show repositories'}
-                  >
-                    {expanded
-                      ? <ChevronDown className="h-4 w-4" />
-                      : <ChevronRight className="h-4 w-4" />
-                    }
-                  </Button>
-
-                  {/* Delete — only shown when the user is allowed to delete this config */}
+                    <Play width={11} height={11} />
+                  </button>
                   {src.canDelete && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteMutation.mutate(src.id)}
-                      loading={deleteMutation.isPending}
-                      className="text-gray-400 hover:text-red-600"
+                    <button
+                      className="btn btn-sm btn-icon"
                       title="Delete data source"
+                      aria-label="Delete data source"
+                      onClick={() => deleteMutation.mutate(src.id)}
+                      disabled={deleteMutation.isPending}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                      <Trash2 width={13} height={13} />
+                    </button>
                   )}
+                  <span style={{ padding: '6px 6px', color: 'var(--fg-3)' }}>
+                    {isExpanded
+                      ? <ChevronDown width={14} height={14} />
+                      : <ChevronRight width={14} height={14} />}
+                  </span>
                 </div>
               </div>
 
-              {/* Repos panel */}
-              {expanded && (
-                <div className="border-t border-gray-100 px-5 py-3">
-                  <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
-                    Repositories
-                  </p>
+              {/* Expanded panel */}
+              {isExpanded && (
+                <div style={{ borderTop: '1px solid var(--line-2)', background: 'var(--bg-2)', padding: 16 }}>
+                  <div className="t-eyebrow" style={{ marginBottom: 10 }}>── repositories</div>
                   <ReposPanel dataSourceId={src.id} sourceType={src.type} />
+                  {src.type === 'JIRA' && (
+                    <>
+                      <div className="t-eyebrow" style={{ marginTop: 18, marginBottom: 10 }}>── jira projects</div>
+                      <JiraProjectsPanel dataSourceId={src.id} syncing={isSyncing} />
+                    </>
+                  )}
                 </div>
               )}
-
-              {/* Jira projects panel */}
-              {expanded && src.type === 'JIRA' && (
-                <div className="border-t border-gray-100 px-5 py-3">
-                  <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
-                    Jira Projects
-                  </p>
-                  <JiraProjectsPanel dataSourceId={src.id} syncing={syncingIds.has(src.id)} />
-                </div>
-              )}
-            </Card>
+            </div>
           );
         })}
       </div>
+
+      <div style={{ height: 32 }} />
     </div>
   );
 }

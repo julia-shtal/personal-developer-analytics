@@ -1,56 +1,45 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  GitCommit,
-  GitPullRequest,
-  GitMerge,
-  Clock,
-  Target,
-  RefreshCw,
-  ChevronDown,
-  ChevronUp,
-  Moon,
-  Flame,
-  CirclePlus,
-  CircleCheckBig,
-  ClockCheck,
-  Route,
-  Hourglass,
-  Replace,
-  Shuffle,
-  EyeOff,
-  Layers3,
-  Brain,
-  LayoutDashboard,
-} from 'lucide-react';
-
-function KnowledgeSiloIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      width="16" height="16" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor"
-      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
-      className={className}
-    >
-      <circle cx="12" cy="12" r="3.2" fill="currentColor" />
-      <circle cx="5" cy="6" r="1.5" />
-      <circle cx="19" cy="6" r="1.5" />
-      <circle cx="5" cy="18" r="1.5" />
-      <circle cx="19" cy="18" r="1.5" />
-    </svg>
-  );
-}
 import { metricsApi } from '@/api/metrics';
-import { KpiCard, Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { DateRangePicker } from '@/components/DateRangePicker';
-import { MetricLineChart } from '@/components/charts/MetricLineChart';
 import { MetricBarChart } from '@/components/charts/MetricBarChart';
+import { Sparkline } from '@/components/charts/Sparkline';
+import { KpiTile } from '@/components/ui/KpiTile';
+import { Chip } from '@/components/ui/Chip';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useDateRange } from '@/context/DateRangeContext';
 import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
-import { AiMetricExplainDrawer } from '@/components/ai/AiMetricExplainDrawer';
+import { formatDate } from '@/lib/dates';
 import type { MetricsSummaryDto } from '@/types/ai';
+import {
+  Commits, PRMerged, LeadTime, Focus, PRCreated, IssuesClosed,
+  Review, FirstCommit, AfterHours, Refactor, NoReview, MergeFreq,
+  DeepWork, Churn, Silo, PRSize,
+} from '@/components/icons';
+
+function numSuffix(
+  val: number | undefined | null,
+  unit: string,
+  fmt: (v: number) => string = (v) => v.toFixed(1),
+): ReactNode {
+  if (!val || val <= 0) return '—';
+  return (
+    <span>
+      {fmt(val)}
+      <em style={{ fontSize: '0.5em', color: 'var(--fg-3)', marginLeft: 4 }}>{unit}</em>
+    </span>
+  );
+}
+
+function pctSuffix(val: number | undefined | null): ReactNode {
+  if (val == null || val <= 0) return '—';
+  return (
+    <span>
+      {Math.round(val * 100)}
+      <em style={{ fontSize: '0.5em', color: 'var(--fg-3)', marginLeft: 2 }}>%</em>
+    </span>
+  );
+}
 
 function sum(data: { value: number }[]) {
   return data.reduce((a, b) => a + b.value, 0);
@@ -61,51 +50,12 @@ function avg(data: { value: number }[]) {
   return data.reduce((a, b) => a + b.value, 0) / data.length;
 }
 
-interface ChartSectionProps {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}
-
-function ChartSection({ title, subtitle, children }: ChartSectionProps) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <Card>
-      <button
-        className="w-full text-left px-5 py-4 flex items-center justify-between group"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-          {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
-        </div>
-        {expanded
-          ? <ChevronUp className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
-          : <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
-        }
-      </button>
-      {expanded && <div className="px-5 pb-5">{children}</div>}
-    </Card>
-  );
-}
-
 export function DashboardPage() {
-  const { range, setRange } = useDateRange();
+  const { range } = useDateRange();
   const qc = useQueryClient();
+  const { from, to } = range;
 
   const [aiSummary, setAiSummary] = useState<MetricsSummaryDto | null>(null);
-  const [explainDrawer, setExplainDrawer] = useState<{
-    label: string;
-    description: string;
-    value: string;
-  } | null>(null);
-
-  function openExplain(label: string, description: string, value: string) {
-    setExplainDrawer({ label, description, value });
-  }
-
-  const { from, to } = range;
 
   const commits = useQuery({
     queryKey: ['daily-commits', from, to],
@@ -197,376 +147,326 @@ export function DashboardPage() {
     queryFn: () => metricsApi.knowledgeSilo(from, to).then((r) => r.data),
   });
 
-  const calculateMutation = useMutation({
+  const recalculateMutation = useMutation({
     mutationFn: () => metricsApi.calculate(from, to),
     onSuccess: () => qc.invalidateQueries({ queryKey: [] }),
   });
+
+  useEffect(() => {
+    const h = () => recalculateMutation.mutate();
+    window.addEventListener('da:recalculate', h);
+    return () => window.removeEventListener('da:recalculate', h);
+  }, [recalculateMutation]);
 
   const isLoading = commits.isLoading && prCreated.isLoading;
   if (isLoading) return <PageSpinner />;
 
   const totalCommits = sum(commits.data ?? []);
   const totalPrsMerged = sum(prMerged.data ?? []);
-  const avgChurn = avg(churn.data ?? []);
+  const avgChurnVal = avg(churn.data ?? []);
   const leadTimeHrs = prLeadTime.data?.value ?? 0;
   const firstCommitLeadTimeHrs = prFirstCommitLeadTime.data?.value ?? 0;
-  const issueLeadTimeHrs = issueLeadTime.data?.value ?? 0;
+  const deepWorkDays = Math.round(deepWorkStreak.data?.value ?? 0);
+  const peakCommits = commits.data?.length ? Math.max(...commits.data.map((d) => d.value)) : 0;
 
-  function fmtHours(h: number) {
-    if (!h || h <= 0) return '—';
-    if (h < 24) return `${h.toFixed(1)}h`;
-    return `${(h / 24).toFixed(1)}d`;
-  }
-
-  function fmtPct(v: number | undefined | null) {
-    if (v == null || v <= 0) return '—';
-    return `${(v * 100).toFixed(0)}%`;
-  }
+  // issueLeadTime kept for future use — data is fetched but not yet shown in KPI tiles
+  void issueLeadTime;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Personal Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Your activity in the selected period</p>
+    <div className="page fade-in">
+
+      {/* ── Hero ──────────────────────────────────────────── */}
+      <div style={{ marginBottom: 36 }}>
+        <div className="t-eyebrow" style={{ marginBottom: 14 }}>
+          ── Personal · {formatDate(from)} → {formatDate(to)}
         </div>
-        <div className="flex items-center gap-2">
-          <DateRangePicker value={range} onChange={setRange} />
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => calculateMutation.mutate()}
-            loading={calculateMutation.isPending}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Recalculate
-          </Button>
+        <h1 className="t-h1" style={{ textAlign: 'justify' }}>
+          <em>{totalCommits} commits</em>, <em>{totalPrsMerged} PRs merged</em>,
+          {' '}a <em>{deepWorkDays}-day</em> deep-work streak
+          {aiSummary?.headline ? ` — ${aiSummary.headline}` : '.'}
+        </h1>
+        <p className="t-body" style={{ marginTop: 18, textAlign: 'justify' }}>
+          {aiSummary?.overview ?? 'Generate an AI summary to see your narrative overview.'}
+        </p>
+      </div>
+
+      {/* ── Commits hero card ────────────────────────────── */}
+      <div className="card" style={{ padding: 22, marginBottom: 32 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div>
+            <div className="t-eyebrow">commits — daily</div>
+            <div className="t-number-hero" style={{ marginTop: 8 }}>
+              {totalCommits}
+              <em style={{ fontSize: '0.4em', marginLeft: 8, color: 'var(--fg-3)', fontStyle: 'normal' }}>total</em>
+            </div>
+          </div>
+          <Chip color="violet" dot>{commits.data?.length ?? 0} days</Chip>
+        </div>
+        <div style={{ overflow: 'hidden' }}>
+          <Sparkline data={commits.data ?? []} color="var(--violet)" height={70} width={800} area responsive />
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', marginTop: 6 }}>
+          <span className="t-label">{formatDate(from)}</span>
+          <span className="t-label">{formatDate(to)}</span>
         </div>
       </div>
 
-      {/* Empty state — shown when no data has been calculated yet */}
-      {!commits.data?.length && !prMerged.data?.length && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <LayoutDashboard className="h-8 w-8 text-gray-300 mb-3" />
-          <p className="text-sm text-gray-400 mb-4">No data — try recalculating for this period</p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => calculateMutation.mutate()}
-            loading={calculateMutation.isPending}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Recalculate
-          </Button>
-        </div>
-      )}
-
-      {/* Primary KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="relative group/explain">
-          <KpiCard
-            label="Total Commits"
+      {/* ── Velocity ─────────────────────────────────────── */}
+      <div className="hr-label"><span>velocity</span></div>
+      <div className="card">
+        <div className="grid-kpi">
+          <KpiTile
+            label="commits"
             value={totalCommits}
-            subtitle="in period"
-            icon={<GitCommit className="h-4 w-4" />}
+            sub={`in ${commits.data?.length ?? 0} days`}
+            accent="violet"
+            icon={<Commits />}
             tooltip="Number of Git commits authored in the selected period."
           />
-          <button
-            onClick={() => openExplain('Total Commits', 'Number of Git commits authored in the selected period.', String(totalCommits))}
-            className="absolute bottom-2.5 right-2.5 opacity-0 group-hover/explain:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-violet-50 text-gray-300 hover:text-violet-500"
-            title="Explain with AI"
-          >
-            <Brain className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        <div className="relative group/explain">
-          <KpiCard
-            label="PRs Merged"
+          <KpiTile
+            label="prs merged"
             value={totalPrsMerged}
-            subtitle="in period"
-            icon={<GitMerge className="h-4 w-4" />}
+            sub="to default branch"
+            accent="violet"
+            icon={<PRMerged />}
             tooltip="Pull requests merged to a target branch in the selected period."
           />
-          <button
-            onClick={() => openExplain('PRs Merged', 'Pull requests merged to a target branch in the selected period.', String(totalPrsMerged))}
-            className="absolute bottom-2.5 right-2.5 opacity-0 group-hover/explain:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-violet-50 text-gray-300 hover:text-violet-500"
-            title="Explain with AI"
-          >
-            <Brain className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        <div className="relative group/explain">
-          <KpiCard
-            label="PR Lead Time"
-            value={fmtHours(leadTimeHrs)}
-            subtitle="open → merge, median"
-            icon={<Clock className="h-4 w-4" />}
+          <KpiTile
+            label="pr lead time"
+            value={numSuffix(leadTimeHrs, 'h')}
+            sub="open → merge · median"
+            accent="cyan"
+            icon={<LeadTime />}
             tooltip="Median time from when a PR is opened to when it is merged."
           />
-          <button
-            onClick={() => openExplain('PR Lead Time', 'Median time from when a PR is opened to when it is merged.', fmtHours(leadTimeHrs))}
-            className="absolute bottom-2.5 right-2.5 opacity-0 group-hover/explain:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-violet-50 text-gray-300 hover:text-violet-500"
-            title="Explain with AI"
-          >
-            <Brain className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        <div className="relative group/explain">
-          <KpiCard
-            label="Focus Ratio"
-            value={focusRatio.data?.value != null ? fmtPct(focusRatio.data.value) : '—'}
-            subtitle="coding days / working days"
-            icon={<Target className="h-4 w-4" />}
-            iconVariant="teal"
+          <KpiTile
+            label="focus ratio"
+            value={pctSuffix(focusRatio.data?.value)}
+            sub="coding days / working"
+            accent="emerald"
+            icon={<Focus />}
             tooltip="Fraction of working days (Mon–Fri) on which you made at least one commit."
           />
-          <button
-            onClick={() => openExplain('Focus Ratio', 'Fraction of working days (Mon–Fri) on which you made at least one commit.', focusRatio.data?.value != null ? fmtPct(focusRatio.data.value) : '—')}
-            className="absolute bottom-2.5 right-2.5 opacity-0 group-hover/explain:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-violet-50 text-gray-300 hover:text-violet-500"
-            title="Explain with AI"
-          >
-            <Brain className="h-3.5 w-3.5" />
-          </button>
+        </div>
+        <div className="divider" />
+        <div className="grid-kpi">
+          <KpiTile
+            label="prs created"
+            value={sum(prCreated.data ?? [])}
+            sub=""
+            accent="violet"
+            icon={<PRCreated />}
+            tooltip="Pull requests opened by you in the selected period."
+          />
+          <KpiTile
+            label="issues closed"
+            value={sum(issuesClosed.data ?? [])}
+            sub=""
+            accent="emerald"
+            icon={<IssuesClosed />}
+            tooltip="Issues resolved or closed by you in the selected period."
+          />
+          <KpiTile
+            label="review response"
+            value={numSuffix(reviewTime.data?.value, 'h')}
+            sub="first review · median"
+            accent="cyan"
+            icon={<Review />}
+            tooltip="Median time from PR open to receiving the first review comment or approval."
+          />
+          <KpiTile
+            label="1st commit → merge"
+            value={numSuffix(firstCommitLeadTimeHrs, 'd', (v) => (v / 24).toFixed(1))}
+            sub="lead time · median"
+            accent="cyan"
+            icon={<FirstCommit />}
+            tooltip="Median time from the first commit on a PR branch to the PR being merged."
+          />
         </div>
       </div>
 
-      {/* Secondary KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="PRs Created"
-          value={sum(prCreated.data ?? [])}
-          icon={<GitPullRequest className="h-4 w-4" />}
-          tooltip="Pull requests opened by you in the selected period."
-        />
-        <KpiCard
-          label="Issues Closed"
-          value={sum(issuesClosed.data ?? [])}
-          icon={<CircleCheckBig className="h-4 w-4" />}
-          tooltip="Issues resolved or closed by you in the selected period."
-        />
-        <KpiCard
-          label="Review Response"
-          value={reviewTime.data?.value != null && reviewTime.data.value > 0
-            ? fmtHours(reviewTime.data.value)
-            : '—'}
-          subtitle="first review, median"
-          icon={<ClockCheck className="h-4 w-4" />}
-          tooltip="Median time from PR open to receiving the first review comment or approval."
-        />
-        <KpiCard
-          label="1st Commit → Merge"
-          value={fmtHours(firstCommitLeadTimeHrs)}
-          subtitle="lead time from first commit"
-          icon={<Route className="h-4 w-4" />}
-          tooltip="Median time from the first commit on a PR branch to the PR being merged."
-        />
-      </div>
-
-      {/* Tertiary KPIs — issue + churn */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="Issues Created"
-          value={sum(issuesCreated.data ?? [])}
-          icon={<CirclePlus className="h-4 w-4" />}
-          tooltip="Issues opened in the selected period across all connected trackers."
-        />
-        <KpiCard
-          label="Issue Lead Time"
-          value={fmtHours(issueLeadTimeHrs)}
-          subtitle="open → close, median"
-          icon={<Hourglass className="h-4 w-4" />}
-          tooltip="Median time from issue creation to it being marked as closed or resolved."
-        />
-        <KpiCard
-          label="Avg Churn"
-          value={avgChurn > 0 ? `${(avgChurn * 100).toFixed(1)}%` : '—'}
-          subtitle="deleted / total lines"
-          icon={<Replace className="h-4 w-4" />}
-          iconVariant="teal"
-          tooltip="Average daily ratio of deleted lines to total changed lines. High churn may indicate rework or rewrites."
-        />
-        <KpiCard
-          label="Deep Work Streak"
-          value={deepWorkStreak.data?.value != null && deepWorkStreak.data.value > 0
-            ? `${Math.round(deepWorkStreak.data.value)}d`
-            : '—'}
-          subtitle="longest active run"
-          icon={<Flame className="h-4 w-4" />}
-          iconVariant="teal"
-          tooltip="Longest consecutive run of days on which you authored at least one commit."
-        />
-      </div>
-
-      {/* Wellness & Quality KPIs */}
-      <div>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Wellness &amp; Quality</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard
-            label="After-Hours Commits"
-            value={afterHours.data?.value != null && afterHours.data.value > 0
-              ? fmtPct(afterHours.data.value)
-              : '—'}
-            subtitle="commits outside 09–18 Mon–Fri"
-            icon={<Moon className="h-4 w-4" />}
-            iconVariant="amber"
-            tooltip="Share of commits made outside 09:00–18:00 Mon–Fri in your local timezone. High values may indicate unsustainable working patterns."
+      {/* ── Wellness & Quality ───────────────────────────── */}
+      <div className="hr-label"><span>wellness · quality</span></div>
+      <div className="card">
+        <div className="grid-kpi">
+          <KpiTile
+            label="after-hours"
+            value={pctSuffix(afterHours.data?.value)}
+            sub="commits outside 9–6"
+            accent="amber"
+            icon={<AfterHours />}
+            tooltip="Share of commits made outside 09:00–18:00 Mon–Fri in your local timezone."
           />
-          <KpiCard
-            label="Refactor Ratio"
-            value={refactorRatio.data?.value != null && refactorRatio.data.value > 0
-              ? fmtPct(refactorRatio.data.value)
-              : '—'}
-            subtitle="commits: deletions > additions"
-            icon={<Shuffle className="h-4 w-4" />}
-            iconVariant="teal"
+          <KpiTile
+            label="refactor ratio"
+            value={pctSuffix(refactorRatio.data?.value)}
+            sub="cleanup commits"
+            accent="emerald"
+            icon={<Refactor />}
             tooltip="Share of commits where deleted lines outnumber added lines — a proxy for cleanup and refactoring activity."
           />
-          <KpiCard
-            label="Merge Without Review"
-            value={mergeWithoutReview.data?.value != null && mergeWithoutReview.data.value > 0
-              ? fmtPct(mergeWithoutReview.data.value)
-              : '—'}
-            subtitle="PRs merged with 0 reviews"
-            icon={<EyeOff className="h-4 w-4" />}
-            iconVariant="amber"
+          <KpiTile
+            label="merge w/o review"
+            value={pctSuffix(mergeWithoutReview.data?.value)}
+            sub="zero approvals"
+            accent="coral"
+            icon={<NoReview />}
             tooltip="Share of merged PRs that had zero reviewer approvals or comments before merge."
           />
-          <KpiCard
-            label="Merge Frequency"
-            value={mergeToMain.data?.value != null && mergeToMain.data.value > 0
-              ? `${mergeToMain.data.value.toFixed(1)}/wk`
-              : '—'}
-            subtitle="merges to main (DORA proxy)"
-            icon={<RefreshCw className="h-4 w-4" />}
-            iconVariant="teal"
+          <KpiTile
+            label="merge frequency"
+            value={numSuffix(mergeToMain.data?.value, '/wk')}
+            sub="dora proxy"
+            accent="violet"
+            icon={<MergeFreq />}
             tooltip="Average number of merges to the main branch per week. Used as a proxy for DORA deployment frequency."
           />
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-          <KpiCard
-            label="Knowledge Silo"
-            value={knowledgeSilo.data?.value != null && knowledgeSilo.data.value > 0
-              ? fmtPct(knowledgeSilo.data.value)
+        <div className="divider" />
+        <div className="grid-kpi">
+          <KpiTile
+            label="deep work streak"
+            value={deepWorkDays > 0
+              ? <span>{deepWorkDays}<em style={{ fontSize: '0.5em', color: 'var(--fg-3)', marginLeft: 4, fontStyle: 'normal' }}>d</em></span>
               : '—'}
-            subtitle="max repo ownership share"
-            icon={<KnowledgeSiloIcon />}
-            iconVariant="amber"
+            sub="longest run"
+            accent="emerald"
+            icon={<DeepWork />}
+            tooltip="Longest consecutive run of days on which you authored at least one commit."
+          />
+          <KpiTile
+            label="avg churn"
+            value={avgChurnVal > 0
+              ? <span>{(avgChurnVal * 100).toFixed(1)}<em style={{ fontSize: '0.5em', color: 'var(--fg-3)', marginLeft: 2, fontStyle: 'normal' }}>%</em></span>
+              : '—'}
+            sub="rewrites / changes"
+            accent="amber"
+            icon={<Churn />}
+            tooltip="Average daily ratio of deleted lines to total changed lines. High churn may indicate rework or rewrites."
+          />
+          <KpiTile
+            label="knowledge silo"
+            value={pctSuffix(knowledgeSilo.data?.value)}
+            sub="max repo ownership"
+            accent="coral"
+            icon={<Silo />}
             tooltip="Your highest commit share across all repos. A high value means you are the sole owner of that repo's knowledge — a bus-factor risk."
           />
-          <KpiCard
-            label="PR Size Complexity"
+          <KpiTile
+            label="pr size · median"
             value={prSizeComplexity.data?.value != null && prSizeComplexity.data.value > 0
-              ? `${prSizeComplexity.data.value.toFixed(0)} ln`
+              ? <span>{prSizeComplexity.data.value.toFixed(0)}<em style={{ fontSize: '0.5em', color: 'var(--fg-3)', marginLeft: 4, fontStyle: 'normal' }}>ln/c</em></span>
               : '—'}
-            subtitle="lines/commit, median"
-            icon={<Layers3 className="h-4 w-4" />}
-            iconVariant="amber"
+            sub="lines per commit"
+            accent="amber"
+            icon={<PRSize />}
             tooltip="Median (additions + deletions) per commit across your PRs. Lower values mean smaller, more focused changes that are easier to review."
           />
         </div>
       </div>
 
-      {/* AI Summary */}
+      {/* ── AI Summary ───────────────────────────────────── */}
+      <div className="hr-label"><span>ai summary</span></div>
       <AiSummaryCard range={range} onSummaryGenerated={setAiSummary} />
 
-      {/* Charts — progressive disclosure */}
-      <div className="space-y-3">
-        <ChartSection title="Commits over time" subtitle="Daily commit count">
-          <MetricBarChart
-            data={commits.data ?? []}
-            label="Commits"
-            color="#7c3aed"
-          />
-        </ChartSection>
+      {/* ── Activity over time ───────────────────────────── */}
+      <div className="hr-label"><span>activity · over time</span></div>
 
-        <ChartSection title="Pull request activity" subtitle="PRs created and merged per day">
-          <div className="space-y-4">
+      <div className="card" style={{ padding: 22, marginBottom: 14 }}>
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div className="t-eyebrow">commits — daily</div>
+            <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Commit cadence</div>
+          </div>
+          <div className="row gap-2">
+            <Chip color="violet" dot>{commits.data?.length ?? 0} days</Chip>
+            {peakCommits > 0 && <Chip>peak: {peakCommits}</Chip>}
+          </div>
+        </div>
+        <MetricBarChart
+          data={commits.data ?? []}
+          label="commits/day"
+          color="var(--violet)"
+          height={160}
+        />
+      </div>
+
+      <div className="charts-grid">
+        <div className="card" style={{ padding: 22 }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-2">Created</p>
-              <MetricLineChart data={prCreated.data ?? []} label="Created" color="#0ea5e9" />
+              <div className="t-eyebrow">pull requests</div>
+              <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>PR flow</div>
+            </div>
+            <Chip color="cyan" dot>open → merge</Chip>
+          </div>
+          <div className="col gap-3">
+            <div>
+              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                <span className="t-label" style={{ color: 'var(--violet)' }}>created</span>
+                <span className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{sum(prCreated.data ?? [])}</span>
+              </div>
+              <Sparkline data={prCreated.data ?? []} color="var(--violet)" height={36} width={500} responsive />
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-2">Merged</p>
-              <MetricLineChart data={prMerged.data ?? []} label="Merged" color="#10b981" />
+              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                <span className="t-label" style={{ color: 'var(--emerald)' }}>merged</span>
+                <span className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{totalPrsMerged}</span>
+              </div>
+              <Sparkline data={prMerged.data ?? []} color="var(--emerald)" height={36} width={500} responsive />
             </div>
           </div>
-        </ChartSection>
+        </div>
 
-        <ChartSection title="Code churn ratio" subtitle="Rewrites as a fraction of total changes">
-          <MetricLineChart
-            data={churn.data ?? []}
-            label="Churn ratio"
-            color="#f59e0b"
-            unit=""
-          />
-          <p className="mt-2 text-xs text-gray-400">
-            Churn ratio = lines deleted / (lines added + lines deleted). High churn may indicate rework.
-          </p>
-        </ChartSection>
-
-        <ChartSection title="Issues" subtitle="Created vs closed per day">
-          <div className="space-y-4">
+        <div className="card" style={{ padding: 22 }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-2">Closed</p>
-              <MetricBarChart data={issuesClosed.data ?? []} label="Closed" color="#10b981" />
+              <div className="t-eyebrow">code churn</div>
+              <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Rewrite ratio</div>
             </div>
+            <Chip color="amber" dot>watch</Chip>
+          </div>
+          <Sparkline
+            data={(churn.data ?? []).map((d) => ({ ...d, value: d.value * 100 }))}
+            color="var(--amber)"
+            height={110}
+            width={500}
+            responsive
+          />
+          <p className="t-muted" style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+            churn = lines_deleted / (lines_added + lines_deleted) · daily
+          </p>
+        </div>
+      </div>
+
+      {/* ── Issues (additional chart) ─────────────────────── */}
+      {((issuesClosed.data?.length ?? 0) > 0 || (issuesCreated.data?.length ?? 0) > 0) && (
+        <div className="card" style={{ padding: 22, marginTop: 14 }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+            <div>
+              <div className="t-eyebrow">issues</div>
+              <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Created vs closed</div>
+            </div>
+            <Chip color="emerald" dot>tracker</Chip>
+          </div>
+          <div className="col gap-4">
+            {(issuesClosed.data?.length ?? 0) > 0 && (
+              <div>
+                <span className="t-label" style={{ display: 'block', marginBottom: 6, color: 'var(--emerald)' }}>closed</span>
+                <MetricBarChart data={issuesClosed.data ?? []} label="Closed" color="var(--emerald)" />
+              </div>
+            )}
             {(issuesCreated.data?.length ?? 0) > 0 && (
               <div>
-                <p className="text-xs font-medium text-gray-500 mb-2">Created</p>
-                <MetricBarChart data={issuesCreated.data ?? []} label="Created" color="#0ea5e9" />
+                <span className="t-label" style={{ display: 'block', marginBottom: 6, color: 'var(--cyan)' }}>created</span>
+                <MetricBarChart data={issuesCreated.data ?? []} label="Created" color="var(--cyan)" />
               </div>
             )}
           </div>
-        </ChartSection>
+        </div>
+      )}
 
-        {(mergeToMain.data?.value ?? 0) > 0 && (
-          <ChartSection title="Merge frequency" subtitle="Merges to main branch — DORA proxy">
-            <div className="flex items-center gap-3 py-4">
-              <RefreshCw className="h-8 w-8 text-violet-400" />
-              <div>
-                <p className="text-3xl font-semibold text-gray-900">
-                  {mergeToMain.data!.value.toFixed(1)}
-                  <span className="text-base font-normal text-gray-400 ml-1">/ week</span>
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Proxy for deployment frequency (no CI/CD data). Label: Merge Frequency.
-                </p>
-              </div>
-            </div>
-          </ChartSection>
-        )}
-
-        {(prSizeComplexity.data?.value ?? 0) > 0 && (
-          <ChartSection title="PR size complexity" subtitle="(additions + deletions) / commits per PR — median">
-            <div className="flex items-center gap-3 py-4">
-              <Layers3 className="h-8 w-8 text-amber-400" />
-              <div>
-                <p className="text-3xl font-semibold text-gray-900">
-                  {prSizeComplexity.data!.value.toFixed(0)}
-                  <span className="text-base font-normal text-gray-400 ml-1">lines/commit</span>
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Lower is better — small focused PRs are easier to review.
-                </p>
-              </div>
-            </div>
-          </ChartSection>
-        )}
-      </div>
-
-      {/* AI Metric Explain Drawer */}
-      <AiMetricExplainDrawer
-        isOpen={explainDrawer !== null}
-        onClose={() => setExplainDrawer(null)}
-        metricLabel={explainDrawer?.label ?? ''}
-        metricDescription={explainDrawer?.description ?? ''}
-        metricValue={explainDrawer?.value ?? '—'}
-        summary={aiSummary}
-      />
+      <div style={{ height: 32 }} />
     </div>
   );
 }

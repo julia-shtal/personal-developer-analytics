@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Tooltip } from './Tooltip';
 
 type AccentColor = 'violet' | 'cyan' | 'amber' | 'emerald' | 'coral';
 
@@ -7,6 +8,7 @@ interface KpiTileProps {
   value: ReactNode;
   sub?: ReactNode;
   icon?: ReactNode;
+  tooltip?: string;
   accent?: AccentColor;
   size?: 'md' | 'lg';
   emphasis?: boolean;
@@ -17,6 +19,7 @@ export function KpiTile({
   value,
   sub,
   icon,
+  tooltip,
   accent = 'violet',
   size = 'md',
   emphasis = false,
@@ -33,9 +36,13 @@ export function KpiTile({
     >
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div className="t-eyebrow">{label}</div>
-        {icon && (
+        {icon && tooltip ? (
+          <Tooltip content={tooltip}>
+            <span style={{ color: `var(--${accent})`, opacity: 0.9, cursor: 'default' }}>{icon}</span>
+          </Tooltip>
+        ) : icon ? (
           <span style={{ color: `var(--${accent})`, opacity: 0.9 }}>{icon}</span>
-        )}
+        ) : null}
       </div>
       <div
         className={emphasis || size === 'lg' ? 't-number-hero' : 't-number-big'}
