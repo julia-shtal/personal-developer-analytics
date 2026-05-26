@@ -5,7 +5,11 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
+import com.juliashtal.devanalytics.jira.model.JiraUrl;
 import com.juliashtal.devanalytics.jira.model.UserProjectRegistration;
+import com.juliashtal.devanalytics.jira.repository.JiraProjectRepository;
+import com.juliashtal.devanalytics.jira.repository.UserProjectRegistrationRepository;
+import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
@@ -31,15 +35,18 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class JiraProjectCanonicalRowTest {
 
-    @Mock JiraProjectRepository jiraProjectRepository;
-    @Mock UserProjectRegistrationRepository userProjectRegistrationRepository;
+    @Mock
+    JiraProjectRepository jiraProjectRepository;
+    @Mock
+    UserProjectRegistrationRepository userProjectRegistrationRepository;
     @Mock UserRepository userRepository;
     @Mock DataSourceConfigRepository dataSourceConfigRepository;
     @Mock RestTemplate restTemplate;
     @Mock SimpleTokenEncryptor tokenEncryptor;
     @Mock ObjectMapper objectMapper;
 
-    @InjectMocks JiraProjectService service;
+    @InjectMocks
+    JiraProjectService service;
 
     private static final String BASE_URL      = "https://acme.atlassian.net";
     private static final String BASE_URL_NORM = "https://acme.atlassian.net"; // already normalized

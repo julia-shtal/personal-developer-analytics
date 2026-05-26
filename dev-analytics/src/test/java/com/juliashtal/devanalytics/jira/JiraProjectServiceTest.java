@@ -4,6 +4,9 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.jira.model.UserProjectRegistration;
+import com.juliashtal.devanalytics.jira.repository.JiraProjectRepository;
+import com.juliashtal.devanalytics.jira.repository.UserProjectRegistrationRepository;
+import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
@@ -27,14 +30,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class JiraProjectServiceTest {
 
-    @Mock JiraProjectRepository jiraProjectRepository;
-    @Mock UserProjectRegistrationRepository userProjectRegistrationRepository;
+    @Mock
+    JiraProjectRepository jiraProjectRepository;
+    @Mock
+    UserProjectRegistrationRepository userProjectRegistrationRepository;
     @Mock UserRepository userRepository;
     @Mock RestTemplate restTemplate;
     @Mock SimpleTokenEncryptor tokenEncryptor;
     @Mock ObjectMapper objectMapper;
 
-    @InjectMocks JiraProjectService service;
+    @InjectMocks
+    JiraProjectService service;
 
     private DataSourceConfig ds;
     private User owner;

@@ -59,6 +59,7 @@ interface KpiCardProps {
   tooltip?: string;
 }
 
+/** @deprecated Use `KpiTile` from `@/components/ui/KpiTile` instead. Will be removed in PR6/T10.1. */
 export function KpiCard({ label, value, subtitle, icon, iconVariant = 'violet', trend, trendValue, tooltip }: KpiCardProps) {
   const trendColor = trend === 'up' ? 'text-emerald-600' : trend === 'down' ? 'text-red-500' : 'text-gray-500';
 

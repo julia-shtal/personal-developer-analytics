@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.jira;
+package com.juliashtal.devanalytics.jira.repository;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
