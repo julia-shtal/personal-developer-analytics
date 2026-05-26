@@ -75,7 +75,7 @@ export function AiMetricExplainDrawer({
                 {summary.insights.slice(0, 3).map((insight, i) => (
                   <li key={i} className="flex items-start gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0 mt-1.5" />
-                    <span className="text-sm text-gray-700">{insight}</span>
+                    <span className="text-sm text-gray-700">{insight.text}</span>
                   </li>
                 ))}
               </ul>

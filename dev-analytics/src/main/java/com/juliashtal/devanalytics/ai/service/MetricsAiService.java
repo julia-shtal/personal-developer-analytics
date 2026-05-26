@@ -1,10 +1,10 @@
 package com.juliashtal.devanalytics.ai.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juliashtal.devanalytics.ai.client.LlmClient;
 import com.juliashtal.devanalytics.ai.model.AggregatedMetricsContext;
-import com.juliashtal.devanalytics.ai.model.AiResponseDto;
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.model.TeamMetricsContext;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
@@ -279,10 +279,23 @@ public class MetricsAiService {
 
                 Required output format (JSON only, no other text):
                 {
+                  "headline": "one sentence editorial title for the period",
                   "overview": "1-2 sentence summary",
-                  "insights": ["bullet 1", "bullet 2", "bullet 3", "bullet 4", "bullet 5"],
+                  "insights": [
+                    { "kind": "positive", "text": "...", "metric": "PR Lead Time" },
+                    { "kind": "risk",     "text": "...", "metric": "Knowledge Silo" },
+                    { "kind": "note",     "text": "...", "metric": "Churn Ratio" }
+                  ],
                   "recommendations": ["action 1", "action 2", "action 3"]
                 }
+
+                Rules for insight "kind":
+                - "positive" — the metric is healthy or improving.
+                - "risk"     — the metric signals a problem that needs attention.
+                - "note"     — neutral observation, neither clearly good nor bad.
+
+                Rules for insight "metric":
+                - Must be one of the human-readable metric names from the mapping above.
 
                 Rules for insights (follow this order strictly):
                 1. Check Churn Ratio and PR Lead Time first — they are primary quality indicators.
@@ -292,6 +305,7 @@ public class MetricsAiService {
                 5. Reference concrete values (median, trendPct, anomaly) in every insight.
 
                 General rules:
+                - headline: one editorial sentence capturing the defining characteristic of the period.
                 - overview: 1-2 sentences on delivery flow, cycle efficiency, and key patterns.
                 - insights: 5-8 items, in the priority order above.
                 - recommendations: 3-5 actionable items backed by the data.
@@ -324,7 +338,7 @@ public class MetricsAiService {
 
     private String buildTeamSystemPrompt() {
         return """
-                You are a developer analytics assistant.
+                You are a developer analytics assistant analyzing metrics for a SOFTWARE DEVELOPMENT TEAM.
                 Analyze the provided team metrics JSON and return ONLY a valid JSON object.
                 Do not include any markdown, code fences, explanations, or text outside the JSON.
 
@@ -345,10 +359,23 @@ public class MetricsAiService {
 
                 Required output format (JSON only, no other text):
                 {
+                  "headline": "one sentence editorial title capturing the team's defining characteristic for the period",
                   "overview": "1-2 sentence team summary",
-                  "insights": ["bullet 1", "bullet 2", "bullet 3", "bullet 4", "bullet 5"],
+                  "insights": [
+                    { "kind": "positive", "text": "...", "metric": "PR Lead Time" },
+                    { "kind": "risk",     "text": "...", "metric": "Knowledge Silo" },
+                    { "kind": "note",     "text": "...", "metric": "Churn Ratio" }
+                  ],
                   "recommendations": ["action 1", "action 2", "action 3"]
                 }
+
+                Rules for insight "kind":
+                - "positive" — the metric is healthy or improving across the team.
+                - "risk"     — the metric signals a problem that needs team attention.
+                - "note"     — neutral observation about team patterns, neither clearly good nor bad.
+
+                Rules for insight "metric":
+                - Must be one of the human-readable metric names from the mapping above.
 
                 Rules for insights (follow this order strictly):
                 1. Check Churn Ratio and PR Lead Time first — they are primary quality indicators across members.
@@ -358,6 +385,7 @@ public class MetricsAiService {
                 5. Reference member usernames and concrete values in every insight.
 
                 General rules:
+                - headline: one editorial sentence capturing the team's defining characteristic for the period.
                 - overview: 1-2 sentences on team delivery flow and collaboration.
                 - insights: 5-8 items, in the priority order above.
                 - recommendations: 3-5 actionable team process improvements backed by the data.
@@ -395,15 +423,47 @@ public class MetricsAiService {
         }
 
         try {
-            AiResponseDto response = objectMapper.readValue(cleaned, AiResponseDto.class);
+            JsonNode root = objectMapper.readTree(cleaned);
+
+            String headline = root.path("headline").asText("").strip();
+            String overview = root.path("overview").asText("").strip();
+
+            // Insights: tolerate flat strings from models that ignore the structured format.
+            // A flat string is wrapped as InsightDto("note", text, "") so parsing never breaks.
+            List<MetricsSummaryDto.InsightDto> insights = new ArrayList<>();
+            JsonNode insightsNode = root.path("insights");
+            if (insightsNode.isArray()) {
+                for (JsonNode node : insightsNode) {
+                    if (node.isTextual()) {
+                        insights.add(MetricsSummaryDto.InsightDto.builder()
+                                .kind("note").text(node.asText()).metric("").build());
+                    } else if (node.isObject()) {
+                        insights.add(MetricsSummaryDto.InsightDto.builder()
+                                .kind(node.path("kind").asText("note"))
+                                .text(node.path("text").asText(""))
+                                .metric(node.path("metric").asText(""))
+                                .build());
+                    }
+                }
+            }
+
+            List<String> recommendations = new ArrayList<>();
+            JsonNode recsNode = root.path("recommendations");
+            if (recsNode.isArray()) {
+                for (JsonNode node : recsNode) {
+                    recommendations.add(node.asText());
+                }
+            }
+
             return MetricsSummaryDto.builder()
                     .from(from)
                     .to(to)
                     .scope(scope)
                     .contextRepoName(scopeName)
-                    .overview(response.overview() != null ? response.overview().strip() : "")
-                    .insights(response.insights() != null ? response.insights() : List.of())
-                    .recommendations(response.recommendations() != null ? response.recommendations() : List.of())
+                    .headline(headline)
+                    .overview(overview)
+                    .insights(insights)
+                    .recommendations(recommendations)
                     .rawModelOutput(raw)
                     .modelName(model)
                     .build();
@@ -414,6 +474,7 @@ public class MetricsAiService {
                     .to(to)
                     .scope(scope)
                     .contextRepoName(scopeName)
+                    .headline("")
                     .overview(raw)
                     .insights(List.of())
                     .recommendations(List.of())
