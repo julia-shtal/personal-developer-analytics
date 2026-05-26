@@ -1,119 +1,200 @@
-import { NavLink } from 'react-router-dom';
-import { Avatar } from '@/components/ui/Avatar';
+import type { CSSProperties, ReactNode } from 'react';
+import { useNavigate, NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard,
+  Home,
   Users,
   UserCog,
   Database,
   Settings,
-  LogOut,
-  ChevronLeft,
+  Shield,
   ChevronRight,
-  ShieldAlert,
+  Sun,
+  Moon,
+  LogOut,
+  Search,
 } from 'lucide-react';
-import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Logo } from '@/components/brand/Logo';
+import { Avatar } from '@/components/ui/Avatar';
+import { APP_VERSION } from '@/config/branding';
 
-interface SidebarProps {
-  collapsed: boolean;
-  onToggle: () => void;
+const NAV_LINK_BASE: CSSProperties = {
+  position: 'relative',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  width: '100%',
+  padding: '7px 10px',
+  border: 'none',
+  borderRadius: 6,
+  fontFamily: 'var(--font-sans)',
+  fontSize: 13,
+  cursor: 'pointer',
+  textDecoration: 'none',
+};
+
+function NavItem({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      style={({ isActive }) => ({
+        ...NAV_LINK_BASE,
+        background: isActive ? 'var(--bg-2)' : 'transparent',
+        color: isActive ? 'var(--fg)' : 'var(--fg-3)',
+        fontWeight: isActive ? 500 : 400,
+      })}
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <span style={{
+              position: 'absolute', left: 0, top: 6, bottom: 6,
+              width: 2, background: 'var(--accent)', borderRadius: 1,
+            }} />
+          )}
+          {icon}
+          <span style={{ flex: 1 }}>{label}</span>
+        </>
+      )}
+    </NavLink>
+  );
 }
 
-const navItemClass = ({ isActive }: { isActive: boolean }) =>
-  clsx(
-    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-    isActive
-      ? 'bg-violet-50 text-violet-700'
-      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-  );
-
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar() {
   const { user, logout, isManager, isAdmin } = useAuth();
-  const { logo } = useTheme();
+  const { logo, theme, setTheme } = useTheme();
+  const navigate = useNavigate();
+
+  function handleSearch() {
+    window.dispatchEvent(new CustomEvent('da:open-palette'));
+  }
+
+  function toggleTheme() {
+    setTheme({ theme: theme === 'dark' ? 'light' : 'dark' });
+  }
 
   return (
-    <aside
-      className={clsx(
-        'flex flex-col h-screen bg-white border-r border-gray-200 transition-all duration-300 flex-shrink-0',
-        collapsed ? 'w-16' : 'w-60'
-      )}
-    >
-      {/* Logo / brand */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-gray-100 flex-shrink-0">
-        <Logo variant={logo} size={26} withWordmark={!collapsed} />
+    <aside style={{
+      width: 'var(--sidebar-w)',
+      borderRight: '1px solid var(--line)',
+      background: 'var(--bg)',
+      flexShrink: 0,
+      height: '100vh',
+      position: 'sticky',
+      top: 0,
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
+      {/* Logo block */}
+      <div style={{ padding: '18px 18px 14px', borderBottom: '1px solid var(--line-2)' }}>
+        <Logo variant={logo} size={26} withWordmark />
+        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span className="t-label" style={{ fontSize: 10 }}>
+            <span className="dot dot-live" style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            ALL SYSTEMS LIVE
+          </span>
+          <span className="kbd">{APP_VERSION}</span>
+        </div>
       </div>
 
-      {/* Nav items */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        <NavLink to="/dashboard" className={navItemClass} title="Dashboard">
-          <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
-          {!collapsed && <span>Dashboard</span>}
-        </NavLink>
+      {/* TODO(palette): wire full command palette here — tracked in docs/REDESIGN_FOLLOWUPS.md (PR6/T10.2) */}
+      <div style={{ padding: '12px 14px 8px' }}>
+        <button
+          className="btn"
+          onClick={handleSearch}
+          aria-label="Open command palette"
+          style={{
+            width: '100%',
+            justifyContent: 'flex-start',
+            color: 'var(--fg-3)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 12.5,
+            padding: '7px 10px',
+          }}
+        >
+          <Search width={13} height={13} />
+          <span style={{ flex: 1, textAlign: 'left' }}>Search…</span>
+          <span className="kbd">⌘K</span>
+        </button>
+      </div>
 
+      {/* Nav */}
+      <nav style={{ padding: '4px 8px', flex: 1, overflowY: 'auto' }}>
+        <div className="t-label" style={{ padding: '8px 10px 6px', fontSize: 9.5, color: 'var(--muted)' }}>
+          ── workspace
+        </div>
+        <NavItem to="/dashboard" icon={<Home width={15} height={15} />} label="Personal" />
         {(isManager || isAdmin) && (
-          <NavLink to="/team" className={navItemClass} title="Team metrics">
-            <Users className="h-4 w-4 flex-shrink-0" />
-            {!collapsed && <span>Team metrics</span>}
-          </NavLink>
+          <NavItem to="/team" icon={<Users width={15} height={15} />} label="Team" />
         )}
-
         {(isManager || isAdmin) && (
-          <NavLink to="/team-manage" className={navItemClass} title="Manage teams">
-            <UserCog className="h-4 w-4 flex-shrink-0" />
-            {!collapsed && <span>Manage teams</span>}
-          </NavLink>
+          <NavItem to="/team-manage" icon={<UserCog width={15} height={15} />} label="Manage" />
         )}
+        <NavItem to="/datasources" icon={<Database width={15} height={15} />} label="Sources" />
 
-        <NavLink to="/datasources" className={navItemClass} title="Data Sources">
-          <Database className="h-4 w-4 flex-shrink-0" />
-          {!collapsed && <span>Data Sources</span>}
-        </NavLink>
-
-        <NavLink to="/settings" className={navItemClass} title="Settings">
-          <Settings className="h-4 w-4 flex-shrink-0" />
-          {!collapsed && <span>Settings</span>}
-        </NavLink>
-
+        <div className="t-label" style={{ padding: '16px 10px 6px', fontSize: 9.5, color: 'var(--muted)' }}>
+          ── account
+        </div>
+        <NavItem to="/settings" icon={<Settings width={15} height={15} />} label="Settings" />
         {isAdmin && (
-          <NavLink to="/admin" className={navItemClass} title="Admin">
-            <ShieldAlert className="h-4 w-4 flex-shrink-0" />
-            {!collapsed && <span>Admin</span>}
-          </NavLink>
+          <NavItem to="/admin" icon={<Shield width={15} height={15} />} label="Admin" />
         )}
       </nav>
 
-      {/* User + logout */}
-      <div className="flex-shrink-0 border-t border-gray-100 p-2 space-y-1">
-        {!collapsed && user && (
-          <div className="px-3 py-2 flex items-center gap-2.5">
+      {/* User card */}
+      <div style={{ borderTop: '1px solid var(--line-2)', padding: 12 }}>
+        {user && (
+          <button
+            onClick={() => navigate('/settings')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '8px 8px',
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 8,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            title="Open profile & settings"
+          >
             <Avatar user={user} size="sm" />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-900 truncate">{user.username}</p>
-              <p className="text-xs text-gray-400 truncate">{user.email}</p>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 12, fontWeight: 500, color: 'var(--fg)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {user.email}
+              </div>
+              <div className="t-label" style={{ fontSize: 10 }}>
+                {user.role.toLowerCase()} · personal
+              </div>
             </div>
-          </div>
+            <ChevronRight width={12} height={12} style={{ color: 'var(--fg-3)', flexShrink: 0 }} />
+          </button>
         )}
-        <button
-          onClick={() => logout()}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors"
-          title="Sign out"
-        >
-          <LogOut className="h-4 w-4 flex-shrink-0" />
-          {!collapsed && <span>Sign out</span>}
-        </button>
-
-        {/* Collapse toggle */}
-        <button
-          onClick={onToggle}
-          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-100 transition-colors"
-        >
-          {collapsed
-            ? <ChevronRight className="h-4 w-4" />
-            : <><ChevronLeft className="h-4 w-4" /><span>Collapse</span></>
-          }
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button
+            className="btn btn-sm"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{ flex: 1, justifyContent: 'center' }}
+          >
+            {theme === 'dark' ? <Sun width={12} height={12} /> : <Moon width={12} height={12} />}
+            <span>{theme === 'dark' ? 'light' : 'dark'}</span>
+          </button>
+          <button
+            className="btn btn-sm btn-icon"
+            onClick={() => logout()}
+            title="Sign out"
+            aria-label="Sign out"
+          >
+            <LogOut width={13} height={13} />
+          </button>
+        </div>
       </div>
     </aside>
   );
