@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { AuthProvider } from '@/context/AuthContext';
 import { DateRangeProvider } from '@/context/DateRangeContext';
 import { AppShell } from '@/components/layout/AppShell';
@@ -23,30 +25,50 @@ const queryClient = new QueryClient({
   },
 });
 
+function FaviconSync() {
+  const { logo } = useTheme();
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (link) link.href = `/favicons/${logo}.svg`;
+  }, [logo]);
+  return null;
+}
+
+function AppRoutes() {
+  return (
+    <>
+      <FaviconSync />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/welcome" element={<WelcomePage />} />
+
+        <Route element={<DateRangeProvider><AppShell /></DateRangeProvider>}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/team" element={<TeamDashboardPage />} />
+          <Route path="/team-manage" element={<TeamManagePage />} />
+          <Route path="/datasources" element={<DataSourcesPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </>
+  );
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/welcome" element={<WelcomePage />} />
-
-            <Route element={<DateRangeProvider><AppShell /></DateRangeProvider>}>
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/team" element={<TeamDashboardPage />} />
-              <Route path="/team-manage" element={<TeamManagePage />} />
-              <Route path="/datasources" element={<DataSourcesPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/admin" element={<AdminPage />} />
-            </Route>
-
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

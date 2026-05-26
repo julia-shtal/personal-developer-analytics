@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.jira;
+package com.juliashtal.devanalytics.jira.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -11,6 +11,9 @@ import com.juliashtal.devanalytics.exception.BadRequestException;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.exception.JiraException;
 import com.juliashtal.devanalytics.exception.NotFoundException;
+import com.juliashtal.devanalytics.jira.repository.JiraProjectRepository;
+import com.juliashtal.devanalytics.jira.model.JiraUrl;
+import com.juliashtal.devanalytics.jira.repository.UserProjectRegistrationRepository;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.jira.model.UserProjectRegistration;
 import com.juliashtal.devanalytics.jira.model.dto.DiscoveredProjectDto;
@@ -55,8 +58,7 @@ public class JiraProjectService {
 
     /**
      * Returns the canonical {@link JiraProjectEntity} for the given datasource + project key,
-     * creating one if it does not yet exist. Three-branch logic mirrors the GitHub attach path
-     * (ADR-004 / ADR-002):
+     * creating one if it does not yet exist. Three-branch logic mirrors the GitHub attach path:
      * <ol>
      *   <li>Canonical row already exists under <em>this</em> datasource → return it (idempotent).</li>
      *   <li>Canonical row exists under a <em>different</em> datasource → return the existing row

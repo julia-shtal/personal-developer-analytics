@@ -23,7 +23,18 @@ export function daysAgo(n: number): string {
 }
 
 export const PRESET_RANGES: { label: string; range: DateRange }[] = [
-  { label: 'Last 7 days', range: { from: daysAgo(7), to: today() } },
-  { label: 'Last 30 days', range: { from: daysAgo(30), to: today() } },
-  { label: 'Last 90 days', range: { from: daysAgo(90), to: today() } },
+  { label: 'Today',         range: { from: today(),      to: today() } },
+  { label: 'Yesterday',     range: { from: daysAgo(1),   to: daysAgo(1) } },
+  { label: 'Last 7 days',   range: { from: daysAgo(7),   to: today() } },
+  { label: 'Last 14 days',  range: { from: daysAgo(14),  to: today() } },
+  { label: '4 weeks',       range: { from: daysAgo(28),  to: today() } },
+  { label: '8 weeks',       range: { from: daysAgo(56),  to: today() } },
+  { label: 'Last quarter',  range: { from: daysAgo(91),  to: today() } },
+  { label: 'Year to date',  range: { from: startOfYear(), to: today() } },
 ];
+
+export function startOfYear(): string {
+  const d = new Date();
+  d.setMonth(0, 1);
+  return isoDate(d);
+}

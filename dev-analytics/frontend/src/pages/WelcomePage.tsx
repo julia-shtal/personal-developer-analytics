@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
+import { Logo } from '@/components/brand/Logo';
 
 const STEPS = [
   'Loading your repositories…',
@@ -14,6 +15,7 @@ const STEP_INTERVAL_MS = 800;
 
 export function WelcomePage() {
   const { user } = useAuth();
+  const { logo } = useTheme();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [fadeIn, setFadeIn] = useState(false);
@@ -46,8 +48,8 @@ export function WelcomePage() {
     >
       <div className="flex flex-col items-center gap-6 text-center px-4">
         {/* Logo */}
-        <div className="w-16 h-16 rounded-2xl bg-violet-600 flex items-center justify-center shadow-xl shadow-violet-200 animate-bounce-slow">
-          <Activity className="h-8 w-8 text-white" />
+        <div className="animate-bounce">
+          <Logo variant={logo} size={72} />
         </div>
 
         {/* Greeting */}
