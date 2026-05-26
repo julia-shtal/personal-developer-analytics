@@ -20,9 +20,22 @@ public class MetricsSummaryDto {
     private String scope;
     /** Snapshot-in-time scope label: repo full name, Jira project key, or team name. */
     private String contextRepoName;
+    private String headline;
     private String overview;
-    private List<String> insights;
+    private List<InsightDto> insights;
     private List<String> recommendations;
     private String rawModelOutput;
     private String modelName;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class InsightDto {
+        /** "positive", "risk", or "note" */
+        private String kind;
+        private String text;
+        /** Human-readable metric name from the mapping in the system prompt. */
+        private String metric;
+    }
 }
