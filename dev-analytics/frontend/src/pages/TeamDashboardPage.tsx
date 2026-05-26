@@ -1,40 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import type { ComponentType, CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Users, TrendingUp, GitCommit, GitMerge, Target, X, Clock, Replace } from 'lucide-react';
+import { Users, ChevronDown, Mail, Sparkles } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
 import { teamMetricsApi } from '@/api/metrics';
-import { Card, CardHeader, CardBody, KpiCard } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { DateRangePicker } from '@/components/DateRangePicker';
+import { KpiTile } from '@/components/ui/KpiTile';
+import { Chip } from '@/components/ui/Chip';
+import { Modal } from '@/components/ui/Modal';
+import { Avatar } from '@/components/ui/Avatar';
 import { MultiLineChart } from '@/components/charts/MultiLineChart';
 import { PageSpinner } from '@/components/ui/Spinner';
-import { useDateRange } from '@/context/DateRangeContext';
 import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
-import { Avatar } from '@/components/ui/Avatar';
-import type { DateRange, Team, MemberSummaryDto } from '@/types';
-
-interface ColHeaderProps {
-  label: string;
-  tip: string;
-  align?: 'left' | 'right';
-  px?: string;
-}
-
-function ColHeader({ label, tip, align = 'right', px = 'px-4' }: ColHeaderProps) {
-  return (
-    <th className={`${align === 'right' ? 'text-right' : 'text-left'} ${px} py-3`}>
-      <span className="relative group inline-flex items-center gap-1 cursor-default">
-        <span className="font-semibold text-gray-700 text-xs">{label}</span>
-        <span className="text-gray-400 text-[10px] leading-none select-none">?</span>
-        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 rounded-lg bg-white border border-gray-200 text-gray-700 text-xs px-3 py-2.5 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none leading-relaxed whitespace-normal text-left">
-          <span className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-white border-r border-b border-gray-200 rotate-45 rounded-sm" />
-          {tip}
-        </span>
-      </span>
-    </th>
-  );
-}
+import { useDateRange } from '@/context/DateRangeContext';
+import { Commits, PRMerged, IssuesClosed, LeadTime, Churn, Focus } from '@/components/icons';
+import type { Team, MemberSummaryDto } from '@/types';
 
 function fmt(v: number | undefined, decimals = 1) {
   if (v == null || v === 0) return '—';
@@ -47,105 +26,140 @@ function fmtHours(v: number | undefined) {
   return `${(v / 24).toFixed(1)}d`;
 }
 
-interface MemberPanelProps {
+function fmtNumber(n: number) {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+}
+
+interface MemberDetailModalProps {
   member: MemberSummaryDto;
   teamId: number;
-  range: DateRange;
+  open: boolean;
   onClose: () => void;
 }
 
-function MemberPanel({ member, teamId, range, onClose }: MemberPanelProps) {
+function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalProps) {
+  const { range } = useDateRange();
   const { from, to } = range;
 
   const commits = useQuery({
     queryKey: ['member-commits', teamId, member.userId, from, to],
     queryFn: () =>
       teamMetricsApi.memberDailyCommits(teamId, member.userId, from, to).then((r) => r.data),
+    enabled: open,
   });
 
   const m = member.metrics;
+  const churn = m.DAILY_CHURN_RATIO ?? 0;
+
+  const kpiItems: Array<[string, string, string, ComponentType<{ width?: number; height?: number; style?: CSSProperties }>]> = [
+    ['commits',       fmt(m.DAILY_COMMITS_COUNT, 0),                       'violet',  Commits],
+    ['prs merged',    fmt(m.DAILY_PR_MERGED, 0),                           'violet',  PRMerged],
+    ['issues closed', fmt(m.DAILY_ISSUES_CLOSED, 0),                       'emerald', IssuesClosed],
+    ['pr lead time',  fmtHours(m.PR_LEAD_TIME_HOURS_MEDIAN),               'cyan',    LeadTime],
+    ['churn',         churn > 0 ? `${(churn * 100).toFixed(0)}%` : '—',   churn > 0.25 ? 'coral' : 'amber', Churn],
+    ['focus ratio',   m.FOCUS_RATIO_DAYS_TASKS != null ? `${Math.round(m.FOCUS_RATIO_DAYS_TASKS)}d` : '—', 'emerald', Focus],
+  ];
+
+  const peakCommits = Math.max(...(commits.data ?? []).map((d) => d.value ?? 0), 1);
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white rounded-2xl border border-gray-200 shadow-2xl">
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <Avatar user={{ id: member.userId, username: member.username, hasCustomAvatar: member.hasCustomAvatar, avatarPreset: member.avatarPreset }} size="md" />
-            <div>
-              <p className="font-semibold text-gray-900">{member.username}</p>
-              <p className="text-xs text-gray-400">Member detail</p>
-            </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      eyebrow={`── member · ${member.username}`}
+      title={`${member.username} — selected period`}
+      width={620}
+      footer={
+        <div className="row gap-2" style={{ justifyContent: 'space-between' }}>
+          <span className="t-label">click any row to drill into other members</span>
+          <div className="row gap-2">
+            {/* TODO(team-messaging): needs messaging integration (email or in-app) — deferred to future sprint */}
+            <button className="btn btn-sm" onClick={() => alert('Messaging coming soon')} aria-label="Message member">
+              <Mail width={12} height={12} />message
+            </button>
+            {/* TODO(ai-member-summary): member-scoped AI endpoint needed — deferred to future sprint */}
+            <button className="btn btn-sm btn-accent" onClick={() => alert('Member-scoped AI summary coming soon')} aria-label="Ask AI about this member">
+              <Sparkles width={12} height={12} />ask AI about {member.username}
+            </button>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <X className="h-4 w-4 text-gray-500" />
-          </button>
         </div>
-
-        <div className="px-5 py-4 space-y-4">
-          {/* KPIs */}
-          <div className="grid grid-cols-3 gap-3">
-            <KpiCard
-              label="Commits"
-              value={fmt(m.DAILY_COMMITS_COUNT, 0)}
-              icon={<GitCommit className="h-4 w-4" />}
-              tooltip="Total Git commits authored by this member in the selected period."
-            />
-            <KpiCard
-              label="PRs Merged"
-              value={fmt(m.DAILY_PR_MERGED, 0)}
-              icon={<GitMerge className="h-4 w-4" />}
-              tooltip="Pull requests merged to a target branch by this member in the selected period."
-            />
-            <KpiCard
-              label="Issues Closed"
-              value={fmt(m.DAILY_ISSUES_CLOSED, 0)}
-              icon={<Target className="h-4 w-4" />}
-              tooltip="Issues resolved or closed by this member in the selected period."
-            />
+      }
+    >
+      {/* Header */}
+      <div className="row gap-3" style={{ marginBottom: 18 }}>
+        <Avatar
+          user={{ id: member.userId, username: member.username, hasCustomAvatar: member.hasCustomAvatar, avatarPreset: member.avatarPreset }}
+          size="lg"
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--fg)' }}>
+            {member.username}
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard
-              label="PR Lead Time"
-              value={fmtHours(m.PR_LEAD_TIME_HOURS_MEDIAN)}
-              subtitle="open → merge, median"
-              icon={<Clock className="h-4 w-4" />}
-              tooltip="Median time from when a PR is opened to when it is merged. Lower values mean faster delivery."
-            />
-            <KpiCard
-              label="Churn Ratio"
-              value={m.DAILY_CHURN_RATIO != null && m.DAILY_CHURN_RATIO > 0
-                ? `${(m.DAILY_CHURN_RATIO * 100).toFixed(0)}%`
-                : '—'}
-              subtitle="lines rewritten"
-              icon={<Replace className="h-4 w-4" />}
-              iconVariant="teal"
-              tooltip="Average ratio of deleted lines to total changed lines. High churn may indicate rework or frequent rewrites."
-            />
-          </div>
-
-          {/* Commits chart */}
-          <div>
-            <p className="text-xs font-medium text-gray-500 mb-2">Commits over period</p>
-            {commits.isLoading ? (
-              <div className="h-32 flex items-center justify-center text-gray-400 text-sm">Loading…</div>
-            ) : (
-              <MultiLineChart
-                data={(commits.data ?? []).map((d) => ({ ...d, username: member.username }))}
-                height={160}
-              />
-            )}
+          <div className="row gap-2" style={{ marginTop: 4, flexWrap: 'wrap' }}>
+            <Chip color="violet">contributor</Chip>
+            {/* TODO(user-activity-tracking): "active X min ago" needs lastActiveAt per user — deferred to future sprint */}
+            <span className="t-label" style={{ fontSize: 11 }}>activity tracking coming soon</span>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* 3×2 KPI grid */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0,
+        border: '1px solid var(--line)', borderRadius: 8, marginBottom: 16, overflow: 'hidden',
+      }}>
+        {kpiItems.map(([label, val, color, Icon], i) => (
+          <div key={label} style={{
+            padding: '14px 16px',
+            borderLeft: i % 3 ? '1px solid var(--line-2)' : 'none',
+            borderTop: i >= 3 ? '1px solid var(--line-2)' : 'none',
+          }}>
+            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+              <span className="t-label" style={{ fontSize: 10 }}>{label}</span>
+              <Icon width={13} height={13} style={{ color: `var(--${color})` }} />
+            </div>
+            <div className="t-number-big" style={{ fontSize: 24 }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Sparkline bars */}
+      <div className="card-quiet" style={{ padding: 14, borderRadius: 8 }}>
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+          <span className="t-eyebrow">commits — daily</span>
+          <span className="t-label">
+            {commits.isLoading ? 'loading…' : `peak: ${peakCommits}`}
+          </span>
+        </div>
+        {commits.isLoading ? (
+          <div style={{ height: 40, display: 'flex', alignItems: 'center' }}>
+            <span className="t-muted" style={{ fontSize: 12 }}>Loading…</span>
+          </div>
+        ) : (
+          <div className="sparkline-bars">
+            {(commits.data ?? []).slice(-56).map((d, i) => {
+              const v = d.value ?? 0;
+              const pct = peakCommits > 0 ? (v / peakCommits) * 100 : 0;
+              return (
+                <span
+                  key={i}
+                  className={v >= peakCommits * 0.85 ? 'peak' : ''}
+                  style={{ height: `${Math.max(pct, 2)}%` }}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
 export function TeamDashboardPage() {
   const qc = useQueryClient();
-  const { range, setRange } = useDateRange();
+  const { range } = useDateRange();
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
+  const [teamPickerOpen, setTeamPickerOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<MemberSummaryDto | null>(null);
   const { from, to } = range;
 
@@ -155,6 +169,7 @@ export function TeamDashboardPage() {
   });
 
   const activeTeamId = selectedTeamId ?? teams?.[0]?.id ?? null;
+  const activeTeam = teams?.find((t) => t.id === activeTeamId);
 
   const { data: commitSeries, isLoading: commitsLoading } = useQuery({
     queryKey: ['team-commits', activeTeamId, from, to],
@@ -182,181 +197,228 @@ export function TeamDashboardPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['team-commits', activeTeamId] }),
   });
 
+  // da:recalculate event from TopBar
+  useEffect(() => {
+    const h = () => calculateMutation.mutate();
+    window.addEventListener('da:recalculate', h);
+    return () => window.removeEventListener('da:recalculate', h);
+  }, [calculateMutation]);
+
   if (teamsLoading) return <PageSpinner />;
 
   if (!teams?.length) {
     return (
-      <div className="p-6 text-center py-24 text-gray-400">
-        <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
-        <p className="text-sm">No teams found. You need to be a manager of at least one team.</p>
+      <div className="page fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
+        <Users width={40} height={40} style={{ opacity: 0.2, marginBottom: 12 }} />
+        <p className="t-muted">No teams found. You need to be a manager of at least one team.</p>
       </div>
     );
   }
 
-  const activeTeam = teams.find((t) => t.id === activeTeamId);
-
-  // Build aggregate KPIs from summary
+  // Aggregate KPIs from summary
   const totals = summary?.reduce(
     (acc, m) => ({
-      commits: acc.commits + (m.metrics.DAILY_COMMITS_COUNT ?? 0),
-      prsMerged: acc.prsMerged + (m.metrics.DAILY_PR_MERGED ?? 0),
+      commits:      acc.commits      + (m.metrics.DAILY_COMMITS_COUNT ?? 0),
+      prsMerged:    acc.prsMerged    + (m.metrics.DAILY_PR_MERGED     ?? 0),
       issuesClosed: acc.issuesClosed + (m.metrics.DAILY_ISSUES_CLOSED ?? 0),
     }),
     { commits: 0, prsMerged: 0, issuesClosed: 0 }
   ) ?? { commits: 0, prsMerged: 0, issuesClosed: 0 };
 
+  const topCommitter = summary?.length
+    ? [...summary].sort((a, b) => (b.metrics.DAILY_COMMITS_COUNT ?? 0) - (a.metrics.DAILY_COMMITS_COUNT ?? 0))[0]
+    : null;
+
+  const memberCount = summary?.length ?? activeTeam?.members?.length ?? 0;
+
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Team Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Overview across all team members</p>
+    <div className="page fade-in">
+      {/* Hero */}
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28, gap: 20, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 400px', minWidth: 0 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 10 }}>
+            ── Team · {activeTeam?.name ?? '…'} · {memberCount} member{memberCount !== 1 ? 's' : ''}
+          </div>
+          <h1 className="t-h1">
+            {summaryLoading
+              ? 'Loading team data…'
+              : totals.commits > 0
+                ? <><em>{fmtNumber(totals.commits)}</em> commits across the team{topCommitter && topCommitter.metrics.DAILY_COMMITS_COUNT ? <>, led by <em>{topCommitter.username}</em> at <em>{Math.round(topCommitter.metrics.DAILY_COMMITS_COUNT)}</em>.</> : '.'}</>
+                : 'No data for this period — try recalculating.'}
+          </h1>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {teams.length > 1 && (
-            <select
-              value={activeTeamId ?? ''}
-              onChange={(e) => setSelectedTeamId(Number(e.target.value))}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-colors cursor-pointer"
-            >
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          )}
-          <DateRangePicker value={range} onChange={setRange} />
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => calculateMutation.mutate()}
-            loading={calculateMutation.isPending}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Recalculate
-          </Button>
+
+        {/* Team selector */}
+        {teams.length > 1 && (
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button className="btn" onClick={() => setTeamPickerOpen((v) => !v)} aria-haspopup="listbox">
+              <span className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>team</span>
+              <span style={{ fontWeight: 500 }}>{activeTeam?.name}</span>
+              <ChevronDown width={11} height={11} />
+            </button>
+            {teamPickerOpen && (
+              <div
+                style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 20,
+                  background: 'var(--bg-card)', border: '1px solid var(--line)',
+                  borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.12)', minWidth: 160,
+                }}
+                role="listbox"
+              >
+                {teams.map((t) => (
+                  <button
+                    key={t.id}
+                    className="btn"
+                    role="option"
+                    aria-selected={t.id === activeTeamId}
+                    style={{
+                      width: '100%', justifyContent: 'flex-start', padding: '9px 14px',
+                      fontWeight: t.id === activeTeamId ? 600 : 400,
+                      color: t.id === activeTeamId ? 'var(--accent)' : 'var(--fg)',
+                      borderRadius: 6,
+                    }}
+                    onClick={() => { setSelectedTeamId(t.id); setTeamPickerOpen(false); }}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* KPI row */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="grid-kpi">
+          <KpiTile label="team commits"      value={fmtNumber(totals.commits)}          sub="all members"         accent="violet"  icon={<Commits width={16} height={16} />} />
+          <KpiTile label="team prs merged"   value={Math.round(totals.prsMerged)}        sub="to default branch"   accent="violet"  icon={<PRMerged width={16} height={16} />} />
+          <KpiTile label="team issues closed" value={Math.round(totals.issuesClosed)}    sub="resolved · closed"   accent="emerald" icon={<IssuesClosed width={16} height={16} />} />
+          <KpiTile label="active members"    value={memberCount}                          sub="≥ 1 commit / period" accent="cyan"    icon={<Users width={16} height={16} />} />
         </div>
       </div>
 
-      {/* Team KPI row */}
-      <div className="grid grid-cols-3 gap-4">
-        <KpiCard label="Total Commits" value={Math.round(totals.commits)} icon={<GitCommit className="h-4 w-4" />} />
-        <KpiCard label="PRs Merged" value={Math.round(totals.prsMerged)} icon={<GitMerge className="h-4 w-4" />} />
-        <KpiCard label="Issues Closed" value={Math.round(totals.issuesClosed)} icon={<Target className="h-4 w-4" />} />
+      {/* AI team insight */}
+      {activeTeamId && (
+        <AiTeamInsightCard
+          range={range}
+          teamId={activeTeamId}
+          teamName={activeTeam?.name ?? ''}
+          memberSummary={summary ?? []}
+        />
+      )}
+
+      {/* Commits chart */}
+      <div className="card" style={{ padding: 22, marginBottom: 24 }}>
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div className="t-eyebrow">commits — per member</div>
+            <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Daily commits by member</div>
+          </div>
+          <Chip>{memberCount} member{memberCount !== 1 ? 's' : ''}</Chip>
+        </div>
+        {commitsLoading ? (
+          <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span className="t-muted">Loading…</span>
+          </div>
+        ) : commitSeries?.length ? (
+          <MultiLineChart data={commitSeries.filter((d) => d.username !== 'team')} height={220} />
+        ) : (
+          <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span className="t-muted">No data — try recalculating for this period.</span>
+          </div>
+        )}
       </div>
 
-      {/* AI Team Insight */}
-      <AiTeamInsightCard
-        range={range}
-        teamId={activeTeamId!}
-        teamName={activeTeam?.name ?? ''}
-        memberSummary={summary ?? []}
-      />
-
-      {/* Team commits chart */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-violet-600" />
-            <h2 className="text-sm font-semibold text-gray-900">
-              Daily commits — {activeTeam?.name}
-            </h2>
+      {/* Member table */}
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="row" style={{ padding: '14px 20px', justifyContent: 'space-between' }}>
+          <div>
+            <div className="t-eyebrow">members</div>
+            <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Per-member breakdown</div>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">Per-member breakdown over the period</p>
-        </CardHeader>
-        <CardBody>
-          {commitsLoading ? (
-            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">Loading…</div>
-          ) : commitSeries?.length ? (
-            <MultiLineChart data={commitSeries.filter((d) => d.username !== 'team')} />
-          ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
-              No data — try recalculating for this period.
-            </div>
-          )}
-        </CardBody>
-      </Card>
+        </div>
 
-      {/* Member summary table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-violet-600" />
-            <h2 className="text-sm font-semibold text-gray-900">Member summary</h2>
+        {summaryLoading ? (
+          <div style={{ padding: '48px 20px', textAlign: 'center' }}>
+            <span className="t-muted">Loading…</span>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">Click a row for member detail</p>
-        </CardHeader>
-        <CardBody className="px-0 py-0">
-          {summaryLoading ? (
-            <div className="py-12 flex items-center justify-center text-gray-400 text-sm">Loading…</div>
-          ) : summary?.length ? (
-            <div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left px-5 py-3 font-semibold text-gray-700 text-xs">Member</th>
-                    <ColHeader label="Commits" tip="Total Git commits authored in the selected period." />
-                    <ColHeader label="PRs merged" tip="Pull requests merged to a target branch in the selected period." />
-                    <ColHeader label="PRs created" tip="Pull requests opened in the selected period." />
-                    <ColHeader label="Issues closed" tip="Issues resolved or closed in the selected period." />
-                    <ColHeader label="PR lead time" tip="Median time from PR open to merge. Lower is faster delivery." />
-                    <ColHeader label="Churn avg" tip="Average ratio of deleted to total changed lines. High churn may indicate rework." px="px-5" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.map((m) => (
-                    <tr
-                      key={m.userId}
-                      className="border-b border-gray-50 hover:bg-violet-50/40 transition-colors cursor-pointer"
-                      onClick={() => setSelectedMember(m)}
-                    >
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-2">
-                          <Avatar user={{ id: m.userId, username: m.username, hasCustomAvatar: m.hasCustomAvatar, avatarPreset: m.avatarPreset }} size="sm" />
-                          <span className="font-medium text-gray-900">{m.username}</span>
+        ) : summary?.length ? (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>member</th>
+                <th style={{ textAlign: 'right' }}>commits</th>
+                <th style={{ textAlign: 'right' }}>prs merged</th>
+                <th style={{ textAlign: 'right' }}>prs opened</th>
+                <th style={{ textAlign: 'right' }}>issues closed</th>
+                <th style={{ textAlign: 'right' }}>pr lead</th>
+                <th style={{ textAlign: 'right' }}>churn</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {summary.map((m) => {
+                const churn = m.metrics.DAILY_CHURN_RATIO ?? 0;
+                const isActive = selectedMember?.userId === m.userId;
+                return (
+                  <tr
+                    key={m.userId}
+                    onClick={() => setSelectedMember(m)}
+                    style={{ cursor: 'pointer', background: isActive ? 'var(--bg-2)' : 'transparent' }}
+                  >
+                    <td>
+                      <div className="row gap-3">
+                        <Avatar
+                          user={{ id: m.userId, username: m.username, hasCustomAvatar: m.hasCustomAvatar, avatarPreset: m.avatarPreset }}
+                          size="sm"
+                        />
+                        <div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg)', fontWeight: 500 }}>
+                            {m.username}
+                          </div>
+                          <div className="t-label" style={{ fontSize: 10, marginTop: 1 }}>contributor</div>
                         </div>
-                      </td>
-                      <td className="text-right px-4 py-3 text-gray-700 font-medium">
-                        {fmt(m.metrics.DAILY_COMMITS_COUNT, 0)}
-                      </td>
-                      <td className="text-right px-4 py-3 text-gray-700">
-                        {fmt(m.metrics.DAILY_PR_MERGED, 0)}
-                      </td>
-                      <td className="text-right px-4 py-3 text-gray-700">
-                        {fmt(m.metrics.DAILY_PR_CREATED, 0)}
-                      </td>
-                      <td className="text-right px-4 py-3 text-gray-700">
-                        {fmt(m.metrics.DAILY_ISSUES_CLOSED, 0)}
-                      </td>
-                      <td className="text-right px-4 py-3 text-gray-500">
-                        {fmtHours(m.metrics.PR_LEAD_TIME_HOURS_MEDIAN)}
-                      </td>
-                      <td className="text-right px-5 py-3">
-                        {m.metrics.DAILY_CHURN_RATIO != null && m.metrics.DAILY_CHURN_RATIO > 0 ? (
-                          <Badge color={m.metrics.DAILY_CHURN_RATIO > 0.5 ? 'amber' : 'emerald'}>
-                            {(m.metrics.DAILY_CHURN_RATIO * 100).toFixed(0)}%
-                          </Badge>
-                        ) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="py-12 flex items-center justify-center text-gray-400 text-sm">
-              No summary data — recalculate to populate.
-            </div>
-          )}
-        </CardBody>
-      </Card>
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_COMMITS_COUNT, 0)}</td>
+                    <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_PR_MERGED, 0)}</td>
+                    <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_PR_CREATED, 0)}</td>
+                    <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_ISSUES_CLOSED, 0)}</td>
+                    <td style={{ textAlign: 'right' }} className="num">{fmtHours(m.metrics.PR_LEAD_TIME_HOURS_MEDIAN)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {churn > 0 ? (
+                        <Chip color={churn > 0.25 ? 'coral' : churn > 0.15 ? 'amber' : 'emerald'}>
+                          {(churn * 100).toFixed(0)}%
+                        </Chip>
+                      ) : '—'}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <ChevronDown
+                        width={13} height={13}
+                        style={{ color: 'var(--fg-3)', transform: 'rotate(-90deg)' }}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <div style={{ padding: '48px 20px', textAlign: 'center' }}>
+            <span className="t-muted">No summary data — recalculate to populate.</span>
+          </div>
+        )}
+      </div>
 
-      {/* Member drill-down panel */}
+      <div style={{ height: 32 }} />
+
+      {/* Member detail modal */}
       {selectedMember && activeTeamId && (
-        <MemberPanel
+        <MemberDetailModal
           member={selectedMember}
           teamId={activeTeamId}
-          range={range}
+          open={!!selectedMember}
           onClose={() => setSelectedMember(null)}
         />
       )}

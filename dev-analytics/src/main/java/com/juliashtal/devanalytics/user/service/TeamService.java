@@ -1,5 +1,7 @@
 package com.juliashtal.devanalytics.user.service;
 
+import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.exception.ConflictException;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.user.model.Role;
@@ -23,6 +25,7 @@ public class TeamService {
 
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
+    private final DataSourceConfigRepository dataSourceConfigRepository;
 
     @Transactional
     public TeamDto createTeam(String name) {
@@ -101,5 +104,24 @@ public class TeamService {
         TeamDto result = TeamDto.from(teamRepository.save(team));
         log.info("Team renamed: teamId={}, newName='{}'", teamId, name);
         return result;
+    }
+
+    @Transactional
+    public void deleteTeam(Long teamId) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new NoSuchElementException("Team not found: " + teamId));
+
+        Role role = userRepository.getReferenceById(currentUserId).getRole();
+        if (role != Role.ADMIN && !team.getManager().getId().equals(currentUserId)) {
+            throw new ForbiddenException("Only the team manager or an admin can delete this team");
+        }
+
+        if (!dataSourceConfigRepository.findAllByTeam(team).isEmpty()) {
+            throw new ConflictException("Team has attached data sources. Move or delete them before deleting the team.");
+        }
+
+        teamRepository.delete(team);
+        log.info("Team deleted: teamId={}, deletedBy={}", teamId, currentUserId);
     }
 }
