@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.jira;
+package com.juliashtal.devanalytics.jira.model;
 
 /** Normalization helpers for Jira instance base URLs. */
 public final class JiraUrl {

@@ -9,7 +9,7 @@ import java.io.Serializable;
 /**
  * Link table between a Jira project and a Git repository.
  * Enables the metric engine to count Jira issues toward the mapped repository's
- * issue metrics (ADR-005 Option C; table created in V32).
+ * issue metrics.
  */
 @Data
 @Entity

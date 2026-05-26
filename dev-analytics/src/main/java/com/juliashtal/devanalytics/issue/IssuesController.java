@@ -10,9 +10,9 @@ import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository
 import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
 import com.juliashtal.devanalytics.issue.model.IssueDto;
 import com.juliashtal.devanalytics.issue.service.IssueService;
-import com.juliashtal.devanalytics.jira.JiraCollector;
+import com.juliashtal.devanalytics.jira.service.JiraCollector;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
-import com.juliashtal.devanalytics.jira.JiraProjectService;
+import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;

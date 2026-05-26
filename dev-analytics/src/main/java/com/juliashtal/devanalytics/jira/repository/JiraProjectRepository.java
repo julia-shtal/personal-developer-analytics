@@ -1,7 +1,8 @@
-package com.juliashtal.devanalytics.jira;
+package com.juliashtal.devanalytics.jira.repository;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
+import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

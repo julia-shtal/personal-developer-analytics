@@ -1,7 +1,7 @@
 package com.juliashtal.devanalytics.jira.model;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
-import com.juliashtal.devanalytics.jira.JiraUrl;
+import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -17,7 +17,7 @@ import java.time.Instant;
  * {@code uq_jira_project_global}), so the same upstream project can have at most one
  * canonical row in the system. This mirrors the {@code git_repositories.repo_full_name UNIQUE}
  * constraint (ADR-004, ADR-002). If two users track the same {@code (baseUrl, projectKey)} on
- * separate datasources, {@link com.juliashtal.devanalytics.jira.JiraProjectService#addProject}
+ * separate datasources, {@link JiraProjectService#addProject}
  * returns the existing canonical row on the second call, and the caller is responsible for
  * subscribing the new user via {@link UserProjectRegistration}.
  *

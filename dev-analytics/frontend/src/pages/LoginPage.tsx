@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Activity, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
+import { Logo } from '@/components/brand/Logo';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
 export function LoginPage() {
   const { login } = useAuth();
+  const { logo } = useTheme();
   const navigate = useNavigate();
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,8 +44,8 @@ export function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-violet-600 flex items-center justify-center mb-4 shadow-lg shadow-violet-200">
-            <Activity className="h-6 w-6 text-white" />
+          <div className="mb-4">
+            <Logo variant={logo} size={36} />
           </div>
           <h1 className="text-2xl font-semibold text-gray-900">Dev Analytics</h1>
           <p className="mt-1 text-sm text-gray-500">Sign in to your account</p>
