@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.user.service.TeamService;
 import com.juliashtal.devanalytics.user.model.request.AddTeamMemberRequest;
 import com.juliashtal.devanalytics.user.model.request.CreateTeamRequest;
 import com.juliashtal.devanalytics.user.model.request.RenameTeamRequest;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -49,5 +50,12 @@ public class TeamController {
             @PathVariable Long teamId,
             @RequestBody RenameTeamRequest request) {
         return ResponseEntity.ok(teamService.renameTeam(teamId, request.getName()));
+    }
+
+    @Operation(summary = "Delete a team. Fails with 409 if any data source is still attached.")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteTeam(@PathVariable Long id) {
+        teamService.deleteTeam(id);
+        return ResponseEntity.noContent().build();
     }
 }

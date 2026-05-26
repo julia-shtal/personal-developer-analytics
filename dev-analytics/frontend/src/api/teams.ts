@@ -10,4 +10,5 @@ export const teamsApi = {
   removeMember: (teamId: number, userId: number) =>
     api.delete<Team>(`/teams/${teamId}/members/${userId}`),
   rename: (teamId: number, name: string) => api.put<Team>(`/teams/${teamId}`, { name }),
+  delete: (teamId: number) => api.delete<void>(`/teams/${teamId}`),
 };
