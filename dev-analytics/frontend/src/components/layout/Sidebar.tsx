@@ -9,11 +9,12 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Activity,
   ShieldAlert,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
+import { Logo } from '@/components/brand/Logo';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -30,6 +31,7 @@ const navItemClass = ({ isActive }: { isActive: boolean }) =>
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { user, logout, isManager, isAdmin } = useAuth();
+  const { logo } = useTheme();
 
   return (
     <aside
@@ -40,12 +42,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       {/* Logo / brand */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-gray-100 flex-shrink-0">
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
-          <Activity className="h-4 w-4 text-white" />
-        </div>
-        {!collapsed && (
-          <span className="font-semibold text-gray-900 text-sm truncate">Dev Analytics</span>
-        )}
+        <Logo variant={logo} size={26} withWordmark={!collapsed} />
       </div>
 
       {/* Nav items */}

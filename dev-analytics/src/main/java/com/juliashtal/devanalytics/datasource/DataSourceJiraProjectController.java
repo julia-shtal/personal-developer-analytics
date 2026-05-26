@@ -1,6 +1,6 @@
 package com.juliashtal.devanalytics.datasource;
 
-import com.juliashtal.devanalytics.jira.JiraProjectService;
+import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.jira.model.dto.AttachProjectRequest;
 import com.juliashtal.devanalytics.jira.model.dto.DiscoveredProjectDto;
 import com.juliashtal.devanalytics.jira.model.dto.JiraProjectResponseDto;

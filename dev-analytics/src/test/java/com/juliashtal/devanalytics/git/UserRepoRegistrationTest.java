@@ -3,10 +3,10 @@ package com.juliashtal.devanalytics.git;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.datasource.service.DataSourceService;
-import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
+import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,8 @@ class UserRepoRegistrationTest {
     @Mock TeamRepository teamRepository;
     @Mock DataSourceConfigRepository dataSourceConfigRepository;
     @Mock GitRepositoryEntityRepository gitRepoRepository;
-    @Mock com.juliashtal.devanalytics.jira.JiraProjectService jiraProjectService;
+    @Mock
+    JiraProjectService jiraProjectService;
     @Mock com.juliashtal.devanalytics.datasource.service.DataSourceValidator validator;
     @Mock com.juliashtal.devanalytics.git.service.GitRepositoryService gitRepositoryService;
     @Mock com.juliashtal.devanalytics.github.service.GitHubRepositoryService gitHubRepositoryService;

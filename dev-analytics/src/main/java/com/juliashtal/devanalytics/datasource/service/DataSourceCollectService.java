@@ -1,15 +1,14 @@
 package com.juliashtal.devanalytics.datasource.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
-import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.service.GitLocalCollector;
 import com.juliashtal.devanalytics.github.service.GitHubCollector;
 import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
 import com.juliashtal.devanalytics.github.service.GitHubPrCollector;
-import com.juliashtal.devanalytics.jira.JiraCollector;
-import com.juliashtal.devanalytics.jira.JiraProjectService;
+import com.juliashtal.devanalytics.jira.service.JiraCollector;
+import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
