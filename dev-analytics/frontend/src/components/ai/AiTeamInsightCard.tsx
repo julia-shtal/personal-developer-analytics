@@ -98,8 +98,11 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
   useEffect(() => {
     const cached = qc.getQueryData<{ summary: MetricsSummaryDto; generatedAt: number; range: DateRange }>(cacheKey);
     if (cached) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSummary(cached.summary);
+       
       setGeneratedAt(new Date(cached.generatedAt));
+       
       setGeneratedForRange(cached.range);
       onSummaryGenerated?.(cached.summary);
     } else {

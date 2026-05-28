@@ -32,23 +32,29 @@ export function MetricBarChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--line-2)" vertical={false} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: '#9ca3af' }}
+          tick={{ fontSize: 11, fill: 'var(--fg-3)' }}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
-          tick={{ fontSize: 11, fill: '#9ca3af' }}
+          tick={{ fontSize: 11, fill: 'var(--fg-3)' }}
           tickLine={false}
           axisLine={false}
           unit={unit}
           width={36}
         />
         <Tooltip
-          contentStyle={{ border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13 }}
-          cursor={{ fill: `${color}15` }}
+          contentStyle={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--line)',
+            borderRadius: 8,
+            fontSize: 13,
+            color: 'var(--fg)',
+          }}
+          cursor={{ fill: 'var(--bg-2)' }}
           formatter={(val) => [`${val}${unit}`, label]}
         />
         <Bar dataKey="value" name={label} fill={color} radius={[4, 4, 0, 0]} maxBarSize={32} />

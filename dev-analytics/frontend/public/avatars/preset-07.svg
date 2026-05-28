@@ -1,15 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#dc2626"/>
-      <stop offset="100%" stop-color="#450a0a"/>
-    </linearGradient>
+    <radialGradient id="g7" cx="35%" cy="35%" r="80%">
+      <stop offset="0%" stop-color="#fbbf24"></stop>
+      <stop offset="60%" stop-color="#ea580c"></stop>
+      <stop offset="100%" stop-color="#7c2d12"></stop>
+    </radialGradient>
   </defs>
-  <rect width="256" height="256" fill="url(#g)"/>
-  <polygon points="128,20 236,200 20,200"  fill="#fca5a5" opacity="0.18"/>
-  <polygon points="128,50 210,185 46,185"  fill="#fca5a5" opacity="0.15"/>
-  <polygon points="20,20 128,236 236,20"   fill="#fca5a5" opacity="0.12"/>
-  <polygon points="46,50 128,205 210,50"   fill="#fca5a5" opacity="0.1"/>
-  <polygon points="128,20 236,200 20,200"  fill="none" stroke="#fca5a5" stroke-width="1.5" opacity="0.4"/>
-  <polygon points="20,20 128,236 236,20"   fill="none" stroke="#fca5a5" stroke-width="1" opacity="0.3"/>
+  <rect width="256" height="256" fill="url(#g7)"></rect>
+  <g fill="#fff7ed" opacity="0.85">
+    <path d="M128 56 L142 110 L196 110 L152 142 L168 196 L128 162 L88 196 L104 142 L60 110 L114 110 Z"></path>
+  </g>
 </svg>

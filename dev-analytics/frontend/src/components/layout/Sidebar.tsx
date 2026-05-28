@@ -167,7 +167,7 @@ export function Sidebar() {
                 fontSize: 12, fontWeight: 500, color: 'var(--fg)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
-                {user.email}
+                {user.username}
               </div>
               <div className="t-label" style={{ fontSize: 10 }}>
                 {user.role.toLowerCase()} · personal

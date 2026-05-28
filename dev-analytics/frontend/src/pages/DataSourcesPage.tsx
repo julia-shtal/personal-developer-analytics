@@ -4,7 +4,6 @@ import {
   Plus, Trash2, ChevronDown, ChevronRight,
   ExternalLink, UserCheck, UserMinus, Play,
   Eye, EyeOff, MessageSquare, AlertCircle, X,
-  GitFork,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { datasourcesApi, type SyncStatus } from '@/api/datasources';
@@ -16,7 +15,7 @@ import { teamsApi } from '@/api/teams';
 import { Chip } from '@/components/ui/Chip';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
-import { Jira, Folder, Branch } from '@/components/icons';
+import { Jira, Folder, Branch, Github } from '@/components/icons';
 import type { DataSourceType, CreateDataSourceRequest, RepoDto, Team, TrackedJiraProjectDto } from '@/types';
 
 // ─── Type helpers ──────────────────────────────────────────────────────────────
@@ -57,7 +56,7 @@ const NEEDS_TOKEN: DataSourceType[] = ['GITHUB', 'JIRA'];
 const NEEDS_REPO_FULLNAME: DataSourceType[] = ['GITHUB'];
 
 function TypeIcon({ type, size = 18 }: { type: DataSourceType; size?: number }) {
-  if (type === 'GITHUB') return <GitFork width={size} height={size} />;
+  if (type === 'GITHUB') return <Github width={size} height={size} />;
   if (type === 'JIRA') return <Jira width={size} height={size} />;
   return <Folder width={size} height={size} />;
 }
@@ -348,7 +347,7 @@ function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; source
 // ─── Jira projects sub-panel ───────────────────────────────────────────────────
 
 function JiraProjectRow({
-  p, syncing, onRequestDetach, isConfirming, onConfirmDetach, onCancelDetach, isDetaching,
+  p, syncing, onRequestDetach, isConfirming, onConfirmDetach, onCancelDetach, isDetaching, isOwner,
 }: {
   p: TrackedJiraProjectDto;
   syncing: boolean;
@@ -357,6 +356,7 @@ function JiraProjectRow({
   onConfirmDetach: () => void;
   onCancelDetach: () => void;
   isDetaching: boolean;
+  isOwner: boolean;
 }) {
   const { data: counts } = useQuery({
     queryKey: ['jira-issue-count', p.id],
@@ -388,7 +388,7 @@ function JiraProjectRow({
             <ExternalLink width={11} height={11} />
           </a>
         )}
-        {isConfirming ? (
+        {isOwner && (isConfirming ? (
           <div className="row gap-1">
             <span className="t-label" style={{ color: 'var(--coral)', fontSize: 11 }}>Remove?</span>
             <button className="btn btn-sm" style={{ color: 'var(--coral)' }} onClick={onConfirmDetach} disabled={isDetaching}>Yes</button>
@@ -398,13 +398,13 @@ function JiraProjectRow({
           <button className="btn btn-sm btn-icon" onClick={onRequestDetach} title="Remove project" aria-label="Remove project">
             <Trash2 width={12} height={12} />
           </button>
-        )}
+        ))}
       </div>
     </div>
   );
 }
 
-function JiraProjectsPanel({ dataSourceId, syncing }: { dataSourceId: number; syncing: boolean }) {
+function JiraProjectsPanel({ dataSourceId, syncing, isOwner }: { dataSourceId: number; syncing: boolean; isOwner: boolean }) {
   const qc = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [confirmDetachId, setConfirmDetachId] = useState<number | null>(null);
@@ -435,12 +435,14 @@ function JiraProjectsPanel({ dataSourceId, syncing }: { dataSourceId: number; sy
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-        <button className="btn btn-sm" onClick={() => setShowModal(true)}>
-          <Plus width={12} height={12} />
-          Add project
-        </button>
-      </div>
+      {isOwner && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button className="btn btn-sm" onClick={() => setShowModal(true)}>
+            <Plus width={12} height={12} />
+            Add project
+          </button>
+        </div>
+      )}
 
       {detachError && (
         <div className="row gap-2" style={{ fontSize: 11, color: 'var(--coral-strong)', background: 'var(--coral-bg)', borderRadius: 6, padding: '8px 12px', marginBottom: 8 }}>
@@ -463,6 +465,7 @@ function JiraProjectsPanel({ dataSourceId, syncing }: { dataSourceId: number; sy
               onConfirmDetach={() => detachMutation.mutate(p.id)}
               onCancelDetach={() => setConfirmDetachId(null)}
               isDetaching={detachMutation.isPending && confirmDetachId === p.id}
+              isOwner={isOwner}
             />
           ))}
         </div>
@@ -899,7 +902,7 @@ export function DataSourcesPage() {
                   {src.type === 'JIRA' && (
                     <>
                       <div className="t-eyebrow" style={{ marginTop: 18, marginBottom: 10 }}>── jira projects</div>
-                      <JiraProjectsPanel dataSourceId={src.id} syncing={isSyncing} />
+                      <JiraProjectsPanel dataSourceId={src.id} syncing={isSyncing} isOwner={!!src.canDelete} />
                     </>
                   )}
                 </div>
