@@ -19,6 +19,7 @@ export function DateRangeProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useDateRange(): DateRangeContextValue {
   const ctx = useContext(DateRangeContext);
   if (!ctx) throw new Error('useDateRange must be used within DateRangeProvider');

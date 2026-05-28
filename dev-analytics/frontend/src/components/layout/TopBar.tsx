@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { RotateCcw, CalendarRange } from 'lucide-react';
 import { useDateRange } from '@/context/DateRangeContext';
@@ -18,11 +18,22 @@ export function TopBar() {
   const { pathname } = useLocation();
   const { range, setRange } = useDateRange();
   const [rangeOpen, setRangeOpen] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   const crumbs = CRUMB_MAP[pathname] ?? ['dev/', 'analytics', pathname.replace(/^\//, '') || 'dashboard'];
 
+  useEffect(() => {
+    const onStart = () => setIsRecalculating(true);
+    const onDone = () => setIsRecalculating(false);
+    window.addEventListener('da:recalculate-start', onStart);
+    window.addEventListener('da:recalculate-done', onDone);
+    return () => {
+      window.removeEventListener('da:recalculate-start', onStart);
+      window.removeEventListener('da:recalculate-done', onDone);
+    };
+  }, []);
+
   function handleRecalculate() {
-    console.log('[TopBar] recalculate dispatched');
     window.dispatchEvent(new CustomEvent('da:recalculate'));
   }
 
@@ -80,10 +91,16 @@ export function TopBar() {
           <button
             className="btn btn-sm btn-icon"
             onClick={handleRecalculate}
-            title="Recalculate metrics"
-            aria-label="Recalculate metrics"
+            disabled={isRecalculating}
+            title={isRecalculating ? 'Recalculating…' : 'Recalculate metrics'}
+            aria-label={isRecalculating ? 'Recalculating…' : 'Recalculate metrics'}
+            style={{ opacity: isRecalculating ? 0.6 : undefined }}
           >
-            <RotateCcw width={13} height={13} />
+            <RotateCcw
+              width={13}
+              height={13}
+              style={{ animation: isRecalculating ? 'spin 1s linear infinite' : 'none' }}
+            />
           </button>
         </div>
       </header>

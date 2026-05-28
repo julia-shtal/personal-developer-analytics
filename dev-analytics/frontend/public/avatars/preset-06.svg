@@ -1,16 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <defs>
-    <linearGradient id="g" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0f766e"/>
-      <stop offset="100%" stop-color="#042f2e"/>
-    </linearGradient>
-  </defs>
-  <rect width="256" height="256" fill="url(#g)"/>
-  <path d="M -20 128 A 148 148 0 0 1 276 128" fill="none" stroke="#5eead4" stroke-width="3" opacity="0.5"/>
-  <path d="M -20 148 A 168 168 0 0 1 276 148" fill="none" stroke="#5eead4" stroke-width="2" opacity="0.4"/>
-  <path d="M -20 108 A 128 128 0 0 1 276 108" fill="none" stroke="#5eead4" stroke-width="2" opacity="0.4"/>
-  <path d="M 128 -20 A 148 148 0 0 1 128 276" fill="none" stroke="#2dd4bf" stroke-width="3" opacity="0.4"/>
-  <path d="M 108 -20 A 168 168 0 0 1 108 276" fill="none" stroke="#2dd4bf" stroke-width="2" opacity="0.3"/>
-  <path d="M 148 -20 A 128 128 0 0 1 148 276" fill="none" stroke="#2dd4bf" stroke-width="2" opacity="0.3"/>
-  <circle cx="128" cy="128" r="20" fill="#99f6e4" opacity="0.3"/>
+  <rect width="256" height="256" fill="#1e293b"></rect>
+  <g stroke="#38bdf8" stroke-width="3" fill="none">
+    <polygon points="128,40 200,86 200,170 128,216 56,170 56,86"></polygon>
+    <polygon points="128,72 172,98 172,158 128,184 84,158 84,98"></polygon>
+    <polygon points="128,104 144,114 144,142 128,152 112,142 112,114" fill="#38bdf8"></polygon>
+  </g>
 </svg>

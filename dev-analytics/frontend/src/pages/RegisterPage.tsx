@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Activity } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { useTheme } from '@/context/ThemeContext';
+import { Logo } from '@/components/brand/Logo';
+import { APP_VERSION } from '@/config/branding';
 
 export function RegisterPage() {
   const { register } = useAuth();
+  const { logo } = useTheme();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -30,62 +31,91 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-violet-600 flex items-center justify-center mb-4 shadow-lg shadow-violet-200">
-            <Activity className="h-6 w-6 text-white" />
-          </div>
-          <h1 className="text-2xl font-semibold text-gray-900">Create account</h1>
-          <p className="mt-1 text-sm text-gray-500">Start tracking your developer metrics</p>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '60px 64px', display: 'flex', flexDirection: 'column', flex: 1, maxWidth: 560, margin: '0 auto', width: '100%' }}>
+        <div style={{ flex: '0 0 auto', marginBottom: 48 }}>
+          <Logo variant={logo} size={36} withWordmark />
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Username"
-              type="text"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-            <Input
-              label="Email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <Input
-              label="Password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
+        <div style={{ flex: '1 1 auto' }}>
+          <div className="t-eyebrow" style={{ marginBottom: 12 }}>── create account</div>
+          <h1 style={{
+            fontFamily: 'var(--font-sans)',
+            fontSize: 36, lineHeight: 1.1,
+            fontWeight: 500, letterSpacing: '-0.02em',
+            color: 'var(--fg)', marginBottom: 28,
+          }}>
+            Start tracking your metrics.
+          </h1>
+
+          <form onSubmit={handleSubmit} className="col gap-3" style={{ maxWidth: 400 }}>
+            <div>
+              <div className="t-eyebrow" style={{ marginBottom: 6 }}>username</div>
+              <input
+                className="input"
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <div className="t-eyebrow" style={{ marginBottom: 6 }}>email</div>
+              <input
+                className="input"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <div className="t-eyebrow" style={{ marginBottom: 6 }}>password</div>
+              <input
+                className="input"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+              <div className="t-label" style={{ marginTop: 4, fontSize: 10.5 }}>at least 6 characters</div>
+            </div>
 
             {error && (
-              <p className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+              <p style={{
+                fontSize: 12, margin: 0,
+                color: 'var(--coral)',
+                background: 'color-mix(in oklab, var(--coral) 10%, var(--bg))',
+                border: '1px solid color-mix(in oklab, var(--coral) 25%, var(--line))',
+                borderRadius: 6, padding: '8px 12px',
+              }}>
                 {error}
               </p>
             )}
 
-            <Button type="submit" className="w-full" loading={loading}>
-              Create account
-            </Button>
+            <button
+              type="submit"
+              className="btn btn-accent"
+              disabled={loading}
+              style={{ marginTop: 8, justifyContent: 'center', padding: '10px 16px', fontSize: 13 }}
+            >
+              {loading ? 'creating account…' : 'create account →'}
+            </button>
+
+            <div className="row gap-2" style={{ marginTop: 4, justifyContent: 'center' }}>
+              <span className="t-label">already have an account?</span>
+              <Link to="/login" className="t-label" style={{ color: 'var(--accent)' }}>sign in</Link>
+            </div>
           </form>
         </div>
 
-        <p className="mt-4 text-center text-sm text-gray-500">
-          Already have an account?{' '}
-          <Link to="/login" className="font-medium text-violet-600 hover:text-violet-700">
-            Sign in
-          </Link>
-        </p>
+        <div className="t-label" style={{ fontSize: 10, marginTop: 32 }}>
+          dev·analytics · {APP_VERSION} · self-hosted
+        </div>
       </div>
     </div>
   );
