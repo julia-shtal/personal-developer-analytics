@@ -150,10 +150,14 @@ export function DashboardPage() {
   const recalculateMutation = useMutation({
     mutationFn: () => metricsApi.calculate(from, to),
     onSuccess: () => qc.invalidateQueries({ queryKey: [] }),
+    onSettled: () => window.dispatchEvent(new CustomEvent('da:recalculate-done')),
   });
 
   useEffect(() => {
-    const h = () => recalculateMutation.mutate();
+    const h = () => {
+      window.dispatchEvent(new CustomEvent('da:recalculate-start'));
+      recalculateMutation.mutate();
+    };
     window.addEventListener('da:recalculate', h);
     return () => window.removeEventListener('da:recalculate', h);
   }, [recalculateMutation]);

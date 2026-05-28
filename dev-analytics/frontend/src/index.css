@@ -320,6 +320,10 @@ body {
 .dot-fail { background: var(--coral); }
 .dot-idle { background: var(--muted); }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklab, oklch(70% 0.18 145) 25%, transparent); }
   50%      { box-shadow: 0 0 0 6px color-mix(in oklab, oklch(70% 0.18 145) 0%, transparent); }

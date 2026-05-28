@@ -172,7 +172,7 @@ public class MetricsController {
     }
 
     // =========================================================================
-    // Ticket 5 — Wellness + Quality metric endpoints (personal, aggregate)
+    // Wellness + Quality metric endpoints (personal, aggregate)
     // =========================================================================
 
     @GetMapping("/after-hours-ratio")

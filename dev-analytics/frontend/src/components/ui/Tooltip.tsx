@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useCallback, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 interface TooltipProps {
   children: ReactNode;
@@ -6,29 +7,39 @@ interface TooltipProps {
 }
 
 export function Tooltip({ children, content }: TooltipProps) {
-  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  const handleEnter = useCallback((e: React.MouseEvent<HTMLSpanElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPos({ x: rect.left + rect.width / 2, y: rect.top });
+  }, []);
+
+  const handleLeave = useCallback(() => setPos(null), []);
 
   return (
     <span
       style={{ position: 'relative', display: 'inline-flex' }}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
     >
       {children}
-      {show && (
+      {pos && createPortal(
         <span
           style={{
-            position: 'absolute', bottom: '100%', left: '50%',
-            transform: 'translate(-50%, -8px)',
+            position: 'fixed',
+            left: pos.x,
+            top: pos.y - 8,
+            transform: 'translate(-50%, -100%)',
             background: 'var(--fg)', color: 'var(--bg)',
             padding: '6px 10px', borderRadius: 6,
             fontFamily: 'var(--font-mono)', fontSize: 10.5,
             whiteSpace: 'normal', maxWidth: 260, lineHeight: 1.45,
-            textAlign: 'left', zIndex: 50, pointerEvents: 'none',
+            textAlign: 'left', zIndex: 9999, pointerEvents: 'none',
           }}
         >
           {content}
-        </span>
+        </span>,
+        document.body,
       )}
     </span>
   );

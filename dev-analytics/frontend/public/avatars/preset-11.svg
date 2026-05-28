@@ -1,39 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#e11d48"/>
-      <stop offset="100%" stop-color="#881337"/>
+    <linearGradient id="g11" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fef9c3"></stop>
+      <stop offset="100%" stop-color="#f472b6"></stop>
     </linearGradient>
   </defs>
-  <rect width="256" height="256" fill="url(#g)"/>
-  <g fill="#fda4af" opacity="0.18">
-    <rect x="0"   y="0"   width="48" height="48"/>
-    <rect x="96"  y="0"   width="48" height="48"/>
-    <rect x="192" y="0"   width="48" height="48"/>
-    <rect x="48"  y="48"  width="48" height="48"/>
-    <rect x="144" y="48"  width="48" height="48"/>
-    <rect x="0"   y="96"  width="48" height="48"/>
-    <rect x="96"  y="96"  width="48" height="48"/>
-    <rect x="192" y="96"  width="48" height="48"/>
-    <rect x="48"  y="144" width="48" height="48"/>
-    <rect x="144" y="144" width="48" height="48"/>
-    <rect x="0"   y="192" width="48" height="48"/>
-    <rect x="96"  y="192" width="48" height="48"/>
-    <rect x="192" y="192" width="48" height="48"/>
+  <rect width="256" height="256" fill="url(#g11)"></rect>
+  <g fill="#831843" font-family="Georgia, serif" font-style="italic" font-weight="400">
+    <text x="78" y="180" font-size="160" letter-spacing="-6">D</text>
   </g>
-  <g fill="none" stroke="#fda4af" stroke-width="1" opacity="0.3">
-    <rect x="0"   y="0"   width="48" height="48"/>
-    <rect x="96"  y="0"   width="48" height="48"/>
-    <rect x="192" y="0"   width="48" height="48"/>
-    <rect x="48"  y="48"  width="48" height="48"/>
-    <rect x="144" y="48"  width="48" height="48"/>
-    <rect x="0"   y="96"  width="48" height="48"/>
-    <rect x="96"  y="96"  width="48" height="48"/>
-    <rect x="192" y="96"  width="48" height="48"/>
-    <rect x="48"  y="144" width="48" height="48"/>
-    <rect x="144" y="144" width="48" height="48"/>
-    <rect x="0"   y="192" width="48" height="48"/>
-    <rect x="96"  y="192" width="48" height="48"/>
-    <rect x="192" y="192" width="48" height="48"/>
-  </g>
+  <circle cx="186" cy="78" r="10" fill="#fff"></circle>
 </svg>

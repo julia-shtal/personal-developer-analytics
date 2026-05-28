@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
 import type { ComponentType, CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ChevronDown, Mail, Sparkles } from 'lucide-react';
+import { Users, ChevronDown, Mail, Sparkles, AlertCircle } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
 import { teamMetricsApi } from '@/api/metrics';
 import { KpiTile } from '@/components/ui/KpiTile';
 import { Chip } from '@/components/ui/Chip';
 import { Modal } from '@/components/ui/Modal';
 import { Avatar } from '@/components/ui/Avatar';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { MetricBarChart } from '@/components/charts/MetricBarChart';
 import { MultiLineChart } from '@/components/charts/MultiLineChart';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
 import { useDateRange } from '@/context/DateRangeContext';
+import { formatDate } from '@/lib/dates';
 import { Commits, PRMerged, IssuesClosed, LeadTime, Churn, Focus } from '@/components/icons';
 import type { Team, MemberSummaryDto } from '@/types';
 
@@ -51,23 +54,21 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
   const m = member.metrics;
   const churn = m.DAILY_CHURN_RATIO ?? 0;
 
-  const kpiItems: Array<[string, string, string, ComponentType<{ width?: number; height?: number; style?: CSSProperties }>]> = [
-    ['commits',       fmt(m.DAILY_COMMITS_COUNT, 0),                       'violet',  Commits],
-    ['prs merged',    fmt(m.DAILY_PR_MERGED, 0),                           'violet',  PRMerged],
-    ['issues closed', fmt(m.DAILY_ISSUES_CLOSED, 0),                       'emerald', IssuesClosed],
-    ['pr lead time',  fmtHours(m.PR_LEAD_TIME_HOURS_MEDIAN),               'cyan',    LeadTime],
-    ['churn',         churn > 0 ? `${(churn * 100).toFixed(0)}%` : '—',   churn > 0.25 ? 'coral' : 'amber', Churn],
-    ['focus ratio',   m.FOCUS_RATIO_DAYS_TASKS != null ? `${Math.round(m.FOCUS_RATIO_DAYS_TASKS)}d` : '—', 'emerald', Focus],
+  const kpiItems: Array<[string, string, string, ComponentType<{ width?: number; height?: number; style?: CSSProperties }>, string]> = [
+    ['commits',       fmt(m.DAILY_COMMITS_COUNT, 0),                       'violet',  Commits,      'Avg daily commits in the selected period'],
+    ['prs merged',    fmt(m.DAILY_PR_MERGED, 0),                           'violet',  PRMerged,     'Avg daily pull requests merged to the default branch'],
+    ['issues closed', fmt(m.DAILY_ISSUES_CLOSED, 0),                       'emerald', IssuesClosed, 'Avg daily Jira/GitHub issues resolved or closed'],
+    ['pr lead time',  fmtHours(m.PR_LEAD_TIME_HOURS_MEDIAN),               'cyan',    LeadTime,     'Median time from PR open to first merge'],
+    ['churn',         churn > 0 ? `${(churn * 100).toFixed(0)}%` : '—',   churn > 0.25 ? 'coral' : 'amber', Churn, 'Ratio of deleted + churned lines to total changed lines. High values indicate rework.'],
+    ['focus ratio',   m.FOCUS_RATIO_DAYS_TASKS != null ? `${Math.round(m.FOCUS_RATIO_DAYS_TASKS)}d` : '—', 'emerald', Focus, 'Days where task-related activity (issues) was the primary work type'],
   ];
-
-  const peakCommits = Math.max(...(commits.data ?? []).map((d) => d.value ?? 0), 1);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       eyebrow={`── member · ${member.username}`}
-      title={`${member.username} — selected period`}
+      title={`${member.username} — ${formatDate(from)} – ${formatDate(to)}`}
       width={620}
       footer={
         <div className="row gap-2" style={{ justifyContent: 'space-between' }}>
@@ -108,7 +109,7 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
         display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0,
         border: '1px solid var(--line)', borderRadius: 8, marginBottom: 16, overflow: 'hidden',
       }}>
-        {kpiItems.map(([label, val, color, Icon], i) => (
+        {kpiItems.map(([label, val, color, Icon, tip], i) => (
           <div key={label} style={{
             padding: '14px 16px',
             borderLeft: i % 3 ? '1px solid var(--line-2)' : 'none',
@@ -116,39 +117,38 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
           }}>
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
               <span className="t-label" style={{ fontSize: 10 }}>{label}</span>
-              <Icon width={13} height={13} style={{ color: `var(--${color})` }} />
+              <Tooltip content={tip}>
+                <Icon width={13} height={13} style={{ color: `var(--${color})`, cursor: 'default' }} />
+              </Tooltip>
             </div>
             <div className="t-number-big" style={{ fontSize: 24 }}>{val}</div>
           </div>
         ))}
       </div>
 
-      {/* Sparkline bars */}
+      {/* Daily commits bar chart */}
       <div className="card-quiet" style={{ padding: 14, borderRadius: 8 }}>
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
           <span className="t-eyebrow">commits — daily</span>
           <span className="t-label">
-            {commits.isLoading ? 'loading…' : `peak: ${peakCommits}`}
+            {commits.isLoading ? 'loading…' : `${(commits.data ?? []).length} days`}
           </span>
         </div>
         {commits.isLoading ? (
-          <div style={{ height: 40, display: 'flex', alignItems: 'center' }}>
+          <div style={{ height: 140, display: 'flex', alignItems: 'center' }}>
             <span className="t-muted" style={{ fontSize: 12 }}>Loading…</span>
           </div>
-        ) : (
-          <div className="sparkline-bars">
-            {(commits.data ?? []).slice(-56).map((d, i) => {
-              const v = d.value ?? 0;
-              const pct = peakCommits > 0 ? (v / peakCommits) * 100 : 0;
-              return (
-                <span
-                  key={i}
-                  className={v >= peakCommits * 0.85 ? 'peak' : ''}
-                  style={{ height: `${Math.max(pct, 2)}%` }}
-                />
-              );
-            })}
+        ) : (commits.data ?? []).length === 0 ? (
+          <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span className="t-muted" style={{ fontSize: 12 }}>No data for this period.</span>
           </div>
+        ) : (
+          <MetricBarChart
+            data={(commits.data ?? []).slice(-60)}
+            color="var(--violet)"
+            label="commits"
+            height={140}
+          />
         )}
       </div>
     </Modal>
@@ -189,20 +189,35 @@ export function TeamDashboardPage() {
     enabled: !!activeTeamId,
   });
 
+  const [calcError, setCalcError] = useState<string | null>(null);
+
   const calculateMutation = useMutation({
-    mutationFn: () => {
-      if (!activeTeamId) return Promise.reject(new Error('No team selected'));
-      return teamMetricsApi.calculate(activeTeamId, from, to);
+    mutationFn: ({ teamId, fromDate, toDate }: { teamId: number; fromDate: string; toDate: string }) =>
+      teamMetricsApi.calculate(teamId, fromDate, toDate),
+    onSuccess: () => {
+      setCalcError(null);
+      qc.invalidateQueries();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['team-commits', activeTeamId] }),
+    onError: (err) => {
+      const msg = (err as { response?: { data?: { message?: string }; status?: number } })?.response?.data?.message;
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setCalcError(msg ?? `Calculation failed (HTTP ${status ?? 'unknown'})`);
+      window.dispatchEvent(new CustomEvent('da:recalculate-done'));
+    },
+    onSettled: () => window.dispatchEvent(new CustomEvent('da:recalculate-done')),
   });
 
-  // da:recalculate event from TopBar
+  const { mutate: runCalculate } = calculateMutation;
+
   useEffect(() => {
-    const h = () => calculateMutation.mutate();
+    const h = () => {
+      if (!activeTeamId) return;
+      window.dispatchEvent(new CustomEvent('da:recalculate-start'));
+      runCalculate({ teamId: activeTeamId, fromDate: from, toDate: to });
+    };
     window.addEventListener('da:recalculate', h);
     return () => window.removeEventListener('da:recalculate', h);
-  }, [calculateMutation]);
+  }, [runCalculate, activeTeamId, from, to]);
 
   if (teamsLoading) return <PageSpinner />;
 
@@ -248,6 +263,19 @@ export function TeamDashboardPage() {
           </h1>
         </div>
 
+        {/* Recalculate error */}
+        {calcError && (
+          <div className="row gap-2" style={{
+            fontSize: 12, color: 'var(--coral-strong)',
+            background: 'var(--coral-bg)',
+            border: '1px solid color-mix(in oklab, var(--coral) 25%, var(--line))',
+            borderRadius: 6, padding: '10px 14px', flexShrink: 0,
+          }}>
+            <AlertCircle width={13} height={13} style={{ flexShrink: 0 }} />
+            {calcError}
+          </div>
+        )}
+
         {/* Team selector */}
         {teams.length > 1 && (
           <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -291,10 +319,10 @@ export function TeamDashboardPage() {
       {/* KPI row */}
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="grid-kpi">
-          <KpiTile label="team commits"      value={fmtNumber(totals.commits)}          sub="all members"         accent="violet"  icon={<Commits width={16} height={16} />} />
-          <KpiTile label="team prs merged"   value={Math.round(totals.prsMerged)}        sub="to default branch"   accent="violet"  icon={<PRMerged width={16} height={16} />} />
-          <KpiTile label="team issues closed" value={Math.round(totals.issuesClosed)}    sub="resolved · closed"   accent="emerald" icon={<IssuesClosed width={16} height={16} />} />
-          <KpiTile label="active members"    value={memberCount}                          sub="≥ 1 commit / period" accent="cyan"    icon={<Users width={16} height={16} />} />
+          <KpiTile label="team commits"       value={fmtNumber(totals.commits)}       sub="all members"         accent="violet"  icon={<Commits      width={16} height={16} />} tooltip="Sum of daily commits across all team members in the selected period" />
+          <KpiTile label="team prs merged"   value={Math.round(totals.prsMerged)}    sub="to default branch"   accent="violet"  icon={<PRMerged     width={16} height={16} />} tooltip="Sum of daily pull requests merged to the default branch by the team" />
+          <KpiTile label="team issues closed" value={Math.round(totals.issuesClosed)} sub="resolved · closed"  accent="emerald" icon={<IssuesClosed width={16} height={16} />} tooltip="Sum of daily Jira/GitHub issues resolved or closed by the team" />
+          <KpiTile label="active members"    value={memberCount}                      sub="≥ 1 commit / period" accent="cyan"    icon={<Users        width={16} height={16} />} tooltip="Members with at least one commit in the selected period" />
         </div>
       </div>
 
