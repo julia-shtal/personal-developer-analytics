@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.user.controller;
 import com.juliashtal.devanalytics.user.model.request.UpdateRoleRequest;
 import com.juliashtal.devanalytics.user.model.UserSummary;
 import com.juliashtal.devanalytics.user.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,9 +19,10 @@ public class AdminController {
 
     private final UserService userService;
 
+    @Operation(summary = "List all users. Optionally filter by email/username with ?q=")
     @GetMapping("/users")
-    public ResponseEntity<List<UserSummary>> getAllUsers() {
-        List<UserSummary> users = userService.findAll().stream()
+    public ResponseEntity<List<UserSummary>> getAllUsers(@RequestParam(required = false) String q) {
+        List<UserSummary> users = userService.search(q).stream()
                 .map(UserSummary::from)
                 .toList();
         return ResponseEntity.ok(users);

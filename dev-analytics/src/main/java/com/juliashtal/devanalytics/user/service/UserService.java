@@ -68,6 +68,11 @@ public class UserService {
         return repository.findAll();
     }
 
+    public List<User> search(String q) {
+        if (q == null || q.isBlank()) return repository.findAll();
+        return repository.searchByEmailOrUsername(q.trim());
+    }
+
     public void delete(Long userId) {
         if (!repository.existsById(userId)) {
             throw new NoSuchElementException("User not found");

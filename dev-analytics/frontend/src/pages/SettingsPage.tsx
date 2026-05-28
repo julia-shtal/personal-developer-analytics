@@ -1,24 +1,20 @@
 import { useState, useEffect, useRef, useMemo, type FormEvent, type ChangeEvent } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Sun, Moon, Lock, Eye, EyeOff, Trash2, Plus } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { Card, CardHeader, CardBody } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { useTheme } from '@/context/ThemeContext';
 import { Avatar } from '@/components/ui/Avatar';
-import { User, Shield, AlertCircle, CheckCircle, ChevronDown, Lock, Eye, EyeOff, Upload, Trash2 } from 'lucide-react';
+import { Chip } from '@/components/ui/Chip';
+import { AccentSwatches, ACCENT_SWATCHES } from '@/components/ui/AccentSwatches';
+import { Logo } from '@/components/brand/Logo';
+import { ACTIVE_LOGO } from '@/config/branding';
+import type { LogoVariant } from '@/lib/theme';
 import api from '@/lib/api';
 import { avatarApi } from '@/api/avatar';
+import { usersApi } from '@/api/users';
 import type { UserProfile } from '@/types';
-import clsx from 'clsx';
 
-const ROLE_COLORS = {
-  DEVELOPER: 'violet' as const,
-  MANAGER: 'blue' as const,
-  ADMIN: 'amber' as const,
-};
-
-// ─── Timezone helpers ────────────────────────────────────────────────────────
+// ─── Timezone helpers ─────────────────────────────────────────────────────────
 
 interface TzOption {
   iana: string;
@@ -31,7 +27,6 @@ function buildTimezoneOptions(): TzOption[] {
   const now = new Date();
   const zones: string[] = (Intl as unknown as { supportedValuesOf: (k: string) => string[] })
     .supportedValuesOf('timeZone');
-
   return zones
     .map((iana): TzOption | null => {
       try {
@@ -48,19 +43,31 @@ function buildTimezoneOptions(): TzOption[] {
           offsetMinutes = sign * (parseInt(match[2]) * 60 + parseInt(match[3] ?? '0'));
         }
         return { iana, offset, offsetMinutes, label: `${offset} — ${iana}` };
-      } catch {
-        return null;
-      }
+      } catch { return null; }
     })
     .filter((o): o is TzOption => o !== null)
     .sort((a, b) => a.offsetMinutes - b.offsetMinutes || a.iana.localeCompare(b.iana));
 }
 
+const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// ─── Logo variant metadata ────────────────────────────────────────────────────
+
+const LOGO_VARIANTS: { variant: LogoVariant; label: string; desc: string }[] = [
+  { variant: 'pulse',   label: 'Pulse bars',       desc: 'The chart-as-D mark.' },
+  { variant: 'bracket', label: 'Bracket monogram',  desc: '[d] with cursor terminal.' },
+  { variant: 'slash',   label: 'CLI slash',         desc: 'Terminal-prompt with blinking cursor.' },
+  { variant: 'crystal', label: 'Editorial italic',  desc: 'Serif D in a circle.' },
+];
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
   const { user, refreshUser } = useAuth();
+  const { theme, accent, logo, setTheme } = useTheme();
+  const qc = useQueryClient();
 
+  // ── Profile state ────────────────────────────────────────────────────────
   const [timezone, setTimezone] = useState(user?.timezone ?? 'UTC');
   const [githubLogin, setGithubLogin] = useState(user?.githubLogin ?? '');
   const [username, setUsername] = useState(user?.username ?? '');
@@ -74,12 +81,12 @@ export function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tzRef = useRef<HTMLDivElement>(null);
 
-  const tzOptions = useMemo(buildTimezoneOptions, []);
+  const tzOptions = useMemo(() => buildTimezoneOptions(), []);
   const filteredTz = useMemo(() => {
     const q = tzSearch.toLowerCase();
     if (!q) return tzOptions;
     return tzOptions.filter(
-      (o) => o.iana.toLowerCase().includes(q) || o.offset.toLowerCase().includes(q)
+      (o) => o.iana.toLowerCase().includes(q) || o.offset.toLowerCase().includes(q),
     );
   }, [tzOptions, tzSearch]);
 
@@ -98,7 +105,16 @@ export function SettingsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [tzOpen]);
 
-  // ── Password change state ────────────────────────────────────────────────
+  // ── Accent hex input — uncontrolled with key reset so no setState-in-effect needed ──
+  const matchedSwatch = ACCENT_SWATCHES.find(
+    (s) => s.hex.toLowerCase() === accent.toLowerCase(),
+  );
+
+  function commitHex(v: string) {
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) setTheme({ accent: v.toLowerCase() });
+  }
+
+  // ── Password state ────────────────────────────────────────────────────────
   const [pwOpen, setPwOpen] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -192,256 +208,418 @@ export function SettingsPage() {
     });
   }
 
-  const selectedOption = tzOptions.find((o) => o.iana === timezone);
+  // ── Notification prefs — use query data directly with optimistic cache update ──
+  const DEFAULT_NOTIFS = { aiBrief: true, syncFailures: true, afterHours: true, newTeamMember: false };
+
+  const { data: notifData } = useQuery({
+    queryKey: ['notification-prefs'],
+    queryFn: () => usersApi.notifications.get().then((r) => r.data),
+    staleTime: 60_000,
+  });
+
+  const notifs = notifData ?? DEFAULT_NOTIFS;
+
+  const notifMutation = useMutation({
+    mutationFn: (dto: typeof DEFAULT_NOTIFS) => usersApi.notifications.update(dto),
+    onSuccess: (res) => {
+      qc.setQueryData(['notification-prefs'], res.data);
+    },
+  });
+
+  function toggleNotif(key: keyof typeof DEFAULT_NOTIFS) {
+    const next = { ...notifs, [key]: !notifs[key] };
+    qc.setQueryData(['notification-prefs'], next);
+    notifMutation.mutate(next);
+  }
+
+  const selectedTz = tzOptions.find((o) => o.iana === timezone);
   const avatarBusy = uploadMutation.isPending || presetMutation.isPending || deleteAvatarMutation.isPending;
   const hasAvatar = user?.hasCustomAvatar || !!user?.avatarPreset;
 
-  return (
-    <div className="p-6 max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Your profile and account preferences</p>
-      </div>
+  const ROLE_CHIP: Record<string, 'violet' | 'coral' | 'cyan'> = {
+    DEVELOPER: 'violet',
+    MANAGER:   'cyan',
+    ADMIN:     'coral',
+  };
 
-      {/* Avatar card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-violet-600" />
-            <h2 className="text-sm font-semibold text-gray-900">Avatar</h2>
+  return (
+    <div className="page narrow">
+      <div className="t-eyebrow" style={{ marginBottom: 10 }}>── Settings</div>
+      <h1 className="t-h1" style={{ marginBottom: 32 }}>Your preferences.</h1>
+
+      <div className="col gap-4">
+
+        {/* ── Appearance ──────────────────────────────────────────────────── */}
+        <div className="card" style={{ padding: 22 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 14 }}>── appearance</div>
+
+          {/* Theme toggle */}
+          <div className="row" style={{ alignItems: 'flex-start', gap: 24, marginBottom: 22, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 140 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--fg)' }}>Theme</div>
+              <div className="t-label" style={{ marginTop: 2 }}>warm paper or carbon</div>
+            </div>
+            <div className="row gap-0" style={{
+              border: '1px solid var(--line)', borderRadius: 6,
+              padding: 2, background: 'var(--bg-card)',
+            }}>
+              {([['light', 'light', <Sun key="i" width={12} height={12} />], ['dark', 'dark', <Moon key="i" width={12} height={12} />]] as const).map(([id, label, icon]) => (
+                <button
+                  key={id}
+                  onClick={() => setTheme({ theme: id })}
+                  aria-label={label}
+                  style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 11, padding: '5px 11px',
+                    background: theme === id ? 'var(--bg-2)' : 'transparent',
+                    color: theme === id ? 'var(--fg)' : 'var(--fg-3)',
+                    border: 'none', cursor: 'pointer', borderRadius: 4,
+                    fontWeight: theme === id ? 600 : 400,
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                  }}
+                >{icon}{label}</button>
+              ))}
+            </div>
           </div>
-        </CardHeader>
-        <CardBody>
-          <div className="space-y-4">
-            {/* Current avatar + actions */}
-            <div className="flex items-center gap-4">
-              {user && <Avatar user={user} size="lg" />}
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    loading={uploadMutation.isPending}
-                    onClick={() => fileInputRef.current?.click()}
+
+          {/* Accent color */}
+          <div className="divider-2" style={{ marginBottom: 18 }} />
+          <div className="row" style={{ alignItems: 'flex-start', gap: 24, flexWrap: 'wrap', marginBottom: 22 }}>
+            <div style={{ minWidth: 140 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--fg)' }}>Accent color</div>
+              <div className="t-label" style={{ marginTop: 2 }}>highlights, focus rings, selection</div>
+            </div>
+            <div className="col gap-3" style={{ flex: 1, minWidth: 260 }}>
+              <AccentSwatches value={accent} onChange={(v) => setTheme({ accent: v })} size={32} />
+              <div className="row gap-2" style={{ alignItems: 'center' }}>
+                <span className="t-label" style={{ width: 60 }}>hex</span>
+                <input
+                  key={accent}
+                  className="input"
+                  defaultValue={accent}
+                  onChange={(e) => commitHex(e.target.value)}
+                  spellCheck={false}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, maxWidth: 140, padding: '7px 10px' }}
+                />
+                <span style={{ width: 32, height: 32, borderRadius: 6, background: accent, border: '1px solid var(--line)' }} />
+                <span className="t-label" style={{ marginLeft: 4 }}>{matchedSwatch ? matchedSwatch.name : 'custom'}</span>
+              </div>
+              <div className="row gap-2" style={{
+                padding: '12px 14px', borderRadius: 8,
+                background: 'var(--bg-2)', border: '1px solid var(--line-2)',
+                flexWrap: 'wrap', alignItems: 'center',
+              }}>
+                <span className="t-h2" style={{ fontSize: 16 }}><em>preview</em> · headlines</span>
+                <span style={{ flex: 1 }} />
+                <button className="btn btn-sm btn-accent">primary action</button>
+                <button className="btn btn-sm"><span style={{ color: 'var(--accent)' }}>linked text</span></button>
+              </div>
+            </div>
+          </div>
+
+          {/* Logo picker — T8.2 */}
+          <div className="divider-2" style={{ marginBottom: 18 }} />
+          <div className="t-eyebrow" style={{ marginBottom: 12 }}>── brand</div>
+          <div className="row gap-3" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
+            {LOGO_VARIANTS.map(({ variant, label, desc }) => {
+              const active = logo === variant;
+              return (
+                <button
+                  key={variant}
+                  onClick={() => setTheme({ logo: variant })}
+                  aria-label={`Use ${label} logo`}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                    padding: '14px 18px', borderRadius: 8,
+                    border: active ? '2px solid var(--accent)' : '2px solid var(--line)',
+                    background: active ? 'var(--accent-bg)' : 'var(--bg-card)',
+                    cursor: 'pointer', minWidth: 110,
+                    transition: 'all .12s',
+                  }}
+                >
+                  <Logo variant={variant} size={32} />
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: active ? 'var(--accent)' : 'var(--fg)', fontFamily: 'var(--font-mono)' }}>{label}</div>
+                    <div className="t-label" style={{ fontSize: 10.5, marginTop: 2 }}>{desc}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <button className="btn btn-sm" onClick={() => setTheme({ logo: ACTIVE_LOGO })}>
+            reset to default
+          </button>
+        </div>
+
+        {/* ── Avatar ──────────────────────────────────────────────────────── */}
+        <div className="card" style={{ padding: 22 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 14 }}>── avatar</div>
+          <div className="row gap-4" style={{ marginBottom: 18, flexWrap: 'wrap' }}>
+            <div>{user && <Avatar user={user} size="lg" />}</div>
+            <div className="col gap-2" style={{ flex: 1, minWidth: 220 }}>
+              <div className="row gap-2" style={{ flexWrap: 'wrap' }}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleFileChange}
+                />
+                <button
+                  className="btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadMutation.isPending}
+                >
+                  <Plus width={13} height={13} />
+                  upload image
+                </button>
+                {hasAvatar && (
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => deleteAvatarMutation.mutate()}
+                    disabled={deleteAvatarMutation.isPending}
+                    style={{ color: 'var(--coral)' }}
                   >
-                    <Upload className="h-3.5 w-3.5" />
-                    Upload image
-                  </Button>
-                  {hasAvatar && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      loading={deleteAvatarMutation.isPending}
-                      onClick={() => deleteAvatarMutation.mutate()}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Remove
-                    </Button>
+                    <Trash2 width={13} height={13} />
+                    remove
+                  </button>
+                )}
+              </div>
+              <div className="t-label" style={{ fontSize: 11 }}>JPEG, PNG or WebP · max 2 MB · resized to 256×256</div>
+              {avatarError && <div className="t-label" style={{ color: 'var(--coral)' }}>{avatarError}</div>}
+            </div>
+          </div>
+          <div className="t-eyebrow" style={{ marginBottom: 10 }}>or pick a preset</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 10 }}>
+            {presets.map((id) => {
+              const active = user?.avatarPreset === id && !user?.hasCustomAvatar;
+              return (
+                <button
+                  key={id}
+                  onClick={() => presetMutation.mutate(id)}
+                  disabled={avatarBusy}
+                  title={id}
+                  style={{
+                    width: '100%', aspectRatio: '1',
+                    padding: 0, borderRadius: '50%', overflow: 'hidden',
+                    border: active ? '2px solid var(--accent)' : '2px solid transparent',
+                    outline: active ? '2px solid color-mix(in oklab, var(--accent) 30%, transparent)' : 'none',
+                    outlineOffset: 1,
+                    cursor: 'pointer', background: 'transparent', transition: 'all .12s',
+                  }}
+                >
+                  <img src={`/avatars/${id}.svg`} alt={id} style={{ width: '100%', height: '100%', display: 'block', objectFit: 'cover' }} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Profile ─────────────────────────────────────────────────────── */}
+        <div className="card" style={{ padding: 22 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 14 }}>── profile</div>
+          <form onSubmit={handleSave}>
+            <div className="col gap-3">
+              <div>
+                <div className="t-label" style={{ marginBottom: 6 }}>username</div>
+                <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} style={{ maxWidth: 380 }} />
+              </div>
+              <div>
+                <div className="t-label" style={{ marginBottom: 6 }}>email</div>
+                <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ maxWidth: 380 }} />
+              </div>
+              <div>
+                <div className="t-label" style={{ marginBottom: 6 }}>github login</div>
+                <input className="input" value={githubLogin} onChange={(e) => setGithubLogin(e.target.value)} placeholder="your-github-username" style={{ maxWidth: 380 }} />
+                <div className="t-label" style={{ marginTop: 4, fontSize: 10.5 }}>used to link commits and PRs to your account in shared repositories</div>
+              </div>
+              <div ref={tzRef}>
+                <div className="t-label" style={{ marginBottom: 6 }}>timezone</div>
+                <div className="row gap-2" style={{ position: 'relative', maxWidth: 400 }}>
+                  <button
+                    type="button"
+                    onClick={() => setTzOpen((v) => !v)}
+                    className="input"
+                    style={{ flex: 1, textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
+                  >
+                    <span>{selectedTz?.label ?? timezone}</span>
+                  </button>
+                  {timezone === BROWSER_TZ && <Chip color="emerald" dot>auto</Chip>}
+                  {tzOpen && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0,
+                      background: 'var(--bg-card)', border: '1px solid var(--line)',
+                      borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.12)',
+                      zIndex: 20, overflow: 'hidden', marginTop: 4,
+                    }}>
+                      <div style={{ padding: 8, borderBottom: '1px solid var(--line-2)' }}>
+                        <input
+                          className="input"
+                          placeholder="Search by city or offset…"
+                          value={tzSearch}
+                          onChange={(e) => setTzSearch(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                        {filteredTz.map((o) => (
+                          <button
+                            key={o.iana}
+                            type="button"
+                            onClick={() => { setTimezone(o.iana); setTzSearch(''); setTzOpen(false); }}
+                            style={{
+                              width: '100%', textAlign: 'left', padding: '8px 12px',
+                              fontSize: 12.5, background: o.iana === timezone ? 'var(--bg-2)' : 'transparent',
+                              color: o.iana === timezone ? 'var(--accent)' : 'var(--fg)',
+                              border: 'none', cursor: 'pointer',
+                            }}
+                          >{o.label}</button>
+                        ))}
+                        {filteredTz.length === 0 && (
+                          <div className="t-label" style={{ textAlign: 'center', padding: 16 }}>No matches</div>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
-                <p className="text-xs text-gray-400">JPEG, PNG or WebP · max 2 MB · resized to 256×256</p>
+                <div className="t-label" style={{ marginTop: 4, fontSize: 10.5 }}>used for after-hours commit metrics</div>
+              </div>
+              <div>
+                <div className="t-label" style={{ marginBottom: 6 }}>role</div>
+                <Chip color={ROLE_CHIP[user?.role ?? 'DEVELOPER']}>{user?.role?.toLowerCase() ?? 'developer'}</Chip>
               </div>
             </div>
-
-            {avatarError && (
-              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                {avatarError}
-              </div>
-            )}
-
-            {/* Preset picker */}
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Or choose a preset</p>
-              <div className="flex flex-wrap gap-2">
-                {presets.map((id) => {
-                  const active = user?.avatarPreset === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      disabled={avatarBusy}
-                      onClick={() => presetMutation.mutate(id)}
-                      className={clsx(
-                        'w-10 h-10 rounded-full overflow-hidden border-2 transition-all focus:outline-none focus:ring-2 focus:ring-violet-500/40',
-                        active ? 'border-violet-500 ring-2 ring-violet-300' : 'border-transparent hover:border-gray-300',
-                        avatarBusy && 'opacity-50 cursor-not-allowed',
-                      )}
-                      title={id}
-                    >
-                      <img
-                        src={`/avatars/${id}.svg`}
-                        alt={id}
-                        className="w-full h-full object-cover"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
-
-      {/* Profile card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-violet-600" />
-            <h2 className="text-sm font-semibold text-gray-900">Profile</h2>
-          </div>
-        </CardHeader>
-        <CardBody>
-          <form onSubmit={handleSave} className="space-y-4">
-            <Input label="Username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Your username" />
-            <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" />
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-1.5">Role</p>
-              <div className="flex flex-wrap gap-2">
-                {user?.role && <Badge color={ROLE_COLORS[user.role] ?? 'gray'} dot>{user.role}</Badge>}
-              </div>
-            </div>
-
-            {/* Timezone picker */}
-            <div ref={tzRef} className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Timezone
-                <span className="ml-1 text-xs text-gray-400 font-normal">— used for after-hours commit metrics</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => setTzOpen((v) => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 hover:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-colors"
-              >
-                <span>{selectedOption?.label ?? timezone}</span>
-                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${tzOpen ? 'rotate-180' : ''}`} />
-              </button>
-              {tzOpen && (
-                <div className="absolute z-20 mt-1 w-full bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden">
-                  <div className="p-2 border-b border-gray-100">
-                    <Input placeholder="Search by city or offset…" value={tzSearch} onChange={(e) => setTzSearch(e.target.value)} autoFocus />
-                  </div>
-                  <div className="max-h-56 overflow-y-auto">
-                    {filteredTz.map((o) => (
-                      <button
-                        key={o.iana}
-                        type="button"
-                        onClick={() => { setTimezone(o.iana); setTzSearch(''); setTzOpen(false); }}
-                        className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                          o.iana === timezone ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-800 hover:bg-gray-50'
-                        }`}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                    {filteredTz.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No matches</p>}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <Input label="GitHub login" value={githubLogin} onChange={(e) => setGithubLogin(e.target.value)} placeholder="your-github-username" />
-            <p className="text-xs text-gray-400 -mt-2">Used to link commits and PRs to your account when collecting from shared repositories.</p>
 
             {saveStatus === 'success' && (
-              <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-                <CheckCircle className="h-4 w-4 flex-shrink-0" />Profile saved successfully.
-              </div>
+              <div className="t-label" style={{ color: 'var(--emerald)', marginTop: 10 }}>Profile saved successfully.</div>
             )}
             {saveStatus === 'error' && (
-              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />{saveError}
-              </div>
+              <div className="t-label" style={{ color: 'var(--coral)', marginTop: 10 }}>{saveError}</div>
             )}
 
-            <Button type="submit" loading={updateMutation.isPending}>Save changes</Button>
+            <div className="row gap-2" style={{ marginTop: 18 }}>
+              <button type="submit" className="btn btn-accent" disabled={updateMutation.isPending}>save changes</button>
+            </div>
           </form>
-        </CardBody>
-      </Card>
+        </div>
 
-      {/* Security card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-violet-600" />
-            <h2 className="text-sm font-semibold text-gray-900">Security</h2>
-          </div>
-        </CardHeader>
-        <CardBody>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-sm font-medium text-gray-700">Session</p>
-                <p className="text-xs text-gray-400">Stateless JWT — tokens are stored locally in this browser</p>
-              </div>
-              <Badge color="emerald">Active</Badge>
+        {/* ── Security ────────────────────────────────────────────────────── */}
+        <div className="card" style={{ padding: 22 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 14 }}>── security</div>
+          <div className="row" style={{ justifyContent: 'space-between', padding: '4px 0 10px' }}>
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--fg)' }}>Session</div>
+              <div className="t-label" style={{ marginTop: 2 }}>Stateless JWT · stored locally</div>
             </div>
-
-            <div className="border border-gray-100 rounded-lg overflow-hidden">
-              <button
-                type="button"
-                onClick={() => { setPwOpen((v) => !v); setPwStatus('idle'); }}
-                className="w-full flex items-center justify-between px-4 py-3 text-left bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Lock className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm font-medium text-gray-700">Change password</span>
+            <Chip color="emerald" dot>Active</Chip>
+          </div>
+          <button
+            onClick={() => { setPwOpen((v) => !v); setPwStatus('idle'); }}
+            className="btn"
+            style={{
+              width: '100%', justifyContent: 'flex-start', padding: '12px 14px',
+              background: pwOpen ? 'var(--bg-2)' : 'var(--bg-card)',
+            }}
+          >
+            <Lock width={13} height={13} />
+            <span style={{ flex: 1, textAlign: 'left' }}>Change password</span>
+            <span style={{ fontSize: 10, color: 'var(--fg-3)', transform: pwOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s', display: 'inline-block' }}>▼</span>
+          </button>
+          {pwOpen && (
+            <form
+              onSubmit={handlePasswordChange}
+              style={{
+                borderLeft: '2px solid var(--accent)',
+                marginLeft: 8, marginTop: 12, paddingLeft: 16,
+              }}
+            >
+              <div className="col gap-3">
+                <div>
+                  <div className="t-label" style={{ marginBottom: 6 }}>current password</div>
+                  <input className="input" type="password" placeholder="Enter current password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} style={{ maxWidth: 380 }} required />
                 </div>
-                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${pwOpen ? 'rotate-180' : ''}`} />
+                <div>
+                  <div className="t-label" style={{ marginBottom: 6 }}>new password</div>
+                  <div className="row gap-2" style={{ maxWidth: 380 }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input className="input" type={showNew ? 'text' : 'password'} placeholder="At least 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={{ paddingRight: 36 }} required />
+                      <button type="button" onClick={() => setShowNew((v) => !v)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--fg-3)', padding: 4 }}>
+                        {showNew ? <EyeOff width={13} height={13} /> : <Eye width={13} height={13} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div className="t-label" style={{ marginBottom: 6 }}>confirm new password</div>
+                  <div className="row gap-2" style={{ maxWidth: 380 }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input className="input" type={showConfirm ? 'text' : 'password'} placeholder="Repeat new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={{ paddingRight: 36 }} required />
+                      <button type="button" onClick={() => setShowConfirm((v) => !v)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--fg-3)', padding: 4 }}>
+                        {showConfirm ? <EyeOff width={13} height={13} /> : <Eye width={13} height={13} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {pwStatus === 'success' && <div className="t-label" style={{ color: 'var(--emerald)' }}>Password changed successfully.</div>}
+                {pwStatus === 'error' && <div className="t-label" style={{ color: 'var(--coral)' }}>{pwError}</div>}
+                <div className="row gap-2" style={{ marginTop: 4 }}>
+                  <button type="submit" className="btn btn-sm btn-accent" disabled={changePasswordMutation.isPending}>update password</button>
+                  <button type="button" className="btn btn-sm" onClick={() => { setOldPassword(''); setNewPassword(''); setConfirmPassword(''); setShowNew(false); setShowConfirm(false); setPwStatus('idle'); setPwError(''); setPwOpen(false); }}>cancel</button>
+                </div>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* ── Notifications ────────────────────────────────────────────────── */}
+        <div className="card" style={{ padding: 22 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 14 }}>── notifications</div>
+          {([
+            ['aiBrief',        'Weekly AI brief',       'Every Monday at 09:00'],
+            ['syncFailures',   'Sync failures',         'When a data source fails'],
+            ['afterHours',     'After-hours commits',   'When > 15% in a 7-day window'],
+            ['newTeamMember',  'New team member',       'When a manager adds you'],
+          ] as const).map(([key, label, sub], i) => (
+            <div key={key} className="row" style={{ padding: '12px 0', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)', gap: 14 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--fg)' }}>{label}</div>
+                <div className="t-label" style={{ marginTop: 2 }}>{sub}</div>
+              </div>
+              <button
+                onClick={() => toggleNotif(key)}
+                disabled={notifMutation.isPending}
+                aria-label={`Toggle ${label}`}
+                style={{
+                  width: 36, height: 20, borderRadius: 999, padding: 0,
+                  background: notifs[key] ? 'var(--accent)' : 'var(--bg-inset)',
+                  border: '1px solid ' + (notifs[key] ? 'var(--accent)' : 'var(--line)'),
+                  cursor: 'pointer', position: 'relative',
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 1, left: notifs[key] ? 17 : 1,
+                  width: 16, height: 16, borderRadius: 999,
+                  background: 'white', transition: 'left .15s',
+                }} />
               </button>
-
-              {pwOpen && (
-                <form onSubmit={handlePasswordChange} className="px-4 py-4 space-y-3 border-t border-gray-100">
-                  <Input label="Current password" type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} placeholder="Enter current password" required />
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-gray-700">New password</label>
-                    <div className="relative">
-                      <Input type={showNew ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" required className="pr-10" />
-                      <button type="button" onClick={() => setShowNew((v) => !v)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600" tabIndex={-1}>
-                        {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-gray-700">Confirm new password</label>
-                    <div className="relative">
-                      <Input type={showConfirm ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repeat new password" required className="pr-10" />
-                      <button type="button" onClick={() => setShowConfirm((v) => !v)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600" tabIndex={-1}>
-                        {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {pwStatus === 'success' && (
-                    <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-                      <CheckCircle className="h-4 w-4 flex-shrink-0" />Password changed successfully.
-                    </div>
-                  )}
-                  {pwStatus === 'error' && (
-                    <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-                      <AlertCircle className="h-4 w-4 flex-shrink-0" />{pwError}
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <Button type="submit" loading={changePasswordMutation.isPending} size="sm">Update password</Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => { setOldPassword(''); setNewPassword(''); setConfirmPassword(''); setShowNew(false); setShowConfirm(false); setPwStatus('idle'); setPwError(''); setPwOpen(false); }}>Cancel</Button>
-                  </div>
-                </form>
-              )}
             </div>
-          </div>
-        </CardBody>
-      </Card>
+          ))}
+        </div>
+
+        {/* ── Danger zone ──────────────────────────────────────────────────── */}
+        <div className="card" style={{ padding: 22, borderColor: 'color-mix(in oklab, var(--coral) 30%, var(--line))' }}>
+          <div className="t-eyebrow" style={{ marginBottom: 6, color: 'var(--coral)' }}>── danger zone</div>
+          <p className="t-body" style={{ marginBottom: 12 }}>
+            Permanently delete your account and all collected metrics. This action cannot be undone.
+          </p>
+          {/* TODO(delete-account-backend): DELETE /api/users/me endpoint not yet implemented */}
+          <button className="btn" style={{ color: 'var(--coral)', borderColor: 'color-mix(in oklab, var(--coral) 40%, var(--line))', opacity: 0.7, cursor: 'not-allowed' }} disabled title="Coming soon">
+            <Trash2 width={13} height={13} />
+            delete account
+          </button>
+        </div>
+
+      </div>
+      <div style={{ height: 32 }} />
     </div>
   );
 }
