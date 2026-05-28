@@ -1,11 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import { clsx } from 'clsx';
 import { datasourcesApi } from '@/api/datasources';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { Spinner } from '@/components/ui/Spinner';
+import { Chip } from '@/components/ui/Chip';
 import type { DiscoveredProjectDto } from '@/types';
 
 interface Props {
@@ -40,7 +37,7 @@ export function DiscoverProjectsModal({ dsId, onClose }: Props) {
   function toggle(projectKey: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(projectKey) ? next.delete(projectKey) : next.add(projectKey);
+      if (next.has(projectKey)) { next.delete(projectKey); } else { next.add(projectKey); }
       return next;
     });
   }
@@ -66,114 +63,119 @@ export function DiscoverProjectsModal({ dsId, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 40,
+        background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+      }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="discover-projects-title"
-        className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col"
+        style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--line)',
+          borderRadius: 12,
+          width: '100%', maxWidth: 480,
+          maxHeight: '80vh',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 id="discover-projects-title" className="text-sm font-semibold text-gray-900">
-            Add Jira projects
-          </h2>
-          <button
-            ref={closeRef}
-            onClick={onClose}
-            className="p-1 rounded text-gray-400 hover:text-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
+        <div className="row" style={{ padding: '16px 20px', borderBottom: '1px solid var(--line-2)', justifyContent: 'space-between' }}>
+          <div>
+            <div className="t-eyebrow" style={{ marginBottom: 2 }}>── jira</div>
+            <h2 id="discover-projects-title" style={{ fontWeight: 500, fontSize: 15, color: 'var(--fg)', margin: 0 }}>
+              Add projects
+            </h2>
+          </div>
+          <button ref={closeRef} onClick={onClose} className="btn btn-ghost btn-icon" aria-label="Close">
+            <X width={14} height={14} />
           </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-3 min-h-0">
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', minHeight: 0 }}>
           {isLoading && (
-            <div className="flex justify-center py-8">
-              <Spinner size="md" />
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
+              <span className="t-label" style={{ color: 'var(--cyan)' }}>Discovering projects…</span>
             </div>
           )}
           {isError && (
-            <p className="text-sm text-red-500 py-4 text-center">
+            <p className="t-label" style={{ color: 'var(--coral)', padding: '16px 0', textAlign: 'center' }}>
               Failed to load projects. Check your token or network.
             </p>
           )}
           {projects && projects.length === 0 && (
-            <p className="text-sm text-gray-400 py-4 text-center">
+            <p className="t-label" style={{ padding: '16px 0', textAlign: 'center' }}>
               No projects found for this token.
             </p>
           )}
           {projects && projects.length > 0 && (
-            <ul className="space-y-1.5">
-              {projects.map((proj: DiscoveredProjectDto) => (
-                <li
-                  key={proj.projectKey}
-                  className={clsx(
-                    'rounded-md px-3 py-2.5 flex items-center gap-3 transition-colors',
-                    proj.alreadyAttached
-                      ? 'bg-gray-50 opacity-60'
-                      : clsx(
-                          'border cursor-pointer',
-                          selected.has(proj.projectKey)
-                            ? 'border-blue-400 bg-blue-50'
-                            : 'border-gray-100 bg-white hover:border-blue-200'
-                        )
-                  )}
-                  onClick={() => !proj.alreadyAttached && toggle(proj.projectKey)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={proj.alreadyAttached || selected.has(proj.projectKey)}
-                    disabled={proj.alreadyAttached}
-                    onChange={() => !proj.alreadyAttached && toggle(proj.projectKey)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="h-4 w-4 rounded accent-blue-600 flex-shrink-0"
-                    aria-label={`Select ${proj.projectKey}`}
-                  />
-                  <span className="text-xs font-mono font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">
-                    {proj.projectKey}
-                  </span>
-                  <span className="text-xs text-gray-700 truncate flex-1">
-                    {proj.projectName}
-                  </span>
-                  {proj.alreadyAttached && (
-                    <Badge color="emerald" className="text-[10px] px-1.5 py-0 flex-shrink-0">
-                      ✓ Attached
-                    </Badge>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <div className="col gap-1">
+              {projects.map((proj: DiscoveredProjectDto) => {
+                const isAttached = proj.alreadyAttached;
+                const isSelected = selected.has(proj.projectKey);
+                return (
+                  <div
+                    key={proj.projectKey}
+                    style={{
+                      padding: '8px 12px', borderRadius: 6,
+                      border: `1px solid ${isSelected ? 'var(--cyan)' : 'var(--line-2)'}`,
+                      background: isSelected ? 'var(--cyan-bg)' : isAttached ? 'var(--bg-2)' : 'var(--bg-card)',
+                      opacity: isAttached ? 0.6 : 1,
+                      cursor: isAttached ? 'default' : 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 10,
+                    }}
+                    onClick={() => !isAttached && toggle(proj.projectKey)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isAttached || isSelected}
+                      disabled={isAttached}
+                      onChange={() => !isAttached && toggle(proj.projectKey)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ flexShrink: 0, accentColor: 'var(--cyan)', width: 14, height: 14 }}
+                      aria-label={`Select ${proj.projectKey}`}
+                    />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--cyan)', background: 'var(--cyan-bg)', padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
+                      {proj.projectKey}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--fg)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {proj.projectName}
+                    </span>
+                    {isAttached && <Chip color="emerald">attached</Chip>}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-100">
-          <div className="flex-1 min-w-0">
+        <div className="row" style={{ padding: '14px 20px', borderTop: '1px solid var(--line-2)', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             {error ? (
-              <p className="text-xs text-red-500 truncate">{error}</p>
+              <span className="t-label" style={{ color: 'var(--coral)', fontSize: 11 }}>{error}</span>
             ) : (
-              <span className="text-xs text-gray-400">
+              <span className="t-label" style={{ fontSize: 11 }}>
                 {selected.size > 0 ? `${selected.size} selected` : 'Select projects to add'}
               </span>
             )}
           </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <Button variant="secondary" size="sm" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button
-              size="sm"
+          <div className="row gap-2" style={{ flexShrink: 0 }}>
+            <button className="btn btn-ghost" onClick={onClose} disabled={isSubmitting}>cancel</button>
+            <button
+              className="btn btn-accent"
               onClick={handleConfirm}
               disabled={selected.size === 0 || isSubmitting}
-              loading={isSubmitting}
             >
-              {selected.size > 0 ? `Add (${selected.size})` : 'Add'}
-            </Button>
+              {isSubmitting ? 'adding…' : selected.size > 0 ? `add (${selected.size})` : 'add'}
+            </button>
           </div>
         </div>
       </div>

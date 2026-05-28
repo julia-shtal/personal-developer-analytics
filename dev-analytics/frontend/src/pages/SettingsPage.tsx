@@ -91,9 +91,13 @@ export function SettingsPage() {
   }, [tzOptions, tzSearch]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTimezone(user?.timezone ?? 'UTC');
+     
     setGithubLogin(user?.githubLogin ?? '');
+     
     setUsername(user?.username ?? '');
+     
     setEmail(user?.email ?? '');
   }, [user]);
 

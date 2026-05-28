@@ -26,7 +26,7 @@ export function TeamManagePage() {
   const qc = useQueryClient();
 
   // All hooks must be declared before any conditional return
-  const [activeTeam, setActiveTeam] = useState<Team | null>(null);
+  const [activeTeamId, setActiveTeamId] = useState<number | null>(null);
   const [mode, setMode] = useState<ModalMode>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -42,6 +42,8 @@ export function TeamManagePage() {
     queryFn: () => teamsApi.list().then((r) => r.data),
     enabled: isManager || isAdmin,
   });
+
+  const activeTeam = teams?.find((t) => t.id === activeTeamId) ?? null;
 
   const { data: allUsers = [] } = useQuery<UserProfile[]>({
     queryKey: ['all-users'],
@@ -92,7 +94,7 @@ export function TeamManagePage() {
   if (teamsLoading) return <PageSpinner />;
 
   function open(team: Team | null, m: ModalMode) {
-    setActiveTeam(team);
+    setActiveTeamId(team?.id ?? null);
     setMode(m);
     setDeleteConfirmName('');
     setDeleteError('');
@@ -103,7 +105,7 @@ export function TeamManagePage() {
 
   function close() {
     setMode(null);
-    setActiveTeam(null);
+    setActiveTeamId(null);
     setDeleteConfirmName('');
     setDeleteError('');
     setAddSearch('');

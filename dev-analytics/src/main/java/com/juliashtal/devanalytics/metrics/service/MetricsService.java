@@ -374,7 +374,7 @@ public class MetricsService {
     }
 
     // -------------------------------------------------------------------------
-    // Ticket 5 — Wellness + Quality metric calculations
+    // Wellness + Quality metric calculations
     // -------------------------------------------------------------------------
 
     /**
