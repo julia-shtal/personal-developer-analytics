@@ -1,7 +1,9 @@
 package com.juliashtal.devanalytics.user.controller;
 
+import com.juliashtal.devanalytics.user.model.AdminStatsDto;
 import com.juliashtal.devanalytics.user.model.request.UpdateRoleRequest;
 import com.juliashtal.devanalytics.user.model.UserSummary;
+import com.juliashtal.devanalytics.user.service.AdminService;
 import com.juliashtal.devanalytics.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,17 @@ import java.util.List;
 public class AdminController {
 
     private final UserService userService;
+    private final AdminService adminService;
+
+    @Operation(summary = "Active users in last 24h, database size, and AI calls today")
+    @GetMapping("/stats")
+    public ResponseEntity<AdminStatsDto> getStats() {
+        return ResponseEntity.ok(new AdminStatsDto(
+                adminService.activeUsersLast24h(),
+                adminService.databaseSizeBytes(),
+                adminService.aiCallsToday()
+        ));
+    }
 
     @Operation(summary = "List all users. Optionally filter by email/username with ?q=")
     @GetMapping("/users")

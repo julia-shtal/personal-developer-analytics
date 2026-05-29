@@ -83,6 +83,11 @@ public class UserService {
     }
 
     @Transactional
+    public void touchLastActive(Long userId) {
+        repository.touchLastActive(userId);
+    }
+
+    @Transactional
     public void deleteSelf(Long userId) {
         User user = repository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found"));

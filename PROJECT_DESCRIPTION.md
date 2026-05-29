@@ -285,6 +285,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | `role` | VARCHAR(32) DEFAULT 'DEVELOPER' | DEVELOPER / MANAGER / ADMIN |
 | `token_version` | INT DEFAULT 0 | Incremented on logout; JWT claim must match |
 | `github_login` | VARCHAR(255) | PR/issue attribution by GitHub username |
+| `last_active_at` | TIMESTAMP | Updated by `ActivityInterceptor` at most once per 5 min; used for active-24h admin KPI |
 
 **`Role`** (Enum) — `DEVELOPER`, `MANAGER`, `ADMIN`.
 
@@ -318,7 +319,9 @@ Created lazily on first read (`UserNotificationPrefsService.getOrCreate`). Row i
 
 #### Services
 
-**`UserService`** — `getById(Long)`, `updateProfile(Long, UpdateProfileRequest)`, `updateRole(Long, Role)`, `findAll()`, `search(String q)` (LIKE filter on email/username when q non-blank, falls back to `findAll()` otherwise), `delete(Long)`.
+**`UserService`** — `getById(Long)`, `updateProfile(Long, UpdateProfileRequest)`, `updateRole(Long, Role)`, `findAll()`, `search(String q)` (LIKE filter on email/username when q non-blank, falls back to `findAll()` otherwise), `delete(Long)`, `touchLastActive(Long userId)` (native UPDATE sets `last_active_at = NOW()`, called by `ActivityInterceptor` at most once per 5 minutes per user via in-memory debounce).
+
+**`AdminService`** — `activeUsersLast24h()` (counts users with `last_active_at > NOW() - INTERVAL '24 hours'`), `databaseSizeBytes()` (calls `pg_database_size(current_database())`), `aiCallsToday()` (counts `metric_summaries` rows where `DATE(generated_at) = CURRENT_DATE`).
 
 **`UserNotificationPrefsService`** — `getOrCreate(Long userId)` (creates a row with defaults on first call; idempotent), `update(Long userId, NotificationPrefsDto)` (persists all four toggles, returns updated DTO).
 
@@ -334,7 +337,7 @@ Created lazily on first read (`UserNotificationPrefsService.getOrCreate`). Row i
 
 **`UserController`** — `/api/users` — `GET` all users (MANAGER/ADMIN).
 
-**`AdminController`** — `/api/admin` — `GET /users?q=` (list or search users by email/username), `PUT /users/{id}/role`, `DELETE /users/{id}` (ADMIN only).
+**`AdminController`** — `/api/admin` — `GET /stats` (active users 24h, DB size bytes, AI calls today — ADMIN only), `GET /users?q=` (list or search users by email/username), `PUT /users/{id}/role`, `DELETE /users/{id}` (ADMIN only).
 
 **`TeamController`** — `/api/teams` — MANAGER/ADMIN only.
 
@@ -1155,6 +1158,9 @@ The AI layer generates natural-language summaries and metric explanations from p
 | V41 | `V41__metric_summaries_rename_repo_name.sql` | Rename `metric_summaries.repo_name` → `context_repo_name` (T5.2); old name implied GitHub-only; field stores snapshot-in-time scope label (repo, Jira project, or team) |
 | V42 | `V42__normalize_fk_naming.sql` | Rename `user_repo_registrations.repo_id` → `repository_id` (T5.3); update `user_accessible_repos` view and all dependent indexes to match the standard FK naming pattern used elsewhere in the schema |
 | V43 | `V43__user_notification_prefs.sql` | Create `user_notification_prefs` (user_id PK FK → users CASCADE, ai_brief BOOLEAN DEFAULT TRUE, sync_failures BOOLEAN DEFAULT TRUE, after_hours BOOLEAN DEFAULT TRUE, new_team_member BOOLEAN DEFAULT FALSE) — stores per-user notification toggle preferences |
+| V44 | `V44__delete_account_cascades.sql` | Add `ON DELETE CASCADE` to all FK references to `users(id)` that were missing it; enables safe self-delete without orphaned rows (PDA-48/T3) |
+| V45 | `V45__user_last_active_at.sql` | ALTER `users` ADD `last_active_at` TIMESTAMP — populated by `ActivityInterceptor` at most once per 5 min; used for `active 24h` admin KPI (PDA-49/B1) |
+| V46 | `V46__last_active_at_timestamptz.sql` | Fix timezone mismatch: convert `last_active_at` from `TIMESTAMP WITHOUT TIME ZONE` to `TIMESTAMPTZ`; V45 stored PostgreSQL session-local time, but Hibernate read it as UTC, producing a future instant that made `timeAgo()` always return "just now" (PDA-49 bugfix) |
 
 ### 4.2 Entity-Relationship Overview
 
@@ -1419,13 +1425,13 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 **`TeamDashboardPage`** — Team selector dropdown (hidden when only one team). Team KPI strip: 4 `KpiTile` (team commits, PRs merged, issues closed, active members) each with a descriptive `tooltip`. `MultiLineChart` for per-member daily commits. Member summary table with per-row click → `MemberDetailModal`. `AiTeamInsightCard` shows AI-generated team summary. Recalculate wired via `da:recalculate` CustomEvent; `onError` surfaces backend errors in a coral banner; `onSuccess` calls `qc.invalidateQueries()` (no-arg) to refetch all active queries.
 
-**`MemberDetailModal`** (inner component of `TeamDashboardPage`) — `Modal` (620 px). Title: `{username} — {formatDate(from)} – {formatDate(to)}` (concrete date range). 3 × 2 KPI grid with 6 metrics; each icon wrapped in `Tooltip` showing metric description. Daily commits rendered as `MetricBarChart` (last 60 data points, `var(--violet)` bars, 140 px height).
+**`MemberDetailModal`** (inner component of `TeamDashboardPage`) — `Modal` (620 px). Title: `{username} — {formatDate(from)} – {formatDate(to)}` (concrete date range). Header shows `<span class="dot dot-live" />active {timeAgo(lastActiveAt)}` if `lastActiveAt` is present, otherwise "no activity recorded". 3 × 2 KPI grid with 6 metrics; each icon wrapped in `Tooltip` showing metric description. Daily commits rendered as `MetricBarChart` (last 60 data points, `var(--violet)` bars, 140 px height). `MemberSummaryDto` carries `lastActiveAt?: string` (ISO timestamp) populated by `MetricsController.getTeamSummary` from `User.lastActiveAt`.
 
 **`TeamManagePage`** — Create team form. Team cards with expandable member list. Add-member modal (searches all users, excludes existing members). Remove member with confirmation. `activeTeam` is derived reactively from the `teams` query result using a stored `activeTeamId` pointer, so the member list updates immediately after add/remove mutations complete without requiring a modal close/reopen.
 
 **`SettingsPage`** — Editorial `.page.narrow` layout. **Appearance card**: theme toggle (light/dark), `AccentSwatches` + hex input, live preview strip, **logo picker** (T8.2 — 4 clickable cards calling `setTheme({ logo })` from `useTheme()`; "reset to default" reverts to `ACTIVE_LOGO`). **Avatar card**: upload via `avatarApi.upload`, preset grid via `avatarApi.setPreset`, remove via `avatarApi.delete`. **Profile card**: username, email, GitHub login, timezone picker with `Chip(emerald, dot) "auto"` badge when tz matches browser tz, role chip. Save → `PUT /users/me`. **Security card**: session JWT info, collapsible password change form. **Notifications card**: four toggle switches wired to `GET/PUT /api/users/me/notifications` (B5.1); toggles fire `notifMutation` on change and update React Query cache optimistically. **Danger zone**: "delete account" button opens a confirmation `Modal` requiring the user to type their email exactly; on confirm calls `DELETE /api/users/me`, then `logout()`, then redirects to `/login`; 409 last-admin guard surfaces as an inline error in the modal (PDA-48/T3).
 
-**`AdminPage`** — ADMIN only (redirects to `/dashboard` if not admin). Hero `N users` headline. KPI strip: `users` count live; `active 24h`, `db size`, `ai calls today` render `—` with tooltip "metric not yet implemented" (`TODO(admin-metrics-backend)`). Users table: email, role dropdown (`RoleDropdown` — inline `useMutation` per row), delete button. **Invite modal**: visual placeholder, `TODO(admin-invites-backend)`. **Promote-to-admin modal**: search input calls `GET /admin/users?q=` (B5.2) with `enabled: adminOpen`; results list shows non-admin users; selecting one highlights it; "promote" button calls `PUT /admin/users/{id}/role` with ADMIN. Current user cannot be deleted.
+**`AdminPage`** — ADMIN only (redirects to `/dashboard` if not admin). Hero `N users` headline. KPI strip: `users` count (from `/admin/users`); `active 24h`, `db size` (formatted as MB), `ai calls today` — all live from `GET /admin/stats` via `useQuery(['admin-stats'])`. Users table: email, role dropdown (`RoleDropdown` — inline `useMutation` per row), delete button. **Invite modal**: visual placeholder, `TODO(admin-invites-backend)`. **Promote-to-admin modal**: search input calls `GET /admin/users?q=` (B5.2) with `enabled: adminOpen`; results list shows non-admin users; selecting one highlights it; "promote" button calls `PUT /admin/users/{id}/role` with ADMIN. Current user cannot be deleted.
 
 ### 10.3 Components
 

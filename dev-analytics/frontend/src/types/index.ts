@@ -166,6 +166,7 @@ export interface MemberSummaryDto {
   metrics: Partial<Record<MetricType, number>>;
   hasCustomAvatar?: boolean;
   avatarPreset?: string;
+  lastActiveAt?: string;
 }
 
 // ─── Teams ───────────────────────────────────────────────────────────────────

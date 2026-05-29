@@ -6,8 +6,8 @@ import { useAuth } from '@/context/AuthContext';
 import { Chip } from '@/components/ui/Chip';
 import { Modal } from '@/components/ui/Modal';
 import { Avatar } from '@/components/ui/Avatar';
-import { Tooltip } from '@/components/ui/Tooltip';
 import api from '@/lib/api';
+import { adminApi } from '@/api/admin';
 import type { UserProfile, Role } from '@/types';
 
 const ROLE_CHIP: Record<Role, 'coral' | 'violet' | undefined> = {
@@ -73,6 +73,12 @@ export function AdminPage() {
     enabled: isAdmin,
   });
 
+  const { data: stats } = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: () => adminApi.stats().then((r) => r.data),
+    enabled: isAdmin,
+  });
+
   // B5.2: search query for promote-to-admin modal
   const { data: searchResults = [] } = useQuery<UserProfile[]>({
     queryKey: ['admin-users-search', searchQ],
@@ -131,25 +137,22 @@ export function AdminPage() {
             <div className="t-number-big" style={{ marginTop: 6 }}>{isLoading ? '—' : users.length}</div>
           </div>
           <div style={{ padding: '18px 20px' }}>
-            <Tooltip content="metric not yet implemented">
-              <div className="t-eyebrow">active 24h</div>
-            </Tooltip>
-            {/* TODO(admin-metrics-backend): active 24h not yet tracked */}
-            <div className="t-number-big" style={{ marginTop: 6, color: 'var(--fg-3)' }}>—</div>
+            <div className="t-eyebrow">active 24h</div>
+            <div className="t-number-big" style={{ marginTop: 6 }}>
+              {stats == null ? '—' : stats.activeUsers24h}
+            </div>
           </div>
           <div style={{ padding: '18px 20px' }}>
-            <Tooltip content="metric not yet implemented">
-              <div className="t-eyebrow">db size</div>
-            </Tooltip>
-            {/* TODO(admin-metrics-backend): db size not yet exposed */}
-            <div className="t-number-big" style={{ marginTop: 6, color: 'var(--fg-3)' }}>—</div>
+            <div className="t-eyebrow">db size</div>
+            <div className="t-number-big" style={{ marginTop: 6 }}>
+              {stats == null ? '—' : `${(stats.databaseSizeBytes / 1024 / 1024).toFixed(1)} MB`}
+            </div>
           </div>
           <div style={{ padding: '18px 20px' }}>
-            <Tooltip content="metric not yet implemented">
-              <div className="t-eyebrow">ai calls today</div>
-            </Tooltip>
-            {/* TODO(admin-metrics-backend): ai call count not yet tracked */}
-            <div className="t-number-big" style={{ marginTop: 6, color: 'var(--fg-3)' }}>—</div>
+            <div className="t-eyebrow">ai calls today</div>
+            <div className="t-number-big" style={{ marginTop: 6 }}>
+              {stats == null ? '—' : stats.aiCallsToday}
+            </div>
           </div>
         </div>
       </div>
