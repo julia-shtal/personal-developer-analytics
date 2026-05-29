@@ -1,11 +1,13 @@
 package com.juliashtal.devanalytics.user.controller;
 
 import com.juliashtal.devanalytics.user.model.TeamDto;
+import com.juliashtal.devanalytics.user.model.request.TeamConfigRequest;
 import com.juliashtal.devanalytics.user.service.TeamService;
 import com.juliashtal.devanalytics.user.model.request.AddTeamMemberRequest;
 import com.juliashtal.devanalytics.user.model.request.CreateTeamRequest;
 import com.juliashtal.devanalytics.user.model.request.RenameTeamRequest;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -57,5 +59,25 @@ public class TeamController {
     public ResponseEntity<Void> deleteTeam(@PathVariable Long id) {
         teamService.deleteTeam(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Archive a team. Sets archivedAt; team is excluded from list by default.")
+    @PatchMapping("/{id}/archive")
+    public ResponseEntity<TeamDto> archiveTeam(@PathVariable Long id) {
+        return ResponseEntity.ok(teamService.archiveTeam(id));
+    }
+
+    @Operation(summary = "Update team configuration: visibility and AI brief schedule.")
+    @PutMapping("/{id}/config")
+    public ResponseEntity<TeamDto> updateConfig(
+            @PathVariable Long id,
+            @RequestBody @Valid TeamConfigRequest request) {
+        return ResponseEntity.ok(teamService.updateConfig(id, request));
+    }
+
+    @Operation(summary = "Duplicate a team with the same members. Name gets ' (copy)' suffix.")
+    @PostMapping("/{id}/duplicate")
+    public ResponseEntity<TeamDto> duplicateTeam(@PathVariable Long id) {
+        return ResponseEntity.status(201).body(teamService.duplicateTeam(id));
     }
 }

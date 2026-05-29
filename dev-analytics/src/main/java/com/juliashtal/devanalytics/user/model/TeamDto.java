@@ -13,6 +13,9 @@ public class TeamDto {
     private UserSummary manager;
     private Set<UserSummary> members;
     private Instant createdAt;
+    private Instant archivedAt;
+    private String visibility;
+    private String aiBriefSchedule;
 
     public static TeamDto from(Team team) {
         TeamDto dto = new TeamDto();
@@ -23,6 +26,9 @@ public class TeamDto {
                 .map(UserSummary::from)
                 .collect(Collectors.toSet());
         dto.createdAt = team.getCreatedAt();
+        dto.archivedAt = team.getArchivedAt();
+        dto.visibility = team.getVisibility();
+        dto.aiBriefSchedule = team.getAiBriefSchedule();
         return dto;
     }
 }

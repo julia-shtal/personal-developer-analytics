@@ -344,11 +344,20 @@ Created lazily on first read (`UserNotificationPrefsService.getOrCreate`). Row i
 | Method | Path | Status | Description |
 |---|---|---|---|
 | POST | `/` | 200 | Create team |
-| GET | `/` | 200 | List caller's teams |
+| GET | `/` | 200 | List caller's non-archived teams |
 | POST | `/{teamId}/members` | 200 | Add member |
 | DELETE | `/{teamId}/members/{userId}` | 200 | Remove member |
 | PUT | `/{teamId}` | 200 | Rename team |
 | DELETE | `/{id}` | 204 | Delete team permanently; 403 if not manager/admin; 409 if data sources attached |
+| PATCH | `/{id}/archive` | 200 | Set `archivedAt = now()`; team disappears from list; 403 if not manager/admin |
+| PUT | `/{id}/config` | 200 | Update `visibility` + `aiBriefSchedule`; 400 if invalid visibility; 403 if not manager/admin |
+| POST | `/{id}/duplicate` | 201 | New team: same members, name + " (copy)", requesting user as manager |
+
+**`TeamExportController`** — `/api/teams` — MANAGER/ADMIN only.
+
+| Method | Path | Query | Response |
+|---|---|---|---|
+| GET | `/{teamId}/export` | `from`, `to` | `text/csv` stream; columns: `username,metric,value,unit,period_from,period_to`; 403 if not team manager/admin |
 
 ---
 
@@ -973,7 +982,7 @@ Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date
 | `MetricPointDto` | `date`, `value`, `metricType`, `repositoryId?`, `repositoryName?` |
 | `MetricAggregateDto` | `metricType`, `value`, `periodFrom?`, `periodTo?` |
 | `TeamMetricPointDto` | `date`, `value`, `metricType`, `userId?`, `username` |
-| `MemberSummaryDto` | `userId`, `username`, `metrics: Map<MetricType, Double>` |
+| `MemberSummaryDto` | `userId`, `username`, `metrics: Map<MetricType, Double>`, `hasCustomAvatar`, `avatarPreset`, `lastActiveAt?`, `email?` |
 
 #### Controller
 
