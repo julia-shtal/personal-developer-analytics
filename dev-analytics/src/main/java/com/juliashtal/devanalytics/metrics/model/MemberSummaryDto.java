@@ -9,5 +9,6 @@ public record MemberSummaryDto(
         Map<MetricType, Double> metrics,
         boolean hasCustomAvatar,
         String avatarPreset,
-        Instant lastActiveAt
+        Instant lastActiveAt,
+        String email
 ) { }

@@ -167,6 +167,7 @@ export interface MemberSummaryDto {
   hasCustomAvatar?: boolean;
   avatarPreset?: string;
   lastActiveAt?: string;
+  email?: string;
 }
 
 // ─── Teams ───────────────────────────────────────────────────────────────────
@@ -176,6 +177,9 @@ export interface Team {
   name: string;
   managerId?: number;
   members?: UserProfile[];
+  archivedAt?: string;
+  visibility?: string;
+  aiBriefSchedule?: string;
 }
 
 // ─── Date range ──────────────────────────────────────────────────────────────
