@@ -6,21 +6,13 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { ProseWithNumbers } from '@/components/ui/ProseWithNumbers';
 import { aiApi } from '@/api/ai';
 import { AI } from '@/components/icons';
+import { timeAgo } from '@/lib/dates';
 import type { MetricsSummaryDto } from '@/types/ai';
 import type { DateRange } from '@/types';
 
 interface Props {
   range: DateRange;
   onSummaryGenerated?: (summary: MetricsSummaryDto) => void;
-}
-
-function timeAgo(date: Date): string {
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin} min ago`;
-  const diffH = Math.floor(diffMin / 60);
-  return `${diffH}h ago`;
 }
 
 function summaryToText(s: MetricsSummaryDto): string {

@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.service.JwtService;
 import com.juliashtal.devanalytics.user.controller.TeamController;
 import com.juliashtal.devanalytics.user.service.TeamService;
+import com.juliashtal.devanalytics.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -25,6 +26,7 @@ class TeamControllerDeleteTest {
 
     @Autowired MockMvc mvc;
     @MockBean TeamService teamService;
+    @MockBean UserService userService;
     @MockBean JwtService jwtService;
     @MockBean CustomUserDetailsService customUserDetailsService;
 

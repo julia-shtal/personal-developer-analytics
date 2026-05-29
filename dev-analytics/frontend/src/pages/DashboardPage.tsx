@@ -249,7 +249,7 @@ export function DashboardPage() {
             sub="coding days / working"
             accent="emerald"
             icon={<Focus />}
-            tooltip="Fraction of working days (Mon–Fri) on which you made at least one commit."
+            tooltip="Fraction of Mon–Fri working days with at least one commit."
           />
         </div>
         <div className="divider" />
@@ -284,7 +284,7 @@ export function DashboardPage() {
             sub="lead time · median"
             accent="cyan"
             icon={<FirstCommit />}
-            tooltip="Median time from the first commit on a PR branch to the PR being merged."
+            tooltip="Median time from first branch commit to PR merge."
           />
         </div>
       </div>
@@ -323,7 +323,7 @@ export function DashboardPage() {
             sub="dora proxy"
             accent="violet"
             icon={<MergeFreq />}
-            tooltip="Average number of merges to the main branch per week. Used as a proxy for DORA deployment frequency."
+            tooltip="Avg. merges to the main branch per week (DORA deployment frequency proxy)."
           />
         </div>
         <div className="divider" />
@@ -364,7 +364,7 @@ export function DashboardPage() {
             sub="lines per commit"
             accent="amber"
             icon={<PRSize />}
-            tooltip="Median (additions + deletions) per commit across your PRs. Lower values mean smaller, more focused changes that are easier to review."
+            tooltip="Median (adds + deletes) per PR commit. Lower = smaller, more focused changes."
           />
         </div>
       </div>
