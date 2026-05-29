@@ -33,4 +33,13 @@ public class Team {
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
+
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
+    @Column(nullable = false)
+    private String visibility = "PRIVATE";
+
+    @Column(name = "ai_brief_schedule")
+    private String aiBriefSchedule;
 }

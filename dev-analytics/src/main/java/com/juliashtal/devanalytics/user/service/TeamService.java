@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.exception.ConflictException;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.user.model.Role;
+import com.juliashtal.devanalytics.user.model.request.TeamConfigRequest;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.TeamDto;
@@ -15,6 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -45,6 +48,7 @@ public class TeamService {
     public List<TeamDto> getMyTeams() {
         Long managerId = SecurityUtils.getCurrentUserId();
         return teamRepository.findByManagerId(managerId).stream()
+                .filter(t -> t.getArchivedAt() == null)
                 .map(TeamDto::from)
                 .toList();
     }
@@ -123,5 +127,59 @@ public class TeamService {
 
         teamRepository.delete(team);
         log.info("Team deleted: teamId={}, deletedBy={}", teamId, currentUserId);
+    }
+
+    @Transactional
+    public TeamDto archiveTeam(Long teamId) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new NoSuchElementException("Team not found: " + teamId));
+
+        Role role = userRepository.getReferenceById(currentUserId).getRole();
+        if (role != Role.ADMIN && !team.getManager().getId().equals(currentUserId)) {
+            throw new ForbiddenException("Only the team manager or an admin can archive this team");
+        }
+
+        team.setArchivedAt(Instant.now());
+        TeamDto result = TeamDto.from(teamRepository.save(team));
+        log.info("Team archived: teamId={}, archivedBy={}", teamId, currentUserId);
+        return result;
+    }
+
+    @Transactional
+    public TeamDto updateConfig(Long teamId, TeamConfigRequest req) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new NoSuchElementException("Team not found: " + teamId));
+
+        Role role = userRepository.getReferenceById(currentUserId).getRole();
+        if (role != Role.ADMIN && !team.getManager().getId().equals(currentUserId)) {
+            throw new ForbiddenException("Only the team manager or an admin can update team config");
+        }
+
+        if (req.visibility() != null) team.setVisibility(req.visibility());
+        if (req.aiBriefSchedule() != null) team.setAiBriefSchedule(req.aiBriefSchedule());
+        TeamDto result = TeamDto.from(teamRepository.save(team));
+        log.info("Team config updated: teamId={}, updatedBy={}", teamId, currentUserId);
+        return result;
+    }
+
+    @Transactional
+    public TeamDto duplicateTeam(Long teamId) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        Team original = teamRepository.findById(teamId)
+                .orElseThrow(() -> new NoSuchElementException("Team not found: " + teamId));
+
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new NoSuchElementException("User not found"));
+
+        Team copy = new Team();
+        copy.setName(original.getName() + " (copy)");
+        copy.setManager(currentUser);
+        copy.setMembers(new HashSet<>(original.getMembers()));
+
+        TeamDto result = TeamDto.from(teamRepository.save(copy));
+        log.info("Team duplicated: originalId={}, newId={}, duplicatedBy={}", teamId, result.getId(), currentUserId);
+        return result;
     }
 }
