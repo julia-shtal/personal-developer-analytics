@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Shield, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
 import { Chip } from '@/components/ui/Chip';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { ProseWithNumbers } from '@/components/ui/ProseWithNumbers';
 import { aiApi } from '@/api/ai';
 import { AI } from '@/components/icons';
 import type { MetricsSummaryDto } from '@/types/ai';
@@ -188,9 +189,7 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
           {/* Overview */}
           <div style={{ marginTop: 16 }}>
             <div className="t-eyebrow" style={{ marginBottom: 6 }}>overview</div>
-            <p className="t-body" style={{ maxWidth: 920, lineHeight: 1.6 }}>
-              {summary.overview}
-            </p>
+            <ProseWithNumbers text={summary.overview} className="t-body" style={{ maxWidth: 920, lineHeight: 1.6 }} />
           </div>
 
           {/* Key insights */}
@@ -209,9 +208,7 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
                         color,
                         width: 18, lineHeight: 1.45, flexShrink: 0,
                       }}>{sym}</span>
-                      <p className="t-body" style={{ margin: 0, lineHeight: 1.55, flex: 1 }}>
-                        {insight.text}
-                      </p>
+                      <ProseWithNumbers text={insight.text} className="t-body" style={{ margin: 0, lineHeight: 1.55, flex: 1 }} />
                       {insight.metric && <Chip color={chipColor}>{insight.metric}</Chip>}
                     </div>
                   );
@@ -228,7 +225,7 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
                 {summary.recommendations.map((rec, i) => (
                   <div key={i} className="row gap-3" style={{ alignItems: 'flex-start', padding: '6px 0' }}>
                     <span className="chip-dot" style={{ color: 'var(--violet)', marginTop: 7, flexShrink: 0 }} />
-                    <p className="t-body" style={{ margin: 0, lineHeight: 1.55 }}>{rec}</p>
+                    <ProseWithNumbers text={rec} className="t-body" style={{ margin: 0, lineHeight: 1.55 }} />
                   </div>
                 ))}
               </div>

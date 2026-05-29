@@ -13,4 +13,5 @@ export const usersApi = {
     update: (dto: NotificationPrefsDto) =>
       api.put<NotificationPrefsDto>('/users/me/notifications', dto),
   },
+  deleteAccount: () => api.delete<void>('/users/me'),
 };

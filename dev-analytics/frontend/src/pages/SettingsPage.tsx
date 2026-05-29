@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useMemo, type FormEvent, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Sun, Moon, Lock, Eye, EyeOff, Trash2, Plus } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Chip } from '@/components/ui/Chip';
+import { Modal } from '@/components/ui/Modal';
 import { AccentSwatches, ACCENT_SWATCHES } from '@/components/ui/AccentSwatches';
 import { Logo } from '@/components/brand/Logo';
 import { ACTIVE_LOGO } from '@/config/branding';
@@ -63,9 +65,10 @@ const LOGO_VARIANTS: { variant: LogoVariant; label: string; desc: string }[] = [
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
-  const { user, refreshUser } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { theme, accent, logo, setTheme } = useTheme();
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   // ── Profile state ────────────────────────────────────────────────────────
   const [timezone, setTimezone] = useState(user?.timezone ?? 'UTC');
@@ -127,6 +130,34 @@ export function SettingsPage() {
   const [pwError, setPwError] = useState('');
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // ── Delete account state ─────────────────────────────────────────────────
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteEmailInput, setDeleteEmailInput] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: () => usersApi.deleteAccount(),
+    onSuccess: async () => {
+      await logout();
+      navigate('/login');
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setDeleteError(msg ?? 'Failed to delete account.');
+    },
+  });
+
+  function openDeleteModal() {
+    setDeleteEmailInput('');
+    setDeleteError('');
+    setDeleteModalOpen(true);
+  }
+
+  function handleDeleteConfirm() {
+    setDeleteError('');
+    deleteAccountMutation.mutate();
+  }
 
   // ── Avatar queries + mutations ───────────────────────────────────────────
   const { data: presets = [] } = useQuery({
@@ -615,8 +646,11 @@ export function SettingsPage() {
           <p className="t-body" style={{ marginBottom: 12 }}>
             Permanently delete your account and all collected metrics. This action cannot be undone.
           </p>
-          {/* TODO(delete-account-backend): DELETE /api/users/me endpoint not yet implemented */}
-          <button className="btn" style={{ color: 'var(--coral)', borderColor: 'color-mix(in oklab, var(--coral) 40%, var(--line))', opacity: 0.7, cursor: 'not-allowed' }} disabled title="Coming soon">
+          <button
+            className="btn"
+            style={{ color: 'var(--coral)', borderColor: 'color-mix(in oklab, var(--coral) 40%, var(--line))' }}
+            onClick={openDeleteModal}
+          >
             <Trash2 width={13} height={13} />
             delete account
           </button>
@@ -624,6 +658,52 @@ export function SettingsPage() {
 
       </div>
       <div style={{ height: 32 }} />
+
+      {/* ── Delete account confirmation modal ────────────────────────────── */}
+      <Modal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title="Delete account"
+        eyebrow="── danger zone"
+        width={480}
+        footer={
+          <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn btn-sm" onClick={() => setDeleteModalOpen(false)}>
+              cancel
+            </button>
+            <button
+              className="btn btn-sm"
+              style={{ color: 'var(--coral)', borderColor: 'color-mix(in oklab, var(--coral) 40%, var(--line))' }}
+              onClick={handleDeleteConfirm}
+              disabled={deleteEmailInput !== (user?.email ?? '') || deleteAccountMutation.isPending}
+            >
+              <Trash2 width={12} height={12} />
+              {deleteAccountMutation.isPending ? 'Deleting…' : 'Delete permanently'}
+            </button>
+          </div>
+        }
+      >
+        <div className="col gap-3">
+          <p className="t-body">
+            This will permanently delete your account, all collected metrics, datasource configurations, and team memberships.
+            <strong> This cannot be undone.</strong>
+          </p>
+          <div>
+            <div className="t-label" style={{ marginBottom: 6 }}>Type your email to confirm:</div>
+            <input
+              className="input"
+              type="email"
+              placeholder={user?.email ?? ''}
+              value={deleteEmailInput}
+              onChange={(e) => { setDeleteEmailInput(e.target.value); setDeleteError(''); }}
+              autoFocus
+            />
+          </div>
+          {deleteError && (
+            <div className="t-label" style={{ color: 'var(--coral)' }}>{deleteError}</div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
