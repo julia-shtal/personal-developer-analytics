@@ -3,24 +3,29 @@ import { Outlet, Navigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { StatusBar } from './StatusBar';
+import { CommandPalette } from '@/components/ui/CommandPalette';
 import { useAuth } from '@/context/AuthContext';
 import { PageSpinner } from '@/components/ui/Spinner';
 
 export function AppShell() {
   const { user, isLoading } = useAuth();
-  const [paletteToast, setPaletteToast] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
-    let t: ReturnType<typeof setTimeout>;
     function handlePalette() {
-      setPaletteToast(true);
-      clearTimeout(t);
-      t = setTimeout(() => setPaletteToast(false), 2000);
+      setPaletteOpen(true);
+    }
+    function handleKeydown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
     }
     window.addEventListener('da:open-palette', handlePalette);
+    window.addEventListener('keydown', handleKeydown);
     return () => {
       window.removeEventListener('da:open-palette', handlePalette);
-      clearTimeout(t);
+      window.removeEventListener('keydown', handleKeydown);
     };
   }, []);
 
@@ -38,25 +43,7 @@ export function AppShell() {
         <StatusBar />
       </div>
 
-      {paletteToast && (
-        <div style={{
-          position: 'fixed',
-          bottom: 48,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'var(--bg-2)',
-          border: '1px solid var(--line)',
-          borderRadius: 8,
-          padding: '8px 16px',
-          fontSize: 13,
-          fontFamily: 'var(--font-sans)',
-          color: 'var(--fg)',
-          zIndex: 100,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-        }}>
-          Command palette coming soon
-        </div>
-      )}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

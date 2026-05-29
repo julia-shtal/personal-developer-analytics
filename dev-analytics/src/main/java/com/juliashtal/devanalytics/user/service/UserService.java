@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.user.service;
 
 import com.juliashtal.devanalytics.exception.BadRequestException;
+import com.juliashtal.devanalytics.exception.ConflictException;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.request.UpdateProfileRequest;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
@@ -79,5 +80,19 @@ public class UserService {
         }
         repository.deleteById(userId);
         log.info("User deleted: id={}", userId);
+    }
+
+    @Transactional
+    public void deleteSelf(Long userId) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("User not found"));
+        if (user.getRole() == Role.ADMIN) {
+            long adminCount = repository.countByRole(Role.ADMIN);
+            if (adminCount <= 1) {
+                throw new ConflictException("Cannot delete the last admin account — promote another user first.");
+            }
+        }
+        repository.deleteById(userId);
+        log.info("User self-deleted: id={}", userId);
     }
 }

@@ -41,6 +41,14 @@ public class UserProfileController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "Delete the current user's account and all associated data.")
+    @DeleteMapping
+    public ResponseEntity<Void> deleteAccount() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        userService.deleteSelf(userId);
+        return ResponseEntity.noContent().build();
+    }
+
     @Operation(summary = "Get notification preferences for the current user.")
     @GetMapping("/notifications")
     public ResponseEntity<NotificationPrefsDto> getNotifications() {
