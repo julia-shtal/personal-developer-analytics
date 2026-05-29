@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.user.repository;
 
+import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -18,4 +19,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Modifying
     @Query("UPDATE User u SET u.tokenVersion = u.tokenVersion + 1 WHERE u.id = :id")
     void incrementTokenVersion(Long id);
+
+    long countByRole(Role role);
 }

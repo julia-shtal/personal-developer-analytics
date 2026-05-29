@@ -1,38 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <defs>
-    <radialGradient id="g" cx="40%" cy="40%" r="70%">
-      <stop offset="0%" stop-color="#1e3a5f"/>
-      <stop offset="100%" stop-color="#020617"/>
-    </radialGradient>
-  </defs>
-  <rect width="256" height="256" fill="url(#g)"/>
-  <g stroke="#93c5fd" stroke-width="1" opacity="0.35">
-    <line x1="50"  y1="60"  x2="110" y2="90"/>
-    <line x1="110" y1="90"  x2="170" y2="55"/>
-    <line x1="170" y1="55"  x2="210" y2="110"/>
-    <line x1="110" y1="90"  x2="130" y2="150"/>
-    <line x1="130" y1="150" x2="80"  y2="190"/>
-    <line x1="130" y1="150" x2="190" y2="180"/>
-    <line x1="190" y1="180" x2="210" y2="110"/>
-    <line x1="80"  y1="190" x2="40"  y2="210"/>
-    <line x1="50"  y1="60"  x2="30"  y2="130"/>
-    <line x1="30"  y1="130" x2="80"  y2="190"/>
-  </g>
-  <g fill="#dbeafe">
-    <circle cx="50"  cy="60"  r="3.5" opacity="0.9"/>
-    <circle cx="110" cy="90"  r="4.5" opacity="0.95"/>
-    <circle cx="170" cy="55"  r="3"   opacity="0.85"/>
-    <circle cx="210" cy="110" r="3.5" opacity="0.9"/>
-    <circle cx="130" cy="150" r="4"   opacity="0.9"/>
-    <circle cx="80"  cy="190" r="3"   opacity="0.8"/>
-    <circle cx="190" cy="180" r="3.5" opacity="0.85"/>
-    <circle cx="40"  cy="210" r="2.5" opacity="0.7"/>
-    <circle cx="30"  cy="130" r="2.5" opacity="0.75"/>
-    <circle cx="150" cy="30"  r="1.5" opacity="0.6"/>
-    <circle cx="220" cy="70"  r="1.5" opacity="0.5"/>
-    <circle cx="230" cy="200" r="1.5" opacity="0.5"/>
-    <circle cx="20"  cy="50"  r="1.5" opacity="0.55"/>
-    <circle cx="240" cy="150" r="1.5" opacity="0.5"/>
-    <circle cx="60"  cy="240" r="1.5" opacity="0.5"/>
+  <rect width="256" height="256" fill="#171717"></rect>
+  <g fill="none" stroke="#fafafa" stroke-width="4" stroke-linecap="round">
+    <path d="M88 92 L60 128 L88 164"></path>
+    <path d="M168 92 L196 128 L168 164"></path>
+    <line x1="146" y1="76" x2="110" y2="180" stroke="#a3a3a3"></line>
   </g>
 </svg>

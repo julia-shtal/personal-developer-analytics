@@ -330,7 +330,7 @@ Created lazily on first read (`UserNotificationPrefsService.getOrCreate`). Row i
 
 #### Controllers
 
-**`UserProfileController`** — `/api/users/me` — `GET` (own profile), `PUT` (update profile), `PUT /password` (change password), `GET /notifications` (notification prefs — creates with defaults on first call), `PUT /notifications` (update notification prefs).
+**`UserProfileController`** — `/api/users/me` — `GET` (own profile), `PUT` (update profile), `PUT /password` (change password), `DELETE` (self-delete — 204; 409 if last admin), `GET /notifications` (notification prefs — creates with defaults on first call), `PUT /notifications` (update notification prefs).
 
 **`UserController`** — `/api/users` — `GET` all users (MANAGER/ADMIN).
 
@@ -1205,6 +1205,7 @@ Selected notable endpoints (added in PDA-46a / PDA-46b):
 | GET | `/api/users/me/notifications` | 200 | Get or create notification prefs with defaults (B5.1) |
 | PUT | `/api/users/me/notifications` | 200 | Update all four notification toggles (B5.1) |
 | GET | `/api/admin/users?q=` | 200 | List users; optional case-insensitive email/username filter (B5.2) |
+| DELETE | `/api/users/me` | 204 / 409 | Self-delete account and all associated data; 409 if last admin (PDA-48/T3) |
 
 *(Full endpoint tables are in Section 3 per domain.)*
 
@@ -1422,13 +1423,15 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 **`TeamManagePage`** — Create team form. Team cards with expandable member list. Add-member modal (searches all users, excludes existing members). Remove member with confirmation. `activeTeam` is derived reactively from the `teams` query result using a stored `activeTeamId` pointer, so the member list updates immediately after add/remove mutations complete without requiring a modal close/reopen.
 
-**`SettingsPage`** — Editorial `.page.narrow` layout. **Appearance card**: theme toggle (light/dark), `AccentSwatches` + hex input, live preview strip, **logo picker** (T8.2 — 4 clickable cards calling `setTheme({ logo })` from `useTheme()`; "reset to default" reverts to `ACTIVE_LOGO`). **Avatar card**: upload via `avatarApi.upload`, preset grid via `avatarApi.setPreset`, remove via `avatarApi.delete`. **Profile card**: username, email, GitHub login, timezone picker with `Chip(emerald, dot) "auto"` badge when tz matches browser tz, role chip. Save → `PUT /users/me`. **Security card**: session JWT info, collapsible password change form. **Notifications card**: four toggle switches wired to `GET/PUT /api/users/me/notifications` (B5.1); toggles fire `notifMutation` on change and update React Query cache optimistically. **Danger zone**: delete-account button (disabled — `TODO(delete-account-backend)`).
+**`SettingsPage`** — Editorial `.page.narrow` layout. **Appearance card**: theme toggle (light/dark), `AccentSwatches` + hex input, live preview strip, **logo picker** (T8.2 — 4 clickable cards calling `setTheme({ logo })` from `useTheme()`; "reset to default" reverts to `ACTIVE_LOGO`). **Avatar card**: upload via `avatarApi.upload`, preset grid via `avatarApi.setPreset`, remove via `avatarApi.delete`. **Profile card**: username, email, GitHub login, timezone picker with `Chip(emerald, dot) "auto"` badge when tz matches browser tz, role chip. Save → `PUT /users/me`. **Security card**: session JWT info, collapsible password change form. **Notifications card**: four toggle switches wired to `GET/PUT /api/users/me/notifications` (B5.1); toggles fire `notifMutation` on change and update React Query cache optimistically. **Danger zone**: "delete account" button opens a confirmation `Modal` requiring the user to type their email exactly; on confirm calls `DELETE /api/users/me`, then `logout()`, then redirects to `/login`; 409 last-admin guard surfaces as an inline error in the modal (PDA-48/T3).
 
 **`AdminPage`** — ADMIN only (redirects to `/dashboard` if not admin). Hero `N users` headline. KPI strip: `users` count live; `active 24h`, `db size`, `ai calls today` render `—` with tooltip "metric not yet implemented" (`TODO(admin-metrics-backend)`). Users table: email, role dropdown (`RoleDropdown` — inline `useMutation` per row), delete button. **Invite modal**: visual placeholder, `TODO(admin-invites-backend)`. **Promote-to-admin modal**: search input calls `GET /admin/users?q=` (B5.2) with `enabled: adminOpen`; results list shows non-admin users; selecting one highlights it; "promote" button calls `PUT /admin/users/{id}/role` with ADMIN. Current user cannot be deleted.
 
 ### 10.3 Components
 
-**`AppShell`** — Auth guard (`useAuth().user` → redirect to `/login` if null). Composes `Sidebar`, `TopBar`, `<Outlet>`, and `StatusBar` in a full-height flex layout. Listens for `da:open-palette` CustomEvent and shows a 2-second toast placeholder (T10.2 wires the real palette).
+**`AppShell`** — Auth guard (`useAuth().user` → redirect to `/login` if null). Composes `Sidebar`, `TopBar`, `<Outlet>`, and `StatusBar` in a full-height flex layout. Listens for `da:open-palette` CustomEvent and global `Ctrl+K` / `⌘K` keydown to open `CommandPalette` (PDA-48/T1).
+
+**`CommandPalette`** (`src/components/ui/CommandPalette.tsx`) — Keyboard-navigable command palette rendered as an overlay (not a `Modal`). Opens on `da:open-palette` event or `Ctrl+K`/`⌘K`. Commands list (8 entries): Go to Dashboard, Go to Team (MANAGER+), Go to Manage Teams (MANAGER+), Go to Data Sources, Go to Settings, Go to Admin (ADMIN), Toggle dark mode, Open date range picker. Text input filters by `label.toLowerCase().includes(query)`. `↑`/`↓` moves selection (accent left border on selected row); `Enter` fires the action; `Escape` closes (PDA-48/T1).
 
 **`Sidebar`** — Fixed 240 px (`--sidebar-w`). Brand block: `Logo` + `APP_VERSION` pill + `.dot-live` eyebrow. `⌘K` search button dispatches `da:open-palette`. Workspace nav: Personal (`/dashboard`), Team (`/team`, MANAGER+), Manage (`/team-manage`, MANAGER+), Sources (`/datasources`). Account nav: Settings, Admin (ADMIN+). Active item: `var(--bg-2)` background + 2 px accent left-bar. User card footer: Avatar + **username** + role badge → navigates `/settings`. Theme toggle and logout buttons.
 
@@ -1451,6 +1454,8 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 **`Tooltip`** — Hover popover. Wraps children; shows `content` above the hovered element on mouse-enter. Renders via `ReactDOM.createPortal` into `document.body` with `position: fixed` and `z-index: 9999` — safe inside `overflow: hidden` ancestors such as the `Modal` dialog wrapper.
 
 **`Modal`** — Focus-trapped overlay. Escape closes, backdrop closes, body scroll locked. `@keyframes mfade` / `mpop` injected inline. Props: `open`, `onClose`, `eyebrow?`, `title`, `width?`, `footer?`.
+
+**`ProseWithNumbers`** (`src/components/ui/ProseWithNumbers.tsx`) — Renders a paragraph with numeric tokens wrapped in `<strong>` using `var(--font-mono)` so numbers stand out editorially from prose. Backed by `tokeniseNumbers` from `src/lib/prose.ts` which splits text on the pattern `\d[\d,.]*(×|%|h|d|\/wk)?`. Used in `AiSummaryCard` overview (PDA-48/T2).
 
 **`AccentSwatches`** — Row of clickable colour swatches (the `ACCENT_PRESETS` list). `onChange` fires once per valid 6-char hex, including manual hex input.
 

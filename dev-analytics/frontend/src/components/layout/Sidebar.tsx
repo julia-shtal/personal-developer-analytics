@@ -98,7 +98,6 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* TODO(palette): wire full command palette here — tracked in docs/REDESIGN_FOLLOWUPS.md (PR6/T10.2) */}
       <div style={{ padding: '12px 14px 8px' }}>
         <button
           className="btn"
