@@ -3,6 +3,8 @@ package com.juliashtal.devanalytics.user.model;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.time.Instant;
+
 @Data
 @Entity
 @Table(name = "users")
@@ -24,6 +26,9 @@ public class User {
 
     // GitHub username — required for attributing PRs from team-scoped repos
     private String githubLogin;
+
+    @Column(name = "last_active_at")
+    private Instant lastActiveAt;
 
     // Avatar — custom upload stored as BYTEA; preset stores a static SVG id like "preset-03"
     @Column(name = "avatar_data", columnDefinition = "BYTEA")

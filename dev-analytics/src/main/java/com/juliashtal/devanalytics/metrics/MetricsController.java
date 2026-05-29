@@ -288,7 +288,8 @@ public class MetricsController {
         return members.stream()
                 .map(m -> new MemberSummaryDto(
                         m.getId(), m.getUsername(), byUser.get(m.getId()),
-                        m.getAvatarData() != null, m.getAvatarPreset()))
+                        m.getAvatarData() != null, m.getAvatarPreset(),
+                        m.getLastActiveAt()))
                 .toList();
     }
 
@@ -316,7 +317,8 @@ public class MetricsController {
 
         return new MemberSummaryDto(
                 member.getId(), member.getUsername(), metrics,
-                member.getAvatarData() != null, member.getAvatarPreset());
+                member.getAvatarData() != null, member.getAvatarPreset(),
+                member.getLastActiveAt());
     }
 
     @GetMapping("/teams/{teamId}/members/{memberId}/daily-commits")
