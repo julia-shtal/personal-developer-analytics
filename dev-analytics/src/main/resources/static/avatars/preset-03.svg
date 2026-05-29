@@ -1,33 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#059669"/>
-      <stop offset="100%" stop-color="#064e3b"/>
-    </linearGradient>
-  </defs>
-  <rect width="256" height="256" fill="url(#g)"/>
-  <g fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.4">
-    <polygon points="64,32 80,42 80,62 64,72 48,62 48,42"/>
-    <polygon points="96,32 112,42 112,62 96,72 80,62 80,42"/>
-    <polygon points="128,32 144,42 144,62 128,72 112,62 112,42"/>
-    <polygon points="160,32 176,42 176,62 160,72 144,62 144,42"/>
-    <polygon points="192,32 208,42 208,62 192,72 176,62 176,42"/>
-    <polygon points="48,72 64,82 64,102 48,112 32,102 32,82"/>
-    <polygon points="80,72 96,82 96,102 80,112 64,102 64,82"/>
-    <polygon points="112,72 128,82 128,102 112,112 96,102 96,82"/>
-    <polygon points="144,72 160,82 160,102 144,112 128,102 128,82"/>
-    <polygon points="176,72 192,82 192,102 176,112 160,102 160,82"/>
-    <polygon points="208,72 224,82 224,102 208,112 192,102 192,82"/>
-    <polygon points="64,112 80,122 80,142 64,152 48,142 48,122"/>
-    <polygon points="96,112 112,122 112,142 96,152 80,142 80,122"/>
-    <polygon points="128,112 144,122 144,142 128,152 112,142 112,122"/>
-    <polygon points="160,112 176,122 176,142 160,152 144,142 144,122"/>
-    <polygon points="192,112 208,122 208,142 192,152 176,142 176,122"/>
-    <polygon points="48,152 64,162 64,182 48,192 32,182 32,162"/>
-    <polygon points="80,152 96,162 96,182 80,192 64,182 64,162"/>
-    <polygon points="112,152 128,162 128,182 112,192 96,182 96,162"/>
-    <polygon points="144,152 160,162 160,182 144,192 128,182 128,162"/>
-    <polygon points="176,152 192,162 192,182 176,192 160,182 160,162"/>
-    <polygon points="208,152 224,162 224,182 208,192 192,182 192,162"/>
+  <rect width="256" height="256" fill="#fef3c7"></rect>
+  <g font-family="ui-monospace, monospace" fill="#92400e" font-weight="700">
+    <text x="44" y="156" font-size="92" letter-spacing="-6">~/</text>
   </g>
+  <rect x="166" y="92" width="18" height="74" fill="#f59e0b">
+    
+  </rect>
 </svg>
