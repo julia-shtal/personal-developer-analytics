@@ -80,10 +80,21 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
         <div className="row gap-2" style={{ justifyContent: 'space-between' }}>
           <span className="t-label">click any row to drill into other members</span>
           <div className="row gap-2">
-            {/* TODO(team-messaging): needs messaging integration (email or in-app) — deferred to future sprint */}
-            <button className="btn btn-sm" onClick={() => alert('Messaging coming soon')} aria-label="Message member">
-              <Mail width={12} height={12} />message
-            </button>
+            {member.email ? (
+              <a
+                href={`mailto:${member.email}?subject=Dev%20Analytics%20%7C%20Quick%20note`}
+                className="btn btn-sm"
+                aria-label={`Email ${member.username}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Mail width={12} height={12} />message
+              </a>
+            ) : (
+              <button className="btn btn-sm" disabled aria-label="Message member (no email on file)">
+                <Mail width={12} height={12} />message
+              </button>
+            )}
             {/* TODO(ai-member-summary): member-scoped AI endpoint needed — deferred to future sprint */}
             <button className="btn btn-sm btn-accent" onClick={() => alert('Member-scoped AI summary coming soon')} aria-label="Ask AI about this member">
               <Sparkles width={12} height={12} />ask AI about {member.username}

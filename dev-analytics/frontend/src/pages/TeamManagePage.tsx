@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, X, Mail, Sparkles, Code, Trash2, ChevronRight, AlertCircle } from 'lucide-react';
+import { Plus, X, Mail, Sparkles, Code, Trash2, ChevronRight, AlertCircle, Archive } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
 import { Modal } from '@/components/ui/Modal';
 import { Chip } from '@/components/ui/Chip';
 import { Avatar } from '@/components/ui/Avatar';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
+import { useDateRange } from '@/context/DateRangeContext';
 import { Navigate } from 'react-router-dom';
 import api from '@/lib/api';
 import type { Team, UserProfile } from '@/types';
@@ -17,15 +18,17 @@ function errMsg(err: unknown, fallback: string) {
   );
 }
 
-type ModalMode = 'members' | 'config' | 'more' | 'new' | 'delete-confirm' | null;
+type ModalMode = 'members' | 'config' | 'more' | 'new' | 'delete-confirm' | 'archive-confirm' | null;
 
 const ACCENT_COLORS = ['violet', 'cyan', 'amber', 'emerald', 'coral'] as const;
 
+const VISIBILITY_OPTIONS = ['PRIVATE', 'WORKSPACE', 'PUBLIC'] as const;
+
 export function TeamManagePage() {
   const { isManager, isAdmin } = useAuth();
+  const { range } = useDateRange();
   const qc = useQueryClient();
 
-  // All hooks must be declared before any conditional return
   const [activeTeamId, setActiveTeamId] = useState<number | null>(null);
   const [mode, setMode] = useState<ModalMode>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
@@ -37,6 +40,12 @@ export function TeamManagePage() {
   const [createError, setCreateError] = useState('');
   const [actionError, setActionError] = useState('');
 
+  // Config modal state
+  const [configName, setConfigName] = useState('');
+  const [configVisibility, setConfigVisibility] = useState('PRIVATE');
+  const [configBriefSchedule, setConfigBriefSchedule] = useState('');
+  const [configError, setConfigError] = useState('');
+
   const { data: teams, isLoading: teamsLoading } = useQuery<Team[]>({
     queryKey: ['teams'],
     queryFn: () => teamsApi.list().then((r) => r.data),
@@ -44,6 +53,16 @@ export function TeamManagePage() {
   });
 
   const activeTeam = teams?.find((t) => t.id === activeTeamId) ?? null;
+
+  // Seed config fields whenever the config modal opens
+  useEffect(() => {
+    if (mode === 'config' && activeTeam) {
+      setConfigName(activeTeam.name);
+      setConfigVisibility(activeTeam.visibility ?? 'PRIVATE');
+      setConfigBriefSchedule(activeTeam.aiBriefSchedule ?? '');
+      setConfigError('');
+    }
+  }, [mode, activeTeam]);
 
   const { data: allUsers = [] } = useQuery<UserProfile[]>({
     queryKey: ['all-users'],
@@ -89,7 +108,41 @@ export function TeamManagePage() {
     onError: (err) => setDeleteError(errMsg(err, 'Failed to delete team.')),
   });
 
-  // Auth guard — after all hooks
+  const archiveMutation = useMutation({
+    mutationFn: (teamId: number) => teamsApi.archive(teamId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['teams'] });
+      close();
+    },
+    onError: (err) => setActionError(errMsg(err, 'Failed to archive team.')),
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: (teamId: number) => teamsApi.duplicate(teamId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['teams'] });
+      close();
+    },
+    onError: (err) => setActionError(errMsg(err, 'Failed to duplicate team.')),
+  });
+
+  const configMutation = useMutation({
+    mutationFn: async () => {
+      await teamsApi.updateConfig(activeTeam!.id, {
+        visibility: configVisibility,
+        aiBriefSchedule: configBriefSchedule,
+      });
+      if (configName.trim() !== activeTeam?.name) {
+        await teamsApi.rename(activeTeam!.id, configName.trim());
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['teams'] });
+      close();
+    },
+    onError: (err) => setConfigError(errMsg(err, 'Failed to save configuration.')),
+  });
+
   if (!isManager && !isAdmin) return <Navigate to="/dashboard" replace />;
   if (teamsLoading) return <PageSpinner />;
 
@@ -101,6 +154,7 @@ export function TeamManagePage() {
     setAddSearch('');
     setAddError('');
     setActionError('');
+    setConfigError('');
   }
 
   function close() {
@@ -111,6 +165,7 @@ export function TeamManagePage() {
     setAddSearch('');
     setAddError('');
     setActionError('');
+    setConfigError('');
   }
 
   const totalMembers = teams?.reduce((sum, t) => sum + (t.members?.length ?? 0), 0) ?? 0;
@@ -311,7 +366,7 @@ export function TeamManagePage() {
         )}
       </Modal>
 
-      {/* ── Config modal ── (TODO: team-config-backend — needs visibility/sources/brief schema, separate ticket) */}
+      {/* ── Config modal ── */}
       <Modal
         open={isOpen && mode === 'config'}
         onClose={close}
@@ -321,39 +376,63 @@ export function TeamManagePage() {
         footer={
           <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
             <button className="btn btn-sm" onClick={close}>cancel</button>
-            <button className="btn btn-sm btn-accent" disabled title="Coming soon">save changes</button>
+            <button
+              className="btn btn-sm btn-accent"
+              disabled={!configName.trim() || configMutation.isPending}
+              onClick={() => configMutation.mutate()}
+              aria-label="Save team configuration"
+            >
+              {configMutation.isPending ? 'Saving…' : 'save changes'}
+            </button>
           </div>
         }
       >
-        <div
-          style={{
-            background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8,
-            padding: '10px 14px', marginBottom: 20,
-          }}
-        >
-          <span className="t-label" style={{ fontSize: 11 }}>
-            Settings preview — visibility, default sources, and weekly brief require a schema migration.
-            Coming in a future sprint.
-          </span>
-        </div>
-        <div className="col gap-4" style={{ opacity: 0.4, pointerEvents: 'none' }}>
+        <div className="col gap-4">
           <div>
             <div className="t-eyebrow" style={{ marginBottom: 6 }}>team name</div>
-            <input className="input" defaultValue={activeTeam?.name} readOnly />
+            <input
+              className="input"
+              value={configName}
+              onChange={(e) => setConfigName(e.target.value)}
+              aria-label="Team name"
+            />
           </div>
           <div>
             <div className="t-eyebrow" style={{ marginBottom: 6 }}>visibility</div>
             <div className="row gap-2">
-              {['private', 'workspace', 'public'].map((v) => (
-                <button key={v} className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}>{v}</button>
+              {VISIBILITY_OPTIONS.map((v) => (
+                <button
+                  key={v}
+                  className="btn btn-sm"
+                  style={{
+                    flex: 1, justifyContent: 'center',
+                    borderColor: configVisibility === v ? 'var(--accent)' : undefined,
+                    color: configVisibility === v ? 'var(--accent)' : undefined,
+                  }}
+                  onClick={() => setConfigVisibility(v)}
+                  aria-pressed={configVisibility === v}
+                >
+                  {v.toLowerCase()}
+                </button>
               ))}
             </div>
           </div>
           <div>
             <div className="t-eyebrow" style={{ marginBottom: 6 }}>weekly AI brief</div>
-            <input className="input" defaultValue="every Monday 09:00" readOnly />
+            <input
+              className="input"
+              placeholder="e.g. every Monday 09:00"
+              value={configBriefSchedule}
+              onChange={(e) => setConfigBriefSchedule(e.target.value)}
+              aria-label="Weekly AI brief schedule"
+            />
           </div>
         </div>
+        {configError && (
+          <div className="row gap-2" style={{ marginTop: 12, color: 'var(--coral)', fontSize: 13 }}>
+            <AlertCircle width={13} height={13} />{configError}
+          </div>
+        )}
       </Modal>
 
       {/* ── More menu ── */}
@@ -365,11 +444,18 @@ export function TeamManagePage() {
         width={420}
       >
         <div className="col gap-1">
-          {/* TODO(team-export): export CSV needs team metrics aggregation endpoint */}
           <button
             className="btn"
             style={{ width: '100%', justifyContent: 'flex-start', padding: '10px 12px' }}
-            onClick={() => { close(); alert('Export coming soon'); }}
+            onClick={async () => {
+              const res = await teamsApi.exportCsv(activeTeamId!, range.from, range.to);
+              const blobUrl = URL.createObjectURL(new Blob([res.data as BlobPart], { type: 'text/csv' }));
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = `team-${activeTeamId}-${range.from}-${range.to}.csv`;
+              a.click();
+              URL.revokeObjectURL(blobUrl);
+            }}
             aria-label="Export team report (CSV)"
           >
             <Code width={13} height={13} />
@@ -388,26 +474,27 @@ export function TeamManagePage() {
             <ChevronRight width={11} height={11} style={{ color: 'var(--fg-3)' }} />
           </button>
 
-          {/* TODO(team-duplicate): team duplication needs schema/endpoint */}
           <button
             className="btn"
             style={{ width: '100%', justifyContent: 'flex-start', padding: '10px 12px' }}
-            onClick={() => { close(); alert('Duplicate coming soon'); }}
+            disabled={duplicateMutation.isPending}
+            onClick={() => activeTeamId && duplicateMutation.mutate(activeTeamId)}
             aria-label="Duplicate team"
           >
             <Plus width={13} height={13} />
-            <span style={{ flex: 1, textAlign: 'left' }}>Duplicate team</span>
+            <span style={{ flex: 1, textAlign: 'left' }}>
+              {duplicateMutation.isPending ? 'Duplicating…' : 'Duplicate team'}
+            </span>
             <ChevronRight width={11} height={11} style={{ color: 'var(--fg-3)' }} />
           </button>
 
-          {/* TODO(team-archive): archive needs a flag in schema */}
           <button
             className="btn"
             style={{ width: '100%', justifyContent: 'flex-start', padding: '10px 12px', color: 'var(--coral)' }}
-            onClick={() => { close(); alert('Archive coming soon'); }}
+            onClick={() => setMode('archive-confirm')}
             aria-label="Archive team"
           >
-            <Trash2 width={13} height={13} />
+            <Archive width={13} height={13} />
             <span style={{ flex: 1, textAlign: 'left' }}>Archive team</span>
             <ChevronRight width={11} height={11} style={{ color: 'var(--fg-3)' }} />
           </button>
@@ -422,7 +509,46 @@ export function TeamManagePage() {
             <span style={{ flex: 1, textAlign: 'left' }}>Delete team permanently</span>
             <ChevronRight width={11} height={11} style={{ color: 'var(--fg-3)' }} />
           </button>
+
+          {actionError && (
+            <div className="row gap-2" style={{ marginTop: 8, color: 'var(--coral)', fontSize: 13 }}>
+              <AlertCircle width={13} height={13} />{actionError}
+            </div>
+          )}
         </div>
+      </Modal>
+
+      {/* ── Archive confirm modal ── */}
+      <Modal
+        open={isOpen && mode === 'archive-confirm'}
+        onClose={close}
+        eyebrow="── archive team"
+        title={`Archive ${activeTeam?.name}?`}
+        width={460}
+        footer={
+          <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn btn-sm" onClick={close}>cancel</button>
+            <button
+              className="btn btn-sm"
+              style={{ borderColor: 'var(--coral)', color: 'var(--coral)' }}
+              disabled={archiveMutation.isPending}
+              onClick={() => activeTeamId && archiveMutation.mutate(activeTeamId)}
+              aria-label="Confirm archive"
+            >
+              {archiveMutation.isPending ? 'Archiving…' : 'Archive team'}
+            </button>
+          </div>
+        }
+      >
+        <p className="t-body">
+          You won't be able to access <strong>{activeTeam?.name}</strong> unless restored by an admin.
+          Members and configuration are preserved.
+        </p>
+        {actionError && (
+          <div className="row gap-2" style={{ marginTop: 10, color: 'var(--coral)', fontSize: 13 }}>
+            <AlertCircle width={13} height={13} />{actionError}
+          </div>
+        )}
       </Modal>
 
       {/* ── Delete confirm modal ── */}

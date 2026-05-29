@@ -289,7 +289,7 @@ public class MetricsController {
                 .map(m -> new MemberSummaryDto(
                         m.getId(), m.getUsername(), byUser.get(m.getId()),
                         m.getAvatarData() != null, m.getAvatarPreset(),
-                        m.getLastActiveAt()))
+                        m.getLastActiveAt(), m.getEmail()))
                 .toList();
     }
 
@@ -318,7 +318,7 @@ public class MetricsController {
         return new MemberSummaryDto(
                 member.getId(), member.getUsername(), metrics,
                 member.getAvatarData() != null, member.getAvatarPreset(),
-                member.getLastActiveAt());
+                member.getLastActiveAt(), member.getEmail());
     }
 
     @GetMapping("/teams/{teamId}/members/{memberId}/daily-commits")
