@@ -38,3 +38,12 @@ export function startOfYear(): string {
   d.setMonth(0, 1);
   return isoDate(d);
 }
+
+export function timeAgo(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  if (!isFinite(diffMs) || diffMs < 60_000) return 'just now';
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffH = Math.floor(diffMin / 60);
+  return `${diffH}h ago`;
+}

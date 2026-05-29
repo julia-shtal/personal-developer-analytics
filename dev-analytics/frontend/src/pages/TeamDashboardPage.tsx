@@ -14,7 +14,7 @@ import { MultiLineChart } from '@/components/charts/MultiLineChart';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
 import { useDateRange } from '@/context/DateRangeContext';
-import { formatDate } from '@/lib/dates';
+import { formatDate, timeAgo } from '@/lib/dates';
 import { Commits, PRMerged, IssuesClosed, LeadTime, Churn, Focus } from '@/components/icons';
 import type { Team, MemberSummaryDto } from '@/types';
 
@@ -43,6 +43,12 @@ interface MemberDetailModalProps {
 function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalProps) {
   const { range } = useDateRange();
   const { from, to } = range;
+
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 10_000);
+    return () => clearInterval(id);
+  }, []);
 
   const commits = useQuery({
     queryKey: ['member-commits', teamId, member.userId, from, to],
@@ -98,8 +104,10 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
           </div>
           <div className="row gap-2" style={{ marginTop: 4, flexWrap: 'wrap' }}>
             <Chip color="violet">contributor</Chip>
-            {/* TODO(user-activity-tracking): "active X min ago" needs lastActiveAt per user — deferred to future sprint */}
-            <span className="t-label" style={{ fontSize: 11 }}>activity tracking coming soon</span>
+            {member.lastActiveAt
+              ? <span className="t-label" style={{ fontSize: 11 }}><span className="dot dot-live" style={{ marginRight: 6 }} />active {timeAgo(new Date(member.lastActiveAt))}</span>
+              : <span className="t-label" style={{ fontSize: 11 }}>no activity recorded</span>
+            }
           </div>
         </div>
       </div>
