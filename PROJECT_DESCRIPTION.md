@@ -41,7 +41,7 @@
 | 19 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, merge frequency |
 | Dual-scope metrics | Personal (`team = NULL`) and team-scoped (per-member attribution on shared repos) |
 | AI insights | On-demand and weekly scheduled summaries via local Ollama (llama3.2); personal and team scopes; Spring Cache backed |
-| Stateless JWT auth | HS256 access tokens (15 min), rotating refresh tokens (7 days), token-version logout invalidation |
+| Stateless JWT auth | HS256 access tokens (15 min), rotating refresh tokens (7 days), token-version logout invalidation; single-flight concurrent 401 refresh (one `POST /auth/refresh` per burst) |
 | RBAC | DEVELOPER, MANAGER, ADMIN — enforced at path level and method level |
 | Scheduled automation | Nightly metric recalculation, weekly AI summaries (Mon 08:00 UTC), background stats enrichment every 2 min, daily token cleanup |
 | React SPA | Full dashboard with AI explain drawer, datasource management, team admin, settings, served from embedded Tomcat |
@@ -111,9 +111,9 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | `issue/` | Unified Jira + GitHub issue collection and retrieval |
 | `metrics/` | 19-metric calculation engine, snapshot persistence and retrieval |
 | `ai/` | LLM context building, Ollama client, personal/team summaries, weekly scheduler |
-| `security/` | JWT filter, token service, user details, token encryption |
+| `security/` | JWT filter, token service, user details, AES-256-GCM token encryption, legacy migration runner |
 | `email/` | SMTP password reset email |
-| `config/` | SecurityConfig, AsyncConfig, CacheConfig, RestTemplateConfig, SpaFallbackController |
+| `config/` | SecurityConfig, AsyncConfig, CacheConfig, RestTemplateConfig, SpaFallbackController, per-user rate limiter |
 | `exception/` | GlobalExceptionHandler, domain exceptions |
 
 ---
@@ -250,22 +250,31 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 
 **`CheckHelper`** (`@Component`) — `currentUser()` → `User` via `SecurityUtils` + `UserRepository`. Used in controllers to resolve the authenticated user entity.
 
-**`SimpleTokenEncryptor`** (`@Component`) — Symmetric encryption of API tokens stored in `DataSourceConfig`. `encrypt(plain)` / `decrypt(encrypted)`.
+**`TokenEncryptor`** (interface) — `encrypt(String plain)` / `decrypt(String encrypted)`. Implemented by `AesGcmTokenEncryptor`.
+
+**`AesGcmTokenEncryptor`** (`@Component`) — AES-256-GCM encryption of API tokens stored in `DataSourceConfig`. 96-bit random IV per encrypt; IV prepended to ciphertext; GCM auth-tag verified on decrypt (tamper-evident). Key from `app.encryption.key` (env `ENCRYPTION_KEY`, 32 bytes base64), separate from the JWT secret. Transparently decrypts legacy base64 values (old `SimpleTokenEncryptor` format) so existing tokens survive until the migration runner re-encrypts them.
+
+**`TokenReEncryptionRunner`** (`ApplicationRunner`, conditional on `app.encryption.migrate-on-startup=true`) — One-time migration that re-encrypts legacy-format `api_token_encrypted` rows with AES-GCM. Idempotent: already-encrypted rows are skipped. Logs migrated/skipped/failed counts; never logs token values.
+
+**`RateLimitInterceptor`** (`HandlerInterceptor`) — Per-user request rate limiter using Bucket4j. Two token-bucket tiers: default (`app.rate-limit.default-rpm`, default 120/min) and AI endpoints under `/api/ai/` (`app.rate-limit.ai-rpm`, default 10/min). Buckets held in in-memory `ConcurrentHashMap<Long, Bucket>` (single-instance; Redis-backed Bucket4j is the multi-instance upgrade path). Exhausted bucket throws `RateLimitExceededException` → 429 with `Retry-After` header via `GlobalExceptionHandler`.
 
 ---
 
 ### 3.5 Exception Handling
 
 **`GlobalExceptionHandler`** (`@RestControllerAdvice`) — Maps exceptions to HTTP responses:
-- `NoSuchElementException` → 404
-- `IllegalArgumentException` → 400
-- `GitHubException` → 400
-- `ForbiddenException` → 403
+- `NoSuchElementException` / `NotFoundException` → 404
+- `IllegalArgumentException` / `BadRequestException` → 400
+- `BadCredentialsException` → 401
+- `AccessDeniedException` / `ForbiddenException` → 403
+- `ConflictException` → 409
+- `RateLimitExceededException` → 429 with `Retry-After` header
+- `ExternalServiceException` / `GitHubException` / `GitException` / `JiraException` → 502/500
 - `GeneralException` / uncaught `Exception` → 500
 
-**`ApiError`** — Response body: `timestamp`, `status`, `error`, `message`, `path`.
+**`ApiError`** — Response body: `timestamp`, `status`, `error`, `message`, `path`, `correlationId`.
 
-**Exception classes:** `ForbiddenException`, `GeneralException`, `GitException`, `GitHubException`, `JiraException`.
+**Exception classes:** `BadRequestException`, `ConflictException`, `ForbiddenException`, `GeneralException`, `GitException`, `GitHubException`, `JiraException`, `NotFoundException`, `RateLimitExceededException`.
 
 ---
 

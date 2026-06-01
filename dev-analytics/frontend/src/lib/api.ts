@@ -14,7 +14,10 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// On 401, attempt token refresh then retry
+// Single in-flight refresh promise — all concurrent 401s share one refresh call.
+let refreshPromise: Promise<string> | null = null;
+
+// On 401, attempt token refresh then retry. Concurrent 401s queue behind one refresh.
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
@@ -28,10 +31,20 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
       try {
-        const { data } = await axios.post('/api/auth/refresh', { refreshToken });
-        localStorage.setItem('access_token', data.accessToken);
-        localStorage.setItem('refresh_token', data.refreshToken);
-        original.headers.Authorization = `Bearer ${data.accessToken}`;
+        if (!refreshPromise) {
+          refreshPromise = axios
+            .post<{ accessToken: string; refreshToken: string }>('/api/auth/refresh', { refreshToken })
+            .then(({ data }) => {
+              localStorage.setItem('access_token', data.accessToken);
+              localStorage.setItem('refresh_token', data.refreshToken);
+              return data.accessToken;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
+        const newToken = await refreshPromise;
+        original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch {
         clearTokens();
