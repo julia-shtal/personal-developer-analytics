@@ -11,7 +11,7 @@ import com.juliashtal.devanalytics.issue.model.IssueSource;
 import com.juliashtal.devanalytics.issue.model.JiraSearchResponse;
 import com.juliashtal.devanalytics.jira.repository.JiraProjectRepository;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
-import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
+import com.juliashtal.devanalytics.security.TokenEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,7 +36,7 @@ public class JiraCollector {
     private final RestTemplate restTemplate;
     private final IssueRepository issueRepository;
     private final JiraProjectRepository jiraProjectRepository;
-    private final SimpleTokenEncryptor tokenEncryptor;
+    private final TokenEncryptor tokenEncryptor;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${jira.page-size:100}")

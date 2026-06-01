@@ -7,7 +7,7 @@ import com.juliashtal.devanalytics.jira.model.UserProjectRegistration;
 import com.juliashtal.devanalytics.jira.repository.JiraProjectRepository;
 import com.juliashtal.devanalytics.jira.repository.UserProjectRegistrationRepository;
 import com.juliashtal.devanalytics.jira.service.JiraProjectService;
-import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
+import com.juliashtal.devanalytics.security.TokenEncryptor;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,7 +36,7 @@ class JiraProjectServiceTest {
     UserProjectRegistrationRepository userProjectRegistrationRepository;
     @Mock UserRepository userRepository;
     @Mock RestTemplate restTemplate;
-    @Mock SimpleTokenEncryptor tokenEncryptor;
+    @Mock TokenEncryptor tokenEncryptor;
     @Mock ObjectMapper objectMapper;
 
     @InjectMocks
