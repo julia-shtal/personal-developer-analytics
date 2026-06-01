@@ -9,4 +9,6 @@ public class RegisterRequest {
     private String password;
     // optional — required for PR attribution in team-scoped GitHub repos
     private String githubLogin;
+    // optional — invite token from /register?invite=... URL
+    private String inviteToken;
 }

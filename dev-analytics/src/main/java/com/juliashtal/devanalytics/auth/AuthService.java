@@ -5,6 +5,8 @@ import com.juliashtal.devanalytics.auth.model.request.LoginRequest;
 import com.juliashtal.devanalytics.auth.model.RefreshToken;
 import com.juliashtal.devanalytics.auth.model.request.RegisterRequest;
 import com.juliashtal.devanalytics.auth.service.RefreshTokenService;
+import com.juliashtal.devanalytics.invite.InviteInfoDto;
+import com.juliashtal.devanalytics.invite.InviteService;
 import com.juliashtal.devanalytics.security.model.CustomUserDetails;
 import com.juliashtal.devanalytics.security.service.JwtService;
 import com.juliashtal.devanalytics.user.model.Role;
@@ -30,7 +32,9 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final InviteService inviteService;
 
+    @Transactional
     public void register(RegisterRequest request) {
         if (userRepository.findByUsername(request.getUsername()).isPresent()) {
             throw new IllegalArgumentException("Username already taken");
@@ -39,15 +43,26 @@ public class AuthService {
             throw new IllegalArgumentException("Email already taken");
         }
 
+        // Validate invite up front so we fail fast before creating the user
+        InviteInfoDto inviteInfo = null;
+        if (request.getInviteToken() != null && !request.getInviteToken().isBlank()) {
+            inviteInfo = inviteService.validateInvite(request.getInviteToken());
+        }
+
         User user = new User();
         user.setUsername(request.getUsername());
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-        user.setRole(Role.DEVELOPER);
+        user.setRole(inviteInfo != null ? Role.valueOf(inviteInfo.role()) : Role.DEVELOPER);
         user.setGithubLogin(request.getGithubLogin());
 
-        userRepository.save(user);
-        log.info("New user registered: username={}", request.getUsername());
+        User saved = userRepository.save(user);
+
+        if (inviteInfo != null) {
+            inviteService.redeemInvite(request.getInviteToken(), saved);
+        }
+
+        log.info("New user registered: username={}, viaInvite={}", request.getUsername(), inviteInfo != null);
     }
 
     public AuthResponse login(LoginRequest request) {
