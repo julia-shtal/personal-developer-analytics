@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.ai.model;
 
+import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -13,7 +14,9 @@ import java.time.LocalDate;
         name = "metric_summaries",
         indexes = {
                 @Index(name = "ix_metric_summaries_user_generated",
-                        columnList = "user_id, generated_at DESC")
+                        columnList = "user_id, generated_at DESC"),
+                @Index(name = "ix_metric_summaries_team_generated",
+                        columnList = "team_id, generated_at DESC")
         }
 )
 public class MetricSummaryEntity {
@@ -22,9 +25,15 @@ public class MetricSummaryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    /** Null for team-scoped summaries. */
+    @ManyToOne(optional = true, fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
+
+    /** Null for personal/repository-scoped summaries. */
+    @ManyToOne(optional = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_id")
+    private Team team;
 
     @Column(nullable = false)
     private LocalDate periodFrom;
@@ -40,9 +49,12 @@ public class MetricSummaryEntity {
     private String contextRepoName;
 
     @Column(columnDefinition = "text")
+    private String headline;
+
+    @Column(columnDefinition = "text")
     private String overview;
 
-    /** JSON-encoded list of insight strings. */
+    /** JSON-encoded list of InsightDto objects. */
     @Column(columnDefinition = "text")
     private String insights;
 
@@ -61,6 +73,6 @@ public class MetricSummaryEntity {
 
     @PrePersist
     public void prePersist() {
-        generatedAt = Instant.now();
+        if (generatedAt == null) generatedAt = Instant.now();
     }
 }

@@ -11,6 +11,16 @@ export const aiApi = {
   generateMemberSummary: (teamId: number, memberId: number, from: string, to: string): Promise<MetricsSummaryDto> =>
     api.get<MetricsSummaryDto>(`/ai/summary/teams/${teamId}/member/${memberId}`, { params: { from, to } }).then((r) => r.data),
 
+  latestSummary: (): Promise<MetricsSummaryDto | null> =>
+    api.get<MetricsSummaryDto>('/ai/summary/latest')
+      .then((r) => r.data ?? null)
+      .catch(() => null),
+
+  latestTeamSummary: (teamId: number): Promise<MetricsSummaryDto | null> =>
+    api.get<MetricsSummaryDto>(`/ai/summary/teams/${teamId}/latest`)
+      .then((r) => r.data ?? null)
+      .catch(() => null),
+
   startConversation: (summaryScope: string, summaryJson: string): Promise<ConversationDto> =>
     api.post<ConversationDto>('/ai/conversations', { summaryScope, summaryJson }).then((r) => r.data),
 

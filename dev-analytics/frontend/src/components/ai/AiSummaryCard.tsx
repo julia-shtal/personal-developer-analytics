@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Shield, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
 import { Chip } from '@/components/ui/Chip';
 import { ProseWithNumbers } from '@/components/ui/ProseWithNumbers';
@@ -58,6 +58,14 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
   const [copied, setCopied] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const { data: dbLatest } = useQuery({
+    queryKey: ['ai-summary-latest'],
+    queryFn: () => aiApi.latestSummary(),
+    staleTime: Infinity,
+    retry: false,
+  });
+
+  // Restore from in-memory cache when range changes
   useEffect(() => {
     const cached = qc.getQueryData<{ summary: MetricsSummaryDto; generatedAt: number; range: DateRange }>(cacheKey);
     if (cached) {
@@ -73,6 +81,17 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range.from, range.to]);
+
+  // Fall back to DB-persisted latest when no in-memory summary is present
+  useEffect(() => {
+    if (!summary && dbLatest) {
+      setSummary(dbLatest);
+      setGeneratedAt(dbLatest.generatedAt ? new Date(dbLatest.generatedAt) : null);
+      setGeneratedForRange({ from: dbLatest.from, to: dbLatest.to });
+      onSummaryGenerated?.(dbLatest);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbLatest]);
 
   const isOutdated =
     generatedForRange !== null &&

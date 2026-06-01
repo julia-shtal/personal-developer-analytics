@@ -15,6 +15,7 @@ export interface MetricsSummaryDto {
   recommendations: string[];
   rawModelOutput: string;
   modelName: string;
+  generatedAt?: string;
 }
 
 export interface ConversationDto {
