@@ -59,6 +59,16 @@ ai:
     num-predict: ${OLLAMA_NUM_PREDICT:1024}
     seed: ${OLLAMA_SEED:42}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-components: always
+      show-details: when-authorized
+
 server:
   port: 8080
 
