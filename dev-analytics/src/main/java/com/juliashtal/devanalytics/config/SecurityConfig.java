@@ -55,6 +55,7 @@ public class SecurityConfig {
                                 "/api/auth/logout",
                                 "/api/auth/forgot-password",
                                 "/api/auth/reset-password",
+                                "/api/auth/invite/**",
                                 "/api/users/*/avatar",   // avatar images served unauthenticated
                                 "/api/users/avatar/presets",
                                 "/actuator/health",

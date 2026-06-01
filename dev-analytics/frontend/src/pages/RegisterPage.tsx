@@ -1,26 +1,46 @@
-import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, type FormEvent } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Logo } from '@/components/brand/Logo';
 import { APP_VERSION } from '@/config/branding';
+import { adminApi } from '@/api/admin';
+import type { InviteInfoDto } from '@/api/admin';
 
 export function RegisterPage() {
   const { register } = useAuth();
   const { logo } = useTheme();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const inviteToken = searchParams.get('invite') ?? undefined;
+  const [inviteInfo, setInviteInfo] = useState<InviteInfoDto | null>(null);
+  const [inviteWarning, setInviteWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    adminApi.getInviteInfo(inviteToken)
+      .then((res) => {
+        setInviteInfo(res.data);
+        setEmail(res.data.email);
+      })
+      .catch(() => {
+        setInviteWarning('This invite link is invalid or has expired. You can still register normally.');
+      });
+  }, [inviteToken]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await register({ username, email, password });
+      await register({ username, email, password, inviteToken });
       navigate('/login');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -47,6 +67,30 @@ export function RegisterPage() {
           }}>
             Start tracking your metrics.
           </h1>
+
+          {inviteInfo && (
+            <div style={{
+              padding: '10px 14px', borderRadius: 6, marginBottom: 20,
+              background: 'color-mix(in oklab, var(--accent) 8%, var(--bg))',
+              border: '1px solid color-mix(in oklab, var(--accent) 25%, var(--line))',
+              fontSize: 13, color: 'var(--fg)',
+            }}>
+              You were invited to join
+              {inviteInfo.teamName ? <strong> {inviteInfo.teamName}</strong> : ' this workspace'}
+              {' '}as <strong>{inviteInfo.role.toLowerCase()}</strong>.
+            </div>
+          )}
+
+          {inviteWarning && (
+            <div style={{
+              padding: '10px 14px', borderRadius: 6, marginBottom: 20,
+              background: 'color-mix(in oklab, var(--amber) 8%, var(--bg))',
+              border: '1px solid color-mix(in oklab, var(--amber) 25%, var(--line))',
+              fontSize: 12, color: 'var(--amber)',
+            }}>
+              {inviteWarning}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="col gap-3" style={{ maxWidth: 400 }}>
             <div>

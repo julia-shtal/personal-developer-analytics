@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Navigate } from 'react-router-dom';
-import { Shield, Mail, Plus, Trash2 } from 'lucide-react';
+import { Shield, Mail, Plus, Trash2, Copy, Check } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Chip } from '@/components/ui/Chip';
 import { Modal } from '@/components/ui/Modal';
@@ -67,6 +67,13 @@ export function AdminPage() {
   const [searchQ, setSearchQ] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
 
+  // Invite modal state
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<Role>('DEVELOPER');
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
   const { data: users = [], isLoading } = useQuery<UserProfile[]>({
     queryKey: ['admin-users'],
     queryFn: () => api.get<UserProfile[]>('/admin/users').then((r) => r.data),
@@ -105,6 +112,33 @@ export function AdminPage() {
       setSearchQ('');
     },
   });
+
+  const inviteMutation = useMutation({
+    mutationFn: () => adminApi.createInvite(inviteEmail.trim(), inviteRole),
+    onSuccess: (res) => {
+      setInviteUrl(res.data.inviteUrl);
+      setInviteError(null);
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      setInviteError(err.response?.data?.message ?? 'Failed to create invite. Please try again.');
+    },
+  });
+
+  function handleCopyLink() {
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  function resetInviteModal() {
+    setInviteEmail('');
+    setInviteRole('DEVELOPER');
+    setInviteUrl(null);
+    setCopied(false);
+    setInviteError(null);
+  }
 
   const nonAdmins = searchResults.filter((u) => u.role !== 'ADMIN');
 
@@ -216,41 +250,96 @@ export function AdminPage() {
 
       <div style={{ height: 32 }} />
 
-      {/* Invite modal — TODO(admin-invites-backend): invite-by-email subsystem not yet implemented */}
+      {/* Invite modal */}
       <Modal
         open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
+        onClose={() => { setInviteOpen(false); resetInviteModal(); }}
         eyebrow="── admin"
         title="Invite people"
         width={540}
         footer={
           <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn btn-sm" onClick={() => setInviteOpen(false)}>cancel</button>
-            <button className="btn btn-sm btn-accent" onClick={() => setInviteOpen(false)} disabled>
-              <Mail width={12} height={12} />send invites
+            <button className="btn btn-sm" onClick={() => { setInviteOpen(false); resetInviteModal(); }}>
+              cancel
             </button>
+            {!inviteUrl ? (
+              <button
+                className="btn btn-sm btn-accent"
+                disabled={!inviteEmail.trim() || inviteMutation.isPending}
+                onClick={() => inviteMutation.mutate()}
+              >
+                <Mail width={12} height={12} />
+                {inviteMutation.isPending ? 'generating…' : 'generate link'}
+              </button>
+            ) : (
+              <button className="btn btn-sm btn-accent" onClick={handleCopyLink}>
+                {copied ? <Check width={12} height={12} /> : <Copy width={12} height={12} />}
+                {copied ? 'copied ✓' : 'copy link'}
+              </button>
+            )}
           </div>
         }
       >
         <div className="col gap-3">
-          <div className="card-quiet" style={{ padding: '12px 14px', borderRadius: 6 }}>
-            <div style={{ fontSize: 13, color: 'var(--amber)' }}>
-              ── Invite subsystem coming soon
-            </div>
-            <div className="t-label" style={{ marginTop: 4 }}>
-              Email invitations require a dedicated invite-token subsystem. This is a visual preview.
-            </div>
-          </div>
           <div>
-            <div className="t-eyebrow" style={{ marginBottom: 6 }}>emails</div>
-            <textarea
+            <div className="t-eyebrow" style={{ marginBottom: 6 }}>email</div>
+            <input
               className="input"
-              rows={4}
-              placeholder={'alice@team.dev\nbob@team.dev\n…'}
-              disabled
-              style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, resize: 'vertical', opacity: 0.5 }}
+              type="email"
+              placeholder="alice@team.dev"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              disabled={!!inviteUrl}
+              autoFocus
             />
           </div>
+          <div>
+            <div className="t-eyebrow" style={{ marginBottom: 8 }}>role</div>
+            <div className="row gap-2">
+              {(['DEVELOPER', 'MANAGER', 'ADMIN'] as Role[]).map((r) => (
+                <button
+                  key={r}
+                  className="btn btn-sm"
+                  disabled={!!inviteUrl}
+                  onClick={() => setInviteRole(r)}
+                  style={{
+                    borderColor: inviteRole === r ? 'var(--accent)' : undefined,
+                    color: inviteRole === r ? 'var(--accent)' : undefined,
+                  }}
+                >
+                  {r.toLowerCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+          {inviteUrl && (
+            <div>
+              <div className="t-eyebrow" style={{ marginBottom: 6 }}>invite link</div>
+              <div
+                style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11.5,
+                  padding: '10px 12px', borderRadius: 6,
+                  background: 'var(--bg-2)', border: '1px solid var(--line)',
+                  wordBreak: 'break-all', color: 'var(--fg)',
+                }}
+              >
+                {inviteUrl}
+              </div>
+              <div className="t-label" style={{ marginTop: 6, fontSize: 10.5 }}>
+                Share this link with the invitee. It expires in 7 days and is single-use.
+              </div>
+            </div>
+          )}
+          {inviteError && (
+            <p style={{
+              fontSize: 12, margin: 0, color: 'var(--coral)',
+              background: 'color-mix(in oklab, var(--coral) 10%, var(--bg))',
+              border: '1px solid color-mix(in oklab, var(--coral) 25%, var(--line))',
+              borderRadius: 6, padding: '8px 12px',
+            }}>
+              {inviteError}
+            </p>
+          )}
         </div>
       </Modal>
 
