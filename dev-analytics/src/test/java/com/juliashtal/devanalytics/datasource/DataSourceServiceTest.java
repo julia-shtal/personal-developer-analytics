@@ -13,7 +13,7 @@ import com.juliashtal.devanalytics.git.service.GitRepositoryService;
 import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
 import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
-import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
+import com.juliashtal.devanalytics.security.TokenEncryptor;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
@@ -38,7 +38,7 @@ class DataSourceServiceTest {
     @Mock DataSourceConfigRepository repository;
     @Mock UserRepository userRepository;
     @Mock TeamRepository teamRepository;
-    @Mock SimpleTokenEncryptor tokenEncryptor;
+    @Mock TokenEncryptor tokenEncryptor;
     @Mock DataSourceValidator validator;
     @Mock GitRepositoryService gitRepositoryService;
     @Mock GitHubRepositoryService gitHubRepositoryService;

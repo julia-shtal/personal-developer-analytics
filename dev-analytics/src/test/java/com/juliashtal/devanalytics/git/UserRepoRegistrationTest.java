@@ -34,7 +34,7 @@ class UserRepoRegistrationTest {
     @Mock com.juliashtal.devanalytics.datasource.service.DataSourceValidator validator;
     @Mock com.juliashtal.devanalytics.git.service.GitRepositoryService gitRepositoryService;
     @Mock com.juliashtal.devanalytics.github.service.GitHubRepositoryService gitHubRepositoryService;
-    @Mock com.juliashtal.devanalytics.security.SimpleTokenEncryptor tokenEncryptor;
+    @Mock com.juliashtal.devanalytics.security.TokenEncryptor tokenEncryptor;
 
     @InjectMocks DataSourceService dataSourceService;
 

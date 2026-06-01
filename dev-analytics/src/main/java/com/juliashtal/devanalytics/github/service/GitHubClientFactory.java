@@ -2,7 +2,7 @@ package com.juliashtal.devanalytics.github.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.exception.GitHubException;
-import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
+import com.juliashtal.devanalytics.security.TokenEncryptor;
 import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GitHubBuilder;
 import org.springframework.stereotype.Component;
@@ -10,9 +10,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class GitHubClientFactory {
 
-    private final SimpleTokenEncryptor tokenEncryptor;
+    private final TokenEncryptor tokenEncryptor;
 
-    public GitHubClientFactory(SimpleTokenEncryptor tokenEncryptor) {
+    public GitHubClientFactory(TokenEncryptor tokenEncryptor) {
         this.tokenEncryptor = tokenEncryptor;
     }
 
