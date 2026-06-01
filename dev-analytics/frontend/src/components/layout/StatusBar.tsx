@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 import { datasourcesApi } from '@/api/datasources';
 import { useTheme } from '@/context/ThemeContext';
 import { APP_VERSION } from '@/config/branding';
@@ -20,18 +20,15 @@ function timeSince(iso: string | undefined): string | null {
 export function StatusBar() {
   const { showStatusBar } = useTheme();
   const { pathname } = useLocation();
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  useEffect(() => {
-    const onOnline = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
-  }, []);
+  const { data: healthData } = useQuery({
+    queryKey: ['actuator-health'],
+    queryFn: () => axios.get('/actuator/health').then((r) => r.data as { status: string }),
+    staleTime: 1000 * 30,
+    retry: false,
+  });
+
+  const isOnline = healthData?.status === 'UP';
 
   const { data: sources } = useQuery({
     queryKey: ['datasources'],
