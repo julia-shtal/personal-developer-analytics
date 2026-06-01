@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Shield, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
 import { Chip } from '@/components/ui/Chip';
-import { Tooltip } from '@/components/ui/Tooltip';
 import { ProseWithNumbers } from '@/components/ui/ProseWithNumbers';
+import { FollowUpDrawer } from '@/components/ai/FollowUpDrawer';
 import { aiApi } from '@/api/ai';
 import { AI } from '@/components/icons';
 import { timeAgo } from '@/lib/dates';
@@ -56,6 +56,7 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [generatedForRange, setGeneratedForRange] = useState<DateRange | null>(null);
   const [copied, setCopied] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     const cached = qc.getQueryData<{ summary: MetricsSummaryDto; generatedAt: number; range: DateRange }>(cacheKey);
@@ -237,15 +238,24 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
               </>
             )}
             <span style={{ flex: 1 }} />
-            {/* TODO(ai-follow-up): Chat endpoint needed for "Ask follow-up". Deferred to future sprint. */}
-            <Tooltip content="Chat coming soon">
-              <button className="btn btn-sm btn-accent" style={{ opacity: 0.6, cursor: 'not-allowed' }} aria-label="Ask follow-up (coming soon)" disabled>
-                <Sparkles width={12} height={12} />
-                Ask follow-up
-              </button>
-            </Tooltip>
+            <button
+              className="btn btn-sm btn-accent"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Ask follow-up questions about this summary"
+            >
+              <Sparkles width={12} height={12} />
+              Ask follow-up
+            </button>
           </div>
         </>
+      )}
+
+      {summary && (
+        <FollowUpDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          summary={summary}
+        />
       )}
     </div>
   );

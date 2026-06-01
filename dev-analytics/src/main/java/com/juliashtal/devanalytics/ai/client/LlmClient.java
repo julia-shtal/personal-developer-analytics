@@ -1,5 +1,5 @@
 package com.juliashtal.devanalytics.ai.client;
 
 public interface LlmClient {
-    String complete(String model, String systemPrompt, String userPrompt);
+    String complete(String model, String systemPrompt, String userPrompt, boolean jsonMode);
 }

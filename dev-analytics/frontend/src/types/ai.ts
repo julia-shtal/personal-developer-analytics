@@ -16,3 +16,15 @@ export interface MetricsSummaryDto {
   rawModelOutput: string;
   modelName: string;
 }
+
+export interface ConversationDto {
+  id: number;
+  createdAt: string;
+}
+
+export interface MessageDto {
+  id: number;
+  role: 'USER' | 'ASSISTANT';
+  content: string;
+  createdAt: string;
+}
