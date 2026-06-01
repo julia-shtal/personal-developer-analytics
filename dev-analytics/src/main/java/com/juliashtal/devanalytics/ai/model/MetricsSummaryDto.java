@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -26,6 +27,7 @@ public class MetricsSummaryDto {
     private List<String> recommendations;
     private String rawModelOutput;
     private String modelName;
+    private Instant generatedAt;
 
     @Data
     @Builder
