@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import axios from 'axios';
 import { useQueryClient } from '@tanstack/react-query';
-import { clearTokens } from '@/lib/api';
+import { clearTokens, setAccessToken } from '@/lib/api';
 import api from '@/lib/api';
 import type { UserProfile, LoginRequest, RegisterRequest, AuthResponse } from '@/types';
 
@@ -22,16 +23,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // On mount: attempt a silent refresh via the httpOnly cookie.
+  // If the cookie is present and valid, this restores the session without any user action.
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsLoading(false);
-      return;
-    }
-    api.get<UserProfile>('/users/me')
+    axios
+      .post<AuthResponse>('/api/auth/refresh', null, { withCredentials: true })
+      .then(({ data }) => {
+        setAccessToken(data.accessToken);
+        return api.get<UserProfile>('/users/me');
+      })
       .then((r) => setUser(r.data))
-      .catch(() => clearTokens())
+      .catch(() => {
+        // No valid session — stay unauthenticated.
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -40,15 +44,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!data.accessToken) {
       throw new Error('No access token in response');
     }
-    // Clear any cached data from a previous user before setting the new tokens.
+    // Clear any cached data from a previous user before activating the new session.
     qc.clear();
-    localStorage.setItem('access_token', data.accessToken);
-    localStorage.setItem('refresh_token', data.refreshToken);
+    setAccessToken(data.accessToken);
+    // refresh_token is in the httpOnly cookie — no localStorage write needed.
     try {
       const profile = await api.get<UserProfile>('/users/me');
       setUser(profile.data);
     } catch (profileErr) {
-      // Login succeeded but profile fetch failed — still navigate, log the error
       console.error('[AuthContext] /users/me failed after login:', profileErr);
       throw profileErr;
     }
@@ -64,10 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (refreshToken) {
-      await api.post('/auth/logout', { refreshToken }).catch(() => {});
-    }
+    // POST /auth/logout — backend revokes tokens (JWT identifies the user) and clears the cookie.
+    await api.post('/auth/logout').catch(() => {});
     clearTokens();
     qc.clear();
     setUser(null);
