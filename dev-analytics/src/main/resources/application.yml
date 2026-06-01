@@ -49,6 +49,8 @@ app:
   rate-limit:
     default-rpm: ${RATE_LIMIT_DEFAULT_RPM:120}
     ai-rpm: ${RATE_LIMIT_AI_RPM:10}
+  cookie:
+    secure: ${COOKIE_SECURE:false}
 
 ai:
   ollama:
