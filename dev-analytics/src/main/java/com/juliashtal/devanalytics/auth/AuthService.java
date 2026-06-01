@@ -107,9 +107,7 @@ public class AuthService {
     }
 
     @Transactional
-    public void logout(String refreshTokenValue) {
-        RefreshToken token = refreshTokenService.verifyToken(refreshTokenValue);
-        Long userId = token.getUser().getId();
+    public void logout(Long userId) {
         refreshTokenService.revokeAllUserTokens(userId);
         userRepository.incrementTokenVersion(userId);
         log.info("User logged out: userId={}", userId);
