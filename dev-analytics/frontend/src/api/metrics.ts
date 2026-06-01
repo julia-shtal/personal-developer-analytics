@@ -67,6 +67,12 @@ export const metricsApi = {
 
   knowledgeSilo: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/knowledge-silo', { params: { from, to } }),
+
+  freshness: () =>
+    api.get<{ metricsComputedThrough?: string }>('/metrics/freshness'),
+
+  backfill: (from: string, to: string) =>
+    api.post('/metrics/backfill', null, { params: { from, to } }),
 };
 
 // ─── Team ─────────────────────────────────────────────────────────────────────
