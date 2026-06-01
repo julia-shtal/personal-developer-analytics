@@ -2,12 +2,15 @@ package com.juliashtal.devanalytics.ai;
 
 import com.juliashtal.devanalytics.ai.controller.AiSummaryController;
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
+import com.juliashtal.devanalytics.ai.service.MetricSummaryPersistenceService;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.service.JwtService;
+import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
+import com.juliashtal.devanalytics.user.service.TeamService;
 import com.juliashtal.devanalytics.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -32,6 +36,8 @@ class AiSummaryControllerTest {
 
     @Autowired MockMvc mvc;
     @MockBean MetricsAiService metricsAiService;
+    @MockBean MetricSummaryPersistenceService persistenceService;
+    @MockBean TeamService teamService;
     @MockBean CheckHelper checkHelper;
     @MockBean UserService userService;
     @MockBean JwtService jwtService;
@@ -84,5 +90,55 @@ class AiSummaryControllerTest {
                         .param("from", "2024-01-01")
                         .param("to", "2024-01-31"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser
+    void getLatestPersonalSummary_whenExists_returns200() throws Exception {
+        User user = new User();
+        user.setId(5L);
+        when(checkHelper.currentUser()).thenReturn(user);
+        when(persistenceService.findLatestPersonal(user)).thenReturn(Optional.of(stubbedSummary()));
+
+        mvc.perform(get("/api/ai/summary/latest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.headline").value("Consistent delivery week"));
+    }
+
+    @Test
+    @WithMockUser
+    void getLatestPersonalSummary_whenNone_returns204() throws Exception {
+        User user = new User();
+        user.setId(5L);
+        when(checkHelper.currentUser()).thenReturn(user);
+        when(persistenceService.findLatestPersonal(user)).thenReturn(Optional.empty());
+
+        mvc.perform(get("/api/ai/summary/latest"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void getLatestTeamSummary_whenExists_returns200() throws Exception {
+        Team team = new Team();
+        team.setId(TEAM_ID);
+        when(teamService.getById(TEAM_ID)).thenReturn(team);
+        when(persistenceService.findLatestTeam(team)).thenReturn(Optional.of(stubbedSummary()));
+
+        mvc.perform(get("/api/ai/summary/teams/{teamId}/latest", TEAM_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.headline").value("Consistent delivery week"));
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void getLatestTeamSummary_whenNone_returns204() throws Exception {
+        Team team = new Team();
+        team.setId(TEAM_ID);
+        when(teamService.getById(TEAM_ID)).thenReturn(team);
+        when(persistenceService.findLatestTeam(team)).thenReturn(Optional.empty());
+
+        mvc.perform(get("/api/ai/summary/teams/{teamId}/latest", TEAM_ID))
+                .andExpect(status().isNoContent());
     }
 }

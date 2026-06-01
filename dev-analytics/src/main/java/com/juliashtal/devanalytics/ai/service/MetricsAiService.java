@@ -72,6 +72,7 @@ public class MetricsAiService {
     private final UserService userService;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
+    private final MetricSummaryPersistenceService persistenceService;
 
     @Value("${ai.ollama.model:llama3}")
     private String model;
@@ -99,8 +100,10 @@ public class MetricsAiService {
 
         log.info("AI summary generated: userId={}, durationMs={}, responseLen={}", user.getId(), durationMs, raw.length());
 
-        return parseSummary(raw, from, to, repo != null ? "REPOSITORY" : "PERSONAL",
+        MetricsSummaryDto dto = parseSummary(raw, from, to, repo != null ? "REPOSITORY" : "PERSONAL",
                 repo != null ? repo.getName() : null);
+        persistenceService.savePersonal(user, dto);
+        return dto;
     }
 
     // -------------------------------------------------------------------------
@@ -131,7 +134,9 @@ public class MetricsAiService {
 
         log.info("Team AI summary generated: teamId={}, durationMs={}, responseLen={}", teamId, durationMs, raw.length());
 
-        return parseSummary(raw, from, to, "TEAM", team.getName());
+        MetricsSummaryDto dto = parseSummary(raw, from, to, "TEAM", team.getName());
+        persistenceService.saveTeam(team, dto);
+        return dto;
     }
 
     // -------------------------------------------------------------------------
@@ -165,7 +170,9 @@ public class MetricsAiService {
 
         log.info("Member AI summary generated: memberId={}, durationMs={}, responseLen={}", memberId, durationMs, raw.length());
 
-        return parseSummary(raw, from, to, "PERSONAL", member.getUsername());
+        MetricsSummaryDto dto = parseSummary(raw, from, to, "PERSONAL", member.getUsername());
+        persistenceService.savePersonal(member, dto);
+        return dto;
     }
 
     // -------------------------------------------------------------------------

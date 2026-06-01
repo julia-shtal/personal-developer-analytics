@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, RefreshCw, Shield, AlertCircle, Copy, Check } from 'lucide-react';
 import { Chip } from '@/components/ui/Chip';
 import { aiApi } from '@/api/ai';
@@ -94,15 +94,20 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
   const [generatedForRange, setGeneratedForRange] = useState<DateRange | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Restore from cache when teamId or range changes
+  const { data: dbLatest } = useQuery({
+    queryKey: ['ai-team-summary-latest', teamId],
+    queryFn: () => aiApi.latestTeamSummary(teamId),
+    staleTime: Infinity,
+    retry: false,
+  });
+
+  // Restore from in-memory cache when teamId or range changes
   useEffect(() => {
     const cached = qc.getQueryData<{ summary: MetricsSummaryDto; generatedAt: number; range: DateRange }>(cacheKey);
     if (cached) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSummary(cached.summary);
-       
       setGeneratedAt(new Date(cached.generatedAt));
-       
       setGeneratedForRange(cached.range);
       onSummaryGenerated?.(cached.summary);
     } else {
@@ -112,6 +117,17 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, range.from, range.to]);
+
+  // Fall back to DB-persisted latest when no in-memory summary is present
+  useEffect(() => {
+    if (!summary && dbLatest) {
+      setSummary(dbLatest);
+      setGeneratedAt(dbLatest.generatedAt ? new Date(dbLatest.generatedAt) : null);
+      setGeneratedForRange({ from: dbLatest.from, to: dbLatest.to });
+      onSummaryGenerated?.(dbLatest);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbLatest]);
 
   const isOutdated =
     generatedForRange !== null &&
