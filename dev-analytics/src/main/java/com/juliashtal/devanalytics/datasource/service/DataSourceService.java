@@ -25,7 +25,7 @@ import com.juliashtal.devanalytics.datasource.model.dto.UpdateDataSourceRequest;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.juliashtal.devanalytics.security.SecurityUtils;
-import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
+import com.juliashtal.devanalytics.security.TokenEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,7 +45,7 @@ public class DataSourceService {
     private final DataSourceConfigRepository repository;
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
-    private final SimpleTokenEncryptor tokenEncryptor;
+    private final TokenEncryptor tokenEncryptor;
     private final DataSourceValidator validator;
     private final GitRepositoryService gitRepositoryService;
     private final GitHubRepositoryService gitHubRepositoryService;

@@ -35,12 +35,20 @@ spring:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:3069dca7dcfb855b274fe98bab084cf4879927e3edcf440004ec76f029d560f5}
+    secret: ${JWT_SECRET:}
     access-expiration: 900000      # 15 minutes
     refresh-expiration: 604800000  # 7 days
   password-reset:
     expiration: 3600000            # 1 hour
   base-url: ${APP_BASE_URL:http://localhost:8080}
+  encryption:
+    # 32-byte AES-256 key, base64-encoded. Generate: openssl rand -base64 32
+    key: ${ENCRYPTION_KEY:}
+    # Set ENCRYPTION_MIGRATE=true once to re-encrypt legacy tokens, then revert
+    migrate-on-startup: ${ENCRYPTION_MIGRATE:false}
+  rate-limit:
+    default-rpm: ${RATE_LIMIT_DEFAULT_RPM:120}
+    ai-rpm: ${RATE_LIMIT_AI_RPM:10}
 
 ai:
   ollama:

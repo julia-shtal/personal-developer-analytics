@@ -139,6 +139,27 @@ public class GlobalExceptionHandler {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // 429 Too Many Requests
+    // ─────────────────────────────────────────────────────────────
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiError> handleRateLimit(
+            RateLimitExceededException ex, HttpServletRequest request) {
+        log.warn("Rate limit exceeded on {}", request.getRequestURI());
+        ApiError apiError = ApiError.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.TOO_MANY_REQUESTS.value())
+                .error("Too Many Requests")
+                .message(ex.getMessage())
+                .path(request.getRequestURI())
+                .correlationId(MDC.get("correlationId"))
+                .build();
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(apiError);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // 502 / 503 External service failures
     // ─────────────────────────────────────────────────────────────
 

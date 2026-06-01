@@ -8,7 +8,7 @@ import com.juliashtal.devanalytics.issue.model.IssueSource;
 import com.juliashtal.devanalytics.jira.service.JiraCollector;
 import com.juliashtal.devanalytics.jira.repository.JiraProjectRepository;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
-import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
+import com.juliashtal.devanalytics.security.TokenEncryptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,7 +34,7 @@ class IssueSourceDiscriminatorTest {
     @Mock RestTemplate restTemplate;
     @Mock IssueRepository issueRepository;
     @Mock JiraProjectRepository jiraProjectRepository;
-    @Mock SimpleTokenEncryptor tokenEncryptor;
+    @Mock TokenEncryptor tokenEncryptor;
     @Spy  ObjectMapper objectMapper;
 
     @InjectMocks JiraCollector jiraCollector;

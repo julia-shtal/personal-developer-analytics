@@ -18,7 +18,7 @@ import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.jira.model.UserProjectRegistration;
 import com.juliashtal.devanalytics.jira.model.dto.DiscoveredProjectDto;
 import com.juliashtal.devanalytics.jira.model.dto.JiraProjectResponseDto;
-import com.juliashtal.devanalytics.security.SimpleTokenEncryptor;
+import com.juliashtal.devanalytics.security.TokenEncryptor;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.Data;
@@ -45,7 +45,7 @@ import java.util.stream.Collectors;
 public class JiraProjectService {
 
     private final RestTemplate restTemplate;
-    private final SimpleTokenEncryptor tokenEncryptor;
+    private final TokenEncryptor tokenEncryptor;
     private final ObjectMapper objectMapper;
     private final JiraProjectRepository jiraProjectRepository;
     private final UserProjectRegistrationRepository userProjectRegistrationRepository;
