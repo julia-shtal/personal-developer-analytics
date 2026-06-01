@@ -60,4 +60,18 @@ public class AiSummaryController {
         User user = checkHelper.currentUser();
         return metricsAiService.generateTeamSummary(user, teamId, from, to);
     }
+
+    /**
+     * Per-member AI summary scoped to the team context. Only the team manager or an ADMIN may call this.
+     */
+    @GetMapping("/teams/{teamId}/member/{memberId}")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    public MetricsSummaryDto getMemberSummary(
+            @PathVariable Long teamId,
+            @PathVariable Long memberId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        User user = checkHelper.currentUser();
+        return metricsAiService.generateMemberSummary(user, teamId, memberId, from, to);
+    }
 }

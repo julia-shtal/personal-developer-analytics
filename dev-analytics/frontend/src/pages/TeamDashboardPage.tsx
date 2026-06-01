@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import type { ComponentType, CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ChevronDown, Mail, Sparkles, AlertCircle } from 'lucide-react';
+import { Users, ChevronDown, Mail, Sparkles, AlertCircle, Shield } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
 import { teamMetricsApi } from '@/api/metrics';
+import { aiApi } from '@/api/ai';
 import { KpiTile } from '@/components/ui/KpiTile';
 import { Chip } from '@/components/ui/Chip';
 import { Modal } from '@/components/ui/Modal';
@@ -11,12 +12,14 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { MetricBarChart } from '@/components/charts/MetricBarChart';
 import { MultiLineChart } from '@/components/charts/MultiLineChart';
-import { PageSpinner } from '@/components/ui/Spinner';
+import { PageSpinner, Spinner } from '@/components/ui/Spinner';
 import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
+import { ProseWithNumbers } from '@/components/ui/ProseWithNumbers';
 import { useDateRange } from '@/context/DateRangeContext';
 import { formatDate, timeAgo } from '@/lib/dates';
 import { Commits, PRMerged, IssuesClosed, LeadTime, Churn, Focus } from '@/components/icons';
 import type { Team, MemberSummaryDto } from '@/types';
+import type { MetricsSummaryDto } from '@/types/ai';
 
 function fmt(v: number | undefined, decimals = 1) {
   if (v == null || v === 0) return '—';
@@ -31,6 +34,79 @@ function fmtHours(v: number | undefined) {
 
 function fmtNumber(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+}
+
+const KIND_COLOR: Record<string, string> = {
+  positive: 'var(--emerald)',
+  risk: 'var(--coral)',
+  note: 'var(--amber)',
+};
+const KIND_CHIP: Record<string, 'emerald' | 'coral' | 'amber'> = {
+  positive: 'emerald',
+  risk: 'coral',
+  note: 'amber',
+};
+const KIND_SYM: Record<string, string> = { positive: '+', risk: '!', note: '~' };
+
+function MemberAiSummaryModal({ member, summary, onClose }: {
+  member: MemberSummaryDto;
+  summary: MetricsSummaryDto;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      eyebrow={`── AI summary · ${member.username}`}
+      title={summary.headline || `AI Summary — ${member.username}`}
+      width={760}
+    >
+      <div style={{ marginTop: 8 }}>
+        <div className="t-eyebrow" style={{ marginBottom: 6 }}>overview</div>
+        <ProseWithNumbers text={summary.overview} className="t-body" style={{ maxWidth: 700, lineHeight: 1.6 }} />
+      </div>
+
+      {summary.insights.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 8 }}>key insights</div>
+          <div className="col gap-2">
+            {summary.insights.map((insight, i) => (
+              <div key={i} className="row gap-3" style={{ alignItems: 'flex-start', padding: '4px 0' }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600,
+                  color: KIND_COLOR[insight.kind] ?? KIND_COLOR.note,
+                  width: 18, lineHeight: 1.45, flexShrink: 0,
+                }}>{KIND_SYM[insight.kind] ?? '~'}</span>
+                <ProseWithNumbers text={insight.text} className="t-body" style={{ margin: 0, lineHeight: 1.55, flex: 1 }} />
+                {insight.metric && <Chip color={KIND_CHIP[insight.kind] ?? 'amber'}>{insight.metric}</Chip>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {summary.recommendations.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 8 }}>recommendations</div>
+          <div className="col gap-2">
+            {summary.recommendations.map((rec, i) => (
+              <div key={i} className="row gap-3" style={{ alignItems: 'flex-start', padding: '4px 0' }}>
+                <span className="chip-dot" style={{ color: 'var(--violet)', marginTop: 7, flexShrink: 0 }} />
+                <ProseWithNumbers text={rec} className="t-body" style={{ margin: 0, lineHeight: 1.55 }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="row gap-2" style={{ marginTop: 18, paddingTop: 12, borderTop: '1px solid var(--line-2)', color: 'var(--fg-3)' }}>
+        <Shield width={12} height={12} />
+        <span className="t-label" style={{ fontSize: 10.5 }}>Generated locally from metrics only</span>
+        <span className="tick">·</span>
+        <span className="t-label" style={{ fontSize: 10.5 }}>{summary.modelName} via Ollama</span>
+      </div>
+    </Modal>
+  );
 }
 
 interface MemberDetailModalProps {
@@ -57,6 +133,26 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
     enabled: open,
   });
 
+  const [aiSummary, setAiSummary] = useState<MetricsSummaryDto | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [showAiSummary, setShowAiSummary] = useState(false);
+
+  async function fetchMemberAi() {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const result = await aiApi.generateMemberSummary(teamId, member.userId, from, to);
+      setAiSummary(result);
+      setShowAiSummary(true);
+    } catch (e) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setAiError(msg ?? 'Failed to generate AI summary');
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   const m = member.metrics;
   const churn = m.DAILY_CHURN_RATIO ?? 0;
 
@@ -70,6 +166,7 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
   ];
 
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -79,26 +176,36 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
       footer={
         <div className="row gap-2" style={{ justifyContent: 'space-between' }}>
           <span className="t-label">click any row to drill into other members</span>
-          <div className="row gap-2">
-            {member.email ? (
-              <a
-                href={`mailto:${member.email}?subject=Dev%20Analytics%20%7C%20Quick%20note`}
-                className="btn btn-sm"
-                aria-label={`Email ${member.username}`}
-                target="_blank"
-                rel="noreferrer"
+          <div className="col gap-2" style={{ alignItems: 'flex-end' }}>
+            <div className="row gap-2">
+              {member.email ? (
+                <a
+                  href={`mailto:${member.email}?subject=Dev%20Analytics%20%7C%20Quick%20note`}
+                  className="btn btn-sm"
+                  aria-label={`Email ${member.username}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Mail width={12} height={12} />message
+                </a>
+              ) : (
+                <button className="btn btn-sm" disabled aria-label="Message member (no email on file)">
+                  <Mail width={12} height={12} />message
+                </button>
+              )}
+              <button
+                className="btn btn-sm btn-accent"
+                onClick={fetchMemberAi}
+                disabled={aiLoading}
+                aria-label={`Ask AI about ${member.username}`}
               >
-                <Mail width={12} height={12} />message
-              </a>
-            ) : (
-              <button className="btn btn-sm" disabled aria-label="Message member (no email on file)">
-                <Mail width={12} height={12} />message
+                {aiLoading ? <Spinner size="sm" /> : <Sparkles width={12} height={12} />}
+                {aiLoading ? 'Generating…' : `ask AI about ${member.username}`}
               </button>
+            </div>
+            {aiError && (
+              <span style={{ fontSize: 11, color: 'var(--coral-strong)' }}>{aiError}</span>
             )}
-            {/* TODO(ai-member-summary): member-scoped AI endpoint needed — deferred to future sprint */}
-            <button className="btn btn-sm btn-accent" onClick={() => alert('Member-scoped AI summary coming soon')} aria-label="Ask AI about this member">
-              <Sparkles width={12} height={12} />ask AI about {member.username}
-            </button>
           </div>
         </div>
       }
@@ -171,6 +278,16 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
         )}
       </div>
     </Modal>
+
+    {/* Member AI summary modal */}
+    {showAiSummary && aiSummary && (
+      <MemberAiSummaryModal
+        member={member}
+        summary={aiSummary}
+        onClose={() => setShowAiSummary(false)}
+      />
+    )}
+    </>
   );
 }
 
