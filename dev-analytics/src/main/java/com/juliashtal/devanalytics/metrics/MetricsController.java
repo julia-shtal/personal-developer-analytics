@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics;
 
+import com.juliashtal.devanalytics.exception.BadRequestException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.model.*;
@@ -12,6 +13,7 @@ import com.juliashtal.devanalytics.user.service.TeamService;
 import com.juliashtal.devanalytics.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,6 +35,7 @@ public class MetricsController {
     private final TeamService teamService;
     private final UserService userService;
     private final CheckHelper checkHelper;
+    private final MetricSnapshotRepository metricSnapshotRepository;
 
     // =========================================================================
     // Personal endpoints — team IS NULL snapshots only
@@ -352,6 +355,39 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         return getMemberDailySeries(teamId, memberId, DAILY_CHURN_RATIO, from, to);
+    }
+
+    // =========================================================================
+    // Backfill + freshness
+    // =========================================================================
+
+    /**
+     * Manually trigger a personal metrics backfill for an explicit date range.
+     * Self-scoped: always computes for the authenticated user only.
+     * Useful after connecting a new data source and wanting historical metrics.
+     */
+    @PostMapping("/backfill")
+    public ResponseEntity<Void> backfill(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        if (from.isAfter(to)) throw new BadRequestException("'from' must not be after 'to'");
+        if (to.isAfter(LocalDate.now().minusDays(1))) throw new BadRequestException("Cannot backfill future dates");
+        User user = checkHelper.currentUser();
+        metricsService.calculateDailyMetrics(user.getId(), from, to);
+        return ResponseEntity.accepted().build();
+    }
+
+    /**
+     * Returns the latest date for which personal metrics have been computed.
+     * Used by the dashboard to show a "metrics current through {date}" freshness indicator.
+     */
+    @GetMapping("/freshness")
+    public ResponseEntity<Map<String, String>> getFreshness() {
+        User user = checkHelper.currentUser();
+        return metricSnapshotRepository.findMaxPersonalDate(user.getId())
+                .map(date -> ResponseEntity.ok(Map.of("metricsComputedThrough", date.toString())))
+                .orElse(ResponseEntity.ok(Map.of()));
     }
 
     // =========================================================================
