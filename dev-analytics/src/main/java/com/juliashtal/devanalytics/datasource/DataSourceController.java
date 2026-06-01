@@ -1,10 +1,12 @@
 package com.juliashtal.devanalytics.datasource;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.datasource.model.SyncJobEntity;
 import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
 import com.juliashtal.devanalytics.datasource.model.dto.DataSourceResponseDto;
 import com.juliashtal.devanalytics.datasource.model.dto.SyncStatusResponse;
 import com.juliashtal.devanalytics.datasource.model.dto.UpdateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.repository.SyncJobRepository;
 import com.juliashtal.devanalytics.datasource.service.AsyncDataSourceCollectService;
 import com.juliashtal.devanalytics.datasource.service.DataSourceService;
 import com.juliashtal.devanalytics.datasource.service.SyncJobTracker;
@@ -31,6 +33,7 @@ public class DataSourceController {
     private final DataSourceService dataSourceService;
     private final AsyncDataSourceCollectService asyncCollectService;
     private final SyncJobTracker syncJobTracker;
+    private final SyncJobRepository syncJobRepository;
 
     @PostMapping
     public ResponseEntity<DataSourceResponseDto> create(@RequestBody @Valid CreateDataSourceRequest request) {
@@ -81,7 +84,8 @@ public class DataSourceController {
 
     /**
      * Live status of the most recent collection job for one data source.
-     * Returns 404 when no job has run since the last server restart.
+     * Falls back to the persisted DB record when the in-memory entry is gone
+     * (e.g. after a restart, or once the 1-hour in-memory cleanup ran).
      */
     @GetMapping("/{id}/collect/status")
     public ResponseEntity<SyncStatusResponse> collectStatus(@PathVariable Long id) {
@@ -89,6 +93,8 @@ public class DataSourceController {
         dataSourceService.getForUser(userId, id);
         return syncJobTracker.getState(id)
                 .map(state -> ResponseEntity.ok(buildResponse(state)))
+                .or(() -> syncJobRepository.findTopByDataSourceIdOrderByStartedAtDesc(id)
+                        .map(entity -> ResponseEntity.ok(buildResponseFromEntity(entity))))
                 .orElse(ResponseEntity.notFound().<SyncStatusResponse>build());
     }
 
@@ -120,8 +126,29 @@ public class DataSourceController {
     }
 
     // -------------------------------------------------------------------------
-    // Helper
+    // Helpers
     // -------------------------------------------------------------------------
+
+    /** Builds a terminal response from a persisted DB record (post-restart fallback). */
+    private SyncStatusResponse buildResponseFromEntity(SyncJobEntity entity) {
+        long elapsed = entity.getCompletedAt() != null
+                ? Duration.between(entity.getStartedAt(), entity.getCompletedAt()).getSeconds()
+                : Duration.between(entity.getStartedAt(), Instant.now()).getSeconds();
+        String result = switch (entity.getStatus()) {
+            case INTERRUPTED -> "Job was interrupted by a server restart";
+            case FAILED -> null;
+            default -> entity.getResult();
+        };
+        String error = entity.getStatus() == com.juliashtal.devanalytics.datasource.model.SyncJobStatus.FAILED
+                ? entity.getError() : null;
+        return new SyncStatusResponse(
+                false, 0, 1,
+                entity.getPhase() != null ? entity.getPhase() : entity.getStatus().name().toLowerCase(),
+                0, -1,
+                entity.getTotalProcessed() != null ? entity.getTotalProcessed() : 0,
+                elapsed, null, null, List.of(), result, error
+        );
+    }
 
     private SyncStatusResponse buildResponse(SyncJobTracker.JobState state) {
         long elapsed = Duration.between(state.startedAt, Instant.now()).getSeconds();

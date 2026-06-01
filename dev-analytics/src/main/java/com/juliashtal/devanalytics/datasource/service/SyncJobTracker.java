@@ -1,5 +1,9 @@
 package com.juliashtal.devanalytics.datasource.service;
 
+import com.juliashtal.devanalytics.datasource.model.SyncJobEntity;
+import com.juliashtal.devanalytics.datasource.model.SyncJobStatus;
+import com.juliashtal.devanalytics.datasource.repository.SyncJobRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -16,9 +20,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * In-memory registry of active and recently-completed collection jobs.
  * Thread-safe: multiple collectors may update the same job concurrently.
+ * Each state change is also persisted to {@code sync_jobs} so the record
+ * survives a restart and the status endpoint can fall back to the DB.
  */
 @Component
+@RequiredArgsConstructor
 public class SyncJobTracker {
+
+    private final SyncJobRepository syncJobRepository;
 
     /** Summary of a completed phase, stored for the final result display. */
     public record PhaseSummary(String name, int itemsSaved, long durationSeconds) {}
@@ -26,6 +35,8 @@ public class SyncJobTracker {
     public static class JobState {
         public volatile boolean running = true;
         public final Instant startedAt = Instant.now();
+        /** DB primary key of the persisted sync_jobs row — set by {@link SyncJobTracker#start}. */
+        public volatile Long syncJobId;
 
         // Phase tracking
         public volatile int phaseNumber = 0;
@@ -53,10 +64,21 @@ public class SyncJobTracker {
 
     private final ConcurrentHashMap<Long, JobState> jobs = new ConcurrentHashMap<>();
 
-    /** Called once when an async sync job begins. */
+    /** Called once when an async sync job begins. Also creates the persisted DB record. */
     public JobState start(Long dataSourceId) {
         JobState state = new JobState();
         jobs.put(dataSourceId, state);
+        try {
+            SyncJobEntity entity = new SyncJobEntity();
+            entity.setDataSourceId(dataSourceId);
+            entity.setStatus(SyncJobStatus.RUNNING);
+            entity.setPhase("starting");
+            entity.setStartedAt(state.startedAt);
+            SyncJobEntity saved = syncJobRepository.save(entity);
+            state.syncJobId = saved.getId();
+        } catch (Exception ignored) {
+            // DB write failure must never block the actual sync job
+        }
         return state;
     }
 
@@ -80,6 +102,11 @@ public class SyncJobTracker {
         state.phaseTotal = phaseTotalEstimate;
         state.phaseStartedAt = Instant.now();
         state.phaseProcessed.set(0);
+        if (state.syncJobId != null) {
+            try {
+                syncJobRepository.updatePhase(state.syncJobId, phaseName);
+            } catch (Exception ignored) {}
+        }
     }
 
     /** Record that {@code delta} more items have been saved in the current phase. */
@@ -129,6 +156,13 @@ public class SyncJobTracker {
             state.running = false;
             state.completedAt = Instant.now();
             state.result = result;
+            if (state.syncJobId != null) {
+                try {
+                    syncJobRepository.markCompleted(
+                            state.syncJobId, SyncJobStatus.COMPLETED, state.completedAt,
+                            result, state.totalProcessed.get());
+                } catch (Exception ignored) {}
+            }
         }
     }
 
@@ -138,6 +172,12 @@ public class SyncJobTracker {
             state.running = false;
             state.completedAt = Instant.now();
             state.error = error;
+            if (state.syncJobId != null) {
+                try {
+                    syncJobRepository.markFailed(
+                            state.syncJobId, SyncJobStatus.FAILED, state.completedAt, error);
+                } catch (Exception ignored) {}
+            }
         }
     }
 

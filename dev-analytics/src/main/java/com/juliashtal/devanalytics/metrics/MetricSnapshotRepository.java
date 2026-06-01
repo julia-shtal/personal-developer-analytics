@@ -112,6 +112,17 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             @Param("to") LocalDate to);
 
     // -------------------------------------------------------------------------
+    // Freshness / backfill helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Latest personal (team IS NULL) snapshot date for a user.
+     * Used by the nightly scheduler for gap detection.
+     */
+    @Query("SELECT MAX(s.date) FROM MetricSnapshot s WHERE s.user.id = :userId AND s.team IS NULL")
+    Optional<LocalDate> findMaxPersonalDate(@Param("userId") Long userId);
+
+    // -------------------------------------------------------------------------
     // Upsert guard — includes team_id so personal and team snapshots never clash
     // -------------------------------------------------------------------------
 

@@ -147,6 +147,13 @@ export function DashboardPage() {
     queryFn: () => metricsApi.knowledgeSilo(from, to).then((r) => r.data),
   });
 
+  const freshness = useQuery({
+    queryKey: ['metrics-freshness'],
+    queryFn: () => metricsApi.freshness().then((r) => r.data),
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+  });
+
   const recalculateMutation = useMutation({
     mutationFn: () => metricsApi.calculate(from, to),
     onSuccess: () => qc.invalidateQueries({ queryKey: [] }),
@@ -181,8 +188,11 @@ export function DashboardPage() {
 
       {/* ── Hero ──────────────────────────────────────────── */}
       <div style={{ marginBottom: 36 }}>
-        <div className="t-eyebrow" style={{ marginBottom: 14 }}>
-          ── Personal · {formatDate(from)} → {formatDate(to)}
+        <div className="row" style={{ marginBottom: 14, gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="t-eyebrow">── Personal · {formatDate(from)} → {formatDate(to)}</div>
+          {freshness.data?.metricsComputedThrough && (
+            <Chip color="amber">metrics through {freshness.data.metricsComputedThrough}</Chip>
+          )}
         </div>
         <h1 className="t-h1" style={{ textAlign: 'justify' }}>
           <em>{totalCommits} commits</em>, <em>{totalPrsMerged} PRs merged</em>,
