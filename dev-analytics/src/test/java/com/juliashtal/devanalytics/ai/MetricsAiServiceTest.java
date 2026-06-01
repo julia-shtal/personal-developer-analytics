@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.juliashtal.devanalytics.ai.client.LlmClient;
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
+import com.juliashtal.devanalytics.ai.service.MetricSummaryPersistenceService;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
@@ -33,6 +34,7 @@ class MetricsAiServiceTest {
     @Mock TeamService teamService;
     @Mock UserService userService;
     @Mock LlmClient llmClient;
+    @Mock MetricSummaryPersistenceService persistenceService;
 
     MetricsAiService service;
 
@@ -45,7 +47,7 @@ class MetricsAiServiceTest {
     @BeforeEach
     void setUp() {
         service = new MetricsAiService(metricSnapshotService, repoService, teamService, userService, llmClient,
-                new ObjectMapper().registerModule(new JavaTimeModule()));
+                new ObjectMapper().registerModule(new JavaTimeModule()), persistenceService);
         ReflectionTestUtils.setField(service, "model", MODEL);
 
         // No metric snapshots — context JSON has an empty metrics map.
