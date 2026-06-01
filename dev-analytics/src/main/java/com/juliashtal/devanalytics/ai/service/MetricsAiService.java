@@ -17,6 +17,7 @@ import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.service.TeamService;
+import com.juliashtal.devanalytics.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -68,6 +69,7 @@ public class MetricsAiService {
     private final MetricSnapshotService metricSnapshotService;
     private final RepoService repoService;
     private final TeamService teamService;
+    private final UserService userService;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
 
@@ -92,7 +94,7 @@ public class MetricsAiService {
                 user.getId(), repo != null ? "REPOSITORY" : "PERSONAL", from, to, model, userPrompt.length());
 
         long startedAt = System.currentTimeMillis();
-        String raw = llmClient.complete(model, systemPrompt, userPrompt);
+        String raw = llmClient.complete(model, systemPrompt, userPrompt, true);
         long durationMs = System.currentTimeMillis() - startedAt;
 
         log.info("AI summary generated: userId={}, durationMs={}, responseLen={}", user.getId(), durationMs, raw.length());
@@ -124,12 +126,46 @@ public class MetricsAiService {
                 teamId, team.getName(), team.getMembers().size(), from, to, model);
 
         long startedAt = System.currentTimeMillis();
-        String raw = llmClient.complete(model, systemPrompt, userPrompt);
+        String raw = llmClient.complete(model, systemPrompt, userPrompt, true);
         long durationMs = System.currentTimeMillis() - startedAt;
 
         log.info("Team AI summary generated: teamId={}, durationMs={}, responseLen={}", teamId, durationMs, raw.length());
 
         return parseSummary(raw, from, to, "TEAM", team.getName());
+    }
+
+    // -------------------------------------------------------------------------
+    // Member summary (manager-scoped, cached per member+period)
+    // -------------------------------------------------------------------------
+
+    @Cacheable(value = "ai_summaries", key = "{'member', #teamId, #memberId, #from, #to}")
+    public MetricsSummaryDto generateMemberSummary(User requestingUser, Long teamId, Long memberId,
+                                                    LocalDate from, LocalDate to) {
+        Team team = teamService.getById(teamId);
+
+        if (requestingUser.getRole() != Role.ADMIN
+                && !team.getManager().getId().equals(requestingUser.getId())) {
+            throw new ForbiddenException("Only the team manager or an admin can generate member AI summaries");
+        }
+
+        User member = userService.getById(memberId);
+
+        AggregatedMetricsContext ctx = buildMetricsContext(member, from, to, null);
+        String ctxJson = toJson(ctx);
+
+        String systemPrompt = buildSystemPrompt();
+        String userPrompt = buildUserPrompt(from, to, null, ctxJson);
+
+        log.info("Generating member AI summary: requesterId={}, teamId={}, memberId={}, from={}, to={}, model={}",
+                requestingUser.getId(), teamId, memberId, from, to, model);
+
+        long startedAt = System.currentTimeMillis();
+        String raw = llmClient.complete(model, systemPrompt, userPrompt, true);
+        long durationMs = System.currentTimeMillis() - startedAt;
+
+        log.info("Member AI summary generated: memberId={}, durationMs={}, responseLen={}", memberId, durationMs, raw.length());
+
+        return parseSummary(raw, from, to, "PERSONAL", member.getUsername());
     }
 
     // -------------------------------------------------------------------------

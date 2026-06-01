@@ -36,13 +36,13 @@ public class OllamaLlmClient implements LlmClient {
     }
 
     @Override
-    public String complete(String model, String systemPrompt, String userPrompt) {
+    public String complete(String model, String systemPrompt, String userPrompt, boolean jsonMode) {
         OllamaRequest req = new OllamaRequest();
         req.setModel(model);
         req.setSystem(systemPrompt);
         req.setPrompt(userPrompt);
         req.setStream(false);
-        req.setFormat("json");
+        if (jsonMode) req.setFormat("json");
         req.setOptions(Map.of("num_predict", numPredict, "temperature", 0.0, "seed", seed));
 
         log.debug("Sending request to Ollama: model={}, promptLength={}, numPredict={}, seed={}", model, userPrompt.length(), numPredict, seed);

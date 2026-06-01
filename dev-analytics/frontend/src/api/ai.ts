@@ -1,5 +1,5 @@
 import api from '@/lib/api';
-import type { MetricsSummaryDto } from '@/types/ai';
+import type { ConversationDto, MessageDto, MetricsSummaryDto } from '@/types/ai';
 
 export const aiApi = {
   generateSummary: (from: string, to: string, repoId?: number): Promise<MetricsSummaryDto> =>
@@ -7,4 +7,16 @@ export const aiApi = {
 
   generateTeamSummary: (teamId: number, from: string, to: string): Promise<MetricsSummaryDto> =>
     api.get<MetricsSummaryDto>(`/ai/summary/teams/${teamId}`, { params: { from, to } }).then((r) => r.data),
+
+  generateMemberSummary: (teamId: number, memberId: number, from: string, to: string): Promise<MetricsSummaryDto> =>
+    api.get<MetricsSummaryDto>(`/ai/summary/teams/${teamId}/member/${memberId}`, { params: { from, to } }).then((r) => r.data),
+
+  startConversation: (summaryScope: string, summaryJson: string): Promise<ConversationDto> =>
+    api.post<ConversationDto>('/ai/conversations', { summaryScope, summaryJson }).then((r) => r.data),
+
+  sendMessage: (conversationId: number, content: string): Promise<MessageDto> =>
+    api.post<MessageDto>(`/ai/conversations/${conversationId}/messages`, { content }).then((r) => r.data),
+
+  getMessages: (conversationId: number): Promise<MessageDto[]> =>
+    api.get<MessageDto[]>(`/ai/conversations/${conversationId}/messages`).then((r) => r.data),
 };

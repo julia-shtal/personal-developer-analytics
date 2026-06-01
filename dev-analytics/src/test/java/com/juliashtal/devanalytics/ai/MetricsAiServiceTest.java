@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.service.TeamService;
+import com.juliashtal.devanalytics.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +22,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,6 +31,7 @@ class MetricsAiServiceTest {
     @Mock MetricSnapshotService metricSnapshotService;
     @Mock RepoService repoService;
     @Mock TeamService teamService;
+    @Mock UserService userService;
     @Mock LlmClient llmClient;
 
     MetricsAiService service;
@@ -41,7 +44,7 @@ class MetricsAiServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MetricsAiService(metricSnapshotService, repoService, teamService, llmClient,
+        service = new MetricsAiService(metricSnapshotService, repoService, teamService, userService, llmClient,
                 new ObjectMapper().registerModule(new JavaTimeModule()));
         ReflectionTestUtils.setField(service, "model", MODEL);
 
@@ -65,7 +68,7 @@ class MetricsAiServiceTest {
                   "recommendations": ["Review large PRs sooner", "Add integration tests"]
                 }
                 """;
-        when(llmClient.complete(any(), any(), any())).thenReturn(json);
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
 
         MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
 
@@ -92,7 +95,7 @@ class MetricsAiServiceTest {
                   "recommendations": ["Keep it up"]
                 }
                 """;
-        when(llmClient.complete(any(), any(), any())).thenReturn(json);
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
 
         MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
 
@@ -116,7 +119,7 @@ class MetricsAiServiceTest {
                   "recommendations": []
                 }
                 ```""";
-        when(llmClient.complete(any(), any(), any())).thenReturn(json);
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
 
         MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
 
@@ -126,7 +129,7 @@ class MetricsAiServiceTest {
 
     @Test
     void returnsRawOutputAsFallbackOnInvalidJson() {
-        when(llmClient.complete(any(), any(), any())).thenReturn("not valid json at all");
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn("not valid json at all");
 
         MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
 
