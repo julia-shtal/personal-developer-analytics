@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @Controller
 public class SpaFallbackController {
 
-    @RequestMapping(value = {"/", "/login", "/register", "/dashboard", "/team", "/datasources", "/settings"})
+    @RequestMapping(value = {"/", "/login", "/register", "/dashboard", "/team", "/datasources", "/settings", "/messages"})
     public String spa(HttpServletRequest request) {
         return "forward:/index.html";
     }
