@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.user.service;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
 import com.juliashtal.devanalytics.exception.ConflictException;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
+import com.juliashtal.devanalytics.notification.NotificationDispatchService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.request.TeamConfigRequest;
@@ -29,6 +30,7 @@ public class TeamService {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final DataSourceConfigRepository dataSourceConfigRepository;
+    private final NotificationDispatchService notificationDispatch;
 
     @Transactional
     public TeamDto createTeam(String name) {
@@ -69,6 +71,7 @@ public class TeamService {
         team.getMembers().add(member);
         TeamDto result = TeamDto.from(teamRepository.save(team));
         log.info("Member userId={} added to teamId={}", userId, teamId);
+        notificationDispatch.sendNewTeamMemberIfEnabled(member, team.getName());
         return result;
     }
 

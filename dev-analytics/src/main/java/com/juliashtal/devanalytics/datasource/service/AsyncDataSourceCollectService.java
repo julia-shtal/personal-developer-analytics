@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.datasource.service;
 
+import com.juliashtal.devanalytics.notification.NotificationDispatchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -16,6 +17,7 @@ public class AsyncDataSourceCollectService {
 
     private final DataSourceCollectService collectService;
     private final SyncJobTracker tracker;
+    private final NotificationDispatchService notificationDispatch;
 
     @Async("collectTaskExecutor")
     public void collectAsync(Long userId, Long dataSourceId) {
@@ -27,6 +29,7 @@ public class AsyncDataSourceCollectService {
         } catch (Exception e) {
             tracker.fail(dataSourceId, e.getMessage());
             log.error("Async collection failed for dataSource={}: {}", dataSourceId, e.getMessage(), e);
+            notificationDispatch.sendSyncFailureIfEnabled(userId, dataSourceId);
         }
     }
 }

@@ -154,6 +154,13 @@ export function DashboardPage() {
     retry: false,
   });
 
+  const anomalies = useQuery({
+    queryKey: ['metric-anomalies', from, to],
+    queryFn: () => metricsApi.anomalies(from, to).then((r) => r.data),
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+  });
+
   const recalculateMutation = useMutation({
     mutationFn: () => metricsApi.calculate(from, to),
     onSuccess: () => qc.invalidateQueries({ queryKey: [] }),
@@ -182,6 +189,24 @@ export function DashboardPage() {
 
   // issueLeadTime kept for future use — data is fetched but not yet shown in KPI tiles
   void issueLeadTime;
+
+  const METRIC_LABELS: Partial<Record<string, string>> = {
+    DAILY_COMMITS_COUNT: 'Daily Commits',
+    DAILY_PR_CREATED: 'PRs Created',
+    DAILY_PR_MERGED: 'Merged PRs',
+    DAILY_ISSUES_CREATED: 'Issues Created',
+    DAILY_ISSUES_CLOSED: 'Issues Closed',
+    DAILY_CHURN_RATIO: 'Churn Ratio',
+    PR_LEAD_TIME_HOURS_MEDIAN: 'PR Lead Time',
+    PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN: 'First Commit to Merge',
+    ISSUE_LEAD_TIME_HOURS_MEDIAN: 'Issue Lead Time',
+    REVIEW_RESPONSE_TIME_HOURS_MEDIAN: 'Review Response Time',
+    FOCUS_RATIO_DAYS_TASKS: 'Focus Ratio',
+  };
+
+  const anomalousMetricNames = Object.entries(anomalies.data ?? {})
+    .filter(([, v]) => v)
+    .map(([k]) => METRIC_LABELS[k] ?? k);
 
   return (
     <div className="page fade-in">
@@ -236,6 +261,7 @@ export function DashboardPage() {
             accent="violet"
             icon={<Commits />}
             tooltip="Number of Git commits authored in the selected period."
+            anomaly={anomalies.data?.DAILY_COMMITS_COUNT}
           />
           <KpiTile
             label="prs merged"
@@ -244,6 +270,7 @@ export function DashboardPage() {
             accent="violet"
             icon={<PRMerged />}
             tooltip="Pull requests merged to a target branch in the selected period."
+            anomaly={anomalies.data?.DAILY_PR_MERGED}
           />
           <KpiTile
             label="pr lead time"
@@ -252,6 +279,7 @@ export function DashboardPage() {
             accent="cyan"
             icon={<LeadTime />}
             tooltip="Median time from when a PR is opened to when it is merged."
+            anomaly={anomalies.data?.PR_LEAD_TIME_HOURS_MEDIAN}
           />
           <KpiTile
             label="focus ratio"
@@ -260,6 +288,7 @@ export function DashboardPage() {
             accent="emerald"
             icon={<Focus />}
             tooltip="Fraction of Mon–Fri working days with at least one commit."
+            anomaly={anomalies.data?.FOCUS_RATIO_DAYS_TASKS}
           />
         </div>
         <div className="divider" />
@@ -271,6 +300,7 @@ export function DashboardPage() {
             accent="violet"
             icon={<PRCreated />}
             tooltip="Pull requests opened by you in the selected period."
+            anomaly={anomalies.data?.DAILY_PR_CREATED}
           />
           <KpiTile
             label="issues closed"
@@ -279,6 +309,7 @@ export function DashboardPage() {
             accent="emerald"
             icon={<IssuesClosed />}
             tooltip="Issues resolved or closed by you in the selected period."
+            anomaly={anomalies.data?.DAILY_ISSUES_CLOSED}
           />
           <KpiTile
             label="review response"
@@ -287,6 +318,7 @@ export function DashboardPage() {
             accent="cyan"
             icon={<Review />}
             tooltip="Median time from PR open to receiving the first review comment or approval."
+            anomaly={anomalies.data?.REVIEW_RESPONSE_TIME_HOURS_MEDIAN}
           />
           <KpiTile
             label="1st commit → merge"
@@ -295,6 +327,7 @@ export function DashboardPage() {
             accent="cyan"
             icon={<FirstCommit />}
             tooltip="Median time from first branch commit to PR merge."
+            anomaly={anomalies.data?.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN}
           />
         </div>
       </div>
@@ -357,6 +390,7 @@ export function DashboardPage() {
             accent="amber"
             icon={<Churn />}
             tooltip="Average daily ratio of deleted lines to total changed lines. High churn may indicate rework or rewrites."
+            anomaly={anomalies.data?.DAILY_CHURN_RATIO}
           />
           <KpiTile
             label="knowledge silo"
@@ -378,6 +412,21 @@ export function DashboardPage() {
           />
         </div>
       </div>
+
+      {/* ── Anomaly strip ────────────────────────────────── */}
+      {anomalousMetricNames.length > 0 && (
+        <>
+          <div className="hr-label"><span>what changed</span></div>
+          <div className="card" style={{ padding: '14px 20px', marginBottom: 0 }}>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span className="t-label" style={{ color: 'var(--fg-2)' }}>unusual this period:</span>
+              {anomalousMetricNames.map((name) => (
+                <Chip key={name} color="amber">{name}</Chip>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── AI Summary ───────────────────────────────────── */}
       <div className="hr-label"><span>ai summary</span></div>
