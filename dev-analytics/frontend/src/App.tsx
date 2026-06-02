@@ -15,6 +15,7 @@ import { TeamDashboardPage } from '@/pages/TeamDashboardPage';
 import { TeamManagePage } from '@/pages/TeamManagePage';
 import { AdminPage } from '@/pages/AdminPage';
 import { WelcomePage } from '@/pages/WelcomePage';
+import { MessagesPage } from '@/pages/MessagesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -50,6 +51,7 @@ function AppRoutes() {
           <Route path="/team-manage" element={<TeamManagePage />} />
           <Route path="/datasources" element={<DataSourcesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
           <Route path="/admin" element={<AdminPage />} />
         </Route>
 

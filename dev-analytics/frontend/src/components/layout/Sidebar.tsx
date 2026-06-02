@@ -12,12 +12,15 @@ import {
   Moon,
   LogOut,
   Search,
+  MessageSquare,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Logo } from '@/components/brand/Logo';
 import { Avatar } from '@/components/ui/Avatar';
 import { APP_VERSION } from '@/config/branding';
+import { messagingApi } from '@/api/messaging';
 
 const NAV_LINK_BASE: CSSProperties = {
   position: 'relative',
@@ -34,7 +37,7 @@ const NAV_LINK_BASE: CSSProperties = {
   textDecoration: 'none',
 };
 
-function NavItem({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
+function NavItem({ to, icon, label, badge }: { to: string; icon: ReactNode; label: string; badge?: number }) {
   return (
     <NavLink
       to={to}
@@ -55,6 +58,21 @@ function NavItem({ to, icon, label }: { to: string; icon: ReactNode; label: stri
           )}
           {icon}
           <span style={{ flex: 1 }}>{label}</span>
+          {badge != null && badge > 0 && (
+            <span style={{
+              background: 'var(--accent)',
+              color: '#fff',
+              borderRadius: 10,
+              fontSize: 9,
+              fontWeight: 700,
+              padding: '1px 5px',
+              minWidth: 16,
+              textAlign: 'center',
+              lineHeight: '14px',
+            }}>
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )}
         </>
       )}
     </NavLink>
@@ -65,6 +83,13 @@ export function Sidebar() {
   const { user, logout, isManager, isAdmin } = useAuth();
   const { logo, theme, setTheme } = useTheme();
   const navigate = useNavigate();
+
+  const { data: unreadData } = useQuery({
+    queryKey: ['messages-unread-count'],
+    queryFn: () => messagingApi.unreadCount().then((r) => r.data),
+    refetchInterval: 30_000,
+    enabled: !!user,
+  });
 
   function handleSearch() {
     window.dispatchEvent(new CustomEvent('da:open-palette'));
@@ -131,6 +156,12 @@ export function Sidebar() {
           <NavItem to="/team-manage" icon={<UserCog width={15} height={15} />} label="Manage" />
         )}
         <NavItem to="/datasources" icon={<Database width={15} height={15} />} label="Sources" />
+        <NavItem
+          to="/messages"
+          icon={<MessageSquare width={15} height={15} />}
+          label="Messages"
+          badge={unreadData?.count}
+        />
 
         <div className="t-label" style={{ padding: '16px 10px 6px', fontSize: 9.5, color: 'var(--muted)' }}>
           ── account
