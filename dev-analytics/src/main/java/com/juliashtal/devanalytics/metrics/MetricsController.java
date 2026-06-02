@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.model.*;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
+import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.user.model.Team;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 
@@ -31,6 +33,7 @@ public class MetricsController {
 
     private final MetricSnapshotService metricSnapshotService;
     private final MetricsService metricsService;
+    private final MetricsAnomalyService metricsAnomalyService;
     private final RepoService repoService;
     private final TeamService teamService;
     private final UserService userService;
@@ -376,6 +379,22 @@ public class MetricsController {
         User user = checkHelper.currentUser();
         metricsService.calculateDailyMetrics(user.getId(), from, to);
         return ResponseEntity.accepted().build();
+    }
+
+    /**
+     * Returns per-metric anomaly flags for the current user over the requested window.
+     * A metric is anomalous when any daily observation deviates more than 2σ from the window mean.
+     * Only the 11 AI context metrics are evaluated; metrics with fewer than 3 data points return false.
+     */
+    @GetMapping("/anomalies")
+    public Map<String, Boolean> getAnomalies(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        User user = checkHelper.currentUser();
+        return metricsAnomalyService.computeAnomalies(user, from, to)
+                .entrySet().stream()
+                .collect(Collectors.toMap(e -> e.getKey().name(), Map.Entry::getValue));
     }
 
     /**

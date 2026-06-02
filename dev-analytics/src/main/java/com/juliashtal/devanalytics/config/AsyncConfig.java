@@ -27,4 +27,19 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * Tiny pool for outbound email notifications.
+     * Kept separate from collectTaskExecutor so mail delivery never delays syncs.
+     */
+    @Bean("notificationTaskExecutor")
+    public Executor notificationTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("notify-");
+        executor.initialize();
+        return executor;
+    }
 }

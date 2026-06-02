@@ -170,6 +170,9 @@ export interface MemberSummaryDto {
   email?: string;
 }
 
+/** Per-metric anomaly flags. True means the metric deviates > 2σ from its window mean. */
+export type MetricAnomalyResponse = Partial<Record<MetricType, boolean>>;
+
 // ─── Teams ───────────────────────────────────────────────────────────────────
 
 export interface Team {
