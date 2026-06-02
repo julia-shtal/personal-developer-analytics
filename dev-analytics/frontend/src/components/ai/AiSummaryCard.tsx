@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Shield, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
+import { Shield, Copy, Check, RefreshCw, Sparkles, History } from 'lucide-react';
 import { Chip } from '@/components/ui/Chip';
 import { ProseWithNumbers } from '@/components/ui/ProseWithNumbers';
 import { FollowUpDrawer } from '@/components/ai/FollowUpDrawer';
+import { SummaryHistoryDrawer } from '@/components/ai/SummaryHistoryDrawer';
 import { aiApi } from '@/api/ai';
 import { AI } from '@/components/icons';
 import { timeAgo } from '@/lib/dates';
@@ -57,6 +58,7 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
   const [generatedForRange, setGeneratedForRange] = useState<DateRange | null>(null);
   const [copied, setCopied] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const { data: dbLatest } = useQuery({
     queryKey: ['ai-summary-latest'],
@@ -258,6 +260,14 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
             )}
             <span style={{ flex: 1 }} />
             <button
+              className="btn btn-sm"
+              onClick={() => setHistoryOpen(true)}
+              aria-label="View summary history"
+            >
+              <History width={12} height={12} />
+              History
+            </button>
+            <button
               className="btn btn-sm btn-accent"
               onClick={() => setDrawerOpen(true)}
               aria-label="Ask follow-up questions about this summary"
@@ -276,6 +286,11 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
           summary={summary}
         />
       )}
+
+      <SummaryHistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+      />
     </div>
   );
 }
