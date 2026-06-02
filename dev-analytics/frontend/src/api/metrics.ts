@@ -1,5 +1,5 @@
 import api from '@/lib/api';
-import type { MetricPointDto, MetricAggregateDto, TeamMetricPointDto, MemberSummaryDto } from '@/types';
+import type { MetricPointDto, MetricAggregateDto, TeamMetricPointDto, MemberSummaryDto, MetricAnomalyResponse } from '@/types';
 
 // ─── Personal ─────────────────────────────────────────────────────────────────
 
@@ -70,6 +70,9 @@ export const metricsApi = {
 
   freshness: () =>
     api.get<{ metricsComputedThrough?: string }>('/metrics/freshness'),
+
+  anomalies: (from: string, to: string) =>
+    api.get<MetricAnomalyResponse>('/metrics/anomalies', { params: { from, to } }),
 
   backfill: (from: string, to: string) =>
     api.post('/metrics/backfill', null, { params: { from, to } }),

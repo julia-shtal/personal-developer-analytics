@@ -1,6 +1,8 @@
 package com.juliashtal.devanalytics.ai.scheduler;
 
+import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
+import com.juliashtal.devanalytics.notification.NotificationDispatchService;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +14,7 @@ import java.time.LocalDate;
 /**
  * Generates and persists a personal weekly AI summary for every user every Monday at 08:00 UTC.
  * Persistence is handled inside MetricsAiService.generateSummary via MetricSummaryPersistenceService.
+ * After each summary, fires notification emails (AI brief and anomaly alerts) per user preferences.
  */
 @Component
 @RequiredArgsConstructor
@@ -20,6 +23,7 @@ public class MetricsSummaryScheduler {
 
     private final UserRepository userRepository;
     private final MetricsAiService metricsAiService;
+    private final NotificationDispatchService notificationDispatch;
 
     @Scheduled(cron = "0 0 8 * * MON", zone = "UTC")
     public void generateWeeklySummaries() {
@@ -30,8 +34,10 @@ public class MetricsSummaryScheduler {
 
         userRepository.findAll().forEach(user -> {
             try {
-                metricsAiService.generateSummary(user, from, to, null);
+                MetricsSummaryDto summary = metricsAiService.generateSummary(user, from, to, null);
                 log.debug("Generated weekly summary for userId={}", user.getId());
+                notificationDispatch.sendAiBriefIfEnabled(user, summary.getHeadline(), from, to);
+                notificationDispatch.sendAnomalyAlertIfEnabled(user, from, to);
             } catch (Exception e) {
                 log.error("Failed to generate weekly summary for userId={}: {}", user.getId(), e.getMessage(), e);
             }

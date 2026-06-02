@@ -12,6 +12,7 @@ interface KpiTileProps {
   accent?: AccentColor;
   size?: 'md' | 'lg';
   emphasis?: boolean;
+  anomaly?: boolean;
 }
 
 export function KpiTile({
@@ -23,6 +24,7 @@ export function KpiTile({
   accent = 'violet',
   size = 'md',
   emphasis = false,
+  anomaly = false,
 }: KpiTileProps) {
   return (
     <div
@@ -35,7 +37,24 @@ export function KpiTile({
       }}
     >
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div className="t-eyebrow">{label}</div>
+        <div className="row" style={{ alignItems: 'center', gap: 6 }}>
+          <div className="t-eyebrow">{label}</div>
+          {anomaly && (
+            <Tooltip content="Anomaly detected — this metric deviates significantly from its recent pattern">
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: 'var(--amber)',
+                  display: 'inline-block',
+                  flexShrink: 0,
+                  cursor: 'default',
+                }}
+              />
+            </Tooltip>
+          )}
+        </div>
         {icon && tooltip ? (
           <Tooltip content={tooltip}>
             <span style={{ color: `var(--${accent})`, opacity: 0.9, cursor: 'default' }}>{icon}</span>

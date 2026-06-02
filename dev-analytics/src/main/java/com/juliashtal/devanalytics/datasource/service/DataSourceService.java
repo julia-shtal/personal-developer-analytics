@@ -442,9 +442,10 @@ public class DataSourceService {
     /**
      * Returns true if the user can read data from a team-scoped data source
      * (i.e. is a team member, the team manager, or an ADMIN).
+     * Uses a DB role lookup so this is safe to call from async threads (no SecurityContext needed).
      */
     private boolean canAccessTeam(Long userId, Team team) {
-        Role role = SecurityUtils.getCurrentUserRole();
+        Role role = userRepository.getReferenceById(userId).getRole();
         if (role == Role.ADMIN) return true;
         return team.getManager().getId().equals(userId)
                 || teamRepository.existsByIdAndMembersId(team.getId(), userId);
@@ -453,9 +454,10 @@ public class DataSourceService {
     /**
      * Asserts the current user can manage (create/update/delete) a team data source.
      * Only the team manager or ADMIN may do so.
+     * Uses a DB role lookup so this is safe to call from async threads (no SecurityContext needed).
      */
     private void assertCanManageTeam(Long userId, Team team) {
-        Role role = SecurityUtils.getCurrentUserRole();
+        Role role = userRepository.getReferenceById(userId).getRole();
         if (role == Role.ADMIN) return;
         if (role == Role.MANAGER && team.getManager().getId().equals(userId)) return;
         throw new ForbiddenException("Only the team manager or an admin can manage team data sources");
