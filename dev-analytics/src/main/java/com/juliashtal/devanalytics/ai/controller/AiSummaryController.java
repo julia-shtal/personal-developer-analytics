@@ -7,6 +7,7 @@ import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.service.TeamService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * REST controller for AI-generated metric summaries.
@@ -104,5 +106,29 @@ public class AiSummaryController {
         return persistenceService.findLatestTeam(team)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /**
+     * Returns the current user's personal summary history, newest-first, up to {@code limit} entries.
+     */
+    @GetMapping("/history")
+    @Operation(summary = "List persisted personal AI summaries, newest first")
+    public List<MetricsSummaryDto> getPersonalHistory(
+            @RequestParam(defaultValue = "10") int limit) {
+        User user = checkHelper.currentUser();
+        return persistenceService.findHistoryPersonal(user, Math.min(limit, 50));
+    }
+
+    /**
+     * Returns a team's summary history, newest-first. Only the team manager or an ADMIN may call this.
+     */
+    @GetMapping("/teams/{teamId}/history")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "List persisted team AI summaries, newest first")
+    public List<MetricsSummaryDto> getTeamHistory(
+            @PathVariable Long teamId,
+            @RequestParam(defaultValue = "10") int limit) {
+        Team team = teamService.getById(teamId);
+        return persistenceService.findHistoryTeam(team, Math.min(limit, 50));
     }
 }

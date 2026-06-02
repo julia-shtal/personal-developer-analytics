@@ -1172,6 +1172,8 @@ Index: `(conversation_id, created_at)`.
 | GET | `/team/{teamId}/summary` | `from`, `to` | Team AI summary (MANAGER/ADMIN, cached, persisted) (PDA-50) |
 | GET | `/explain` | `metricLabel`, `metricDescription`, `metricValue`, `from`, `to` | Explain a single metric in context |
 | GET | `/summaries/latest` | — | Retrieve the user's most recent stored summary (PDA-53) |
+| GET | `/history` | `limit` (default 10, max 50) | List persisted personal summaries newest-first (PDA-61) |
+| GET | `/teams/{teamId}/history` | `limit` (default 10, max 50) | List persisted team summaries newest-first (MANAGER/ADMIN) (PDA-61) |
 
 **`AiConversationController`** — `/api/ai/conversations`, `@PreAuthorize("isAuthenticated()")`
 
@@ -1682,11 +1684,15 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 **`MultiLineChart`** — Multi-series for team data. Pivots by (date, username). 7-color palette.
 
-**`AiSummaryCard`** — Fetches personal AI summary for the current date range. Editorial layout: `AI SUMMARY` eyebrow, italic `t-h2` headline, `Fresh / Outdated` chip, copy button, Regenerate button. Insight rows use `+/!/~` symbols coloured by `insight.kind` (`positive → emerald`, `risk → coral`, `note → amber`) with a `Chip` for the linked metric name. Footer: `Shield` icon + "Generated locally" + model name + `timeAgo`. "Ask follow-up" button disabled with `TODO(ai-follow-up):` tooltip. `onSummaryGenerated` callback drives the Dashboard hero block.
+**`AiSummaryCard`** — Fetches personal AI summary for the current date range. Editorial layout: `AI SUMMARY` eyebrow, italic `t-h2` headline, `Fresh / Outdated` chip, copy button, Regenerate button. Insight rows use `+/!/~` symbols coloured by `insight.kind` (`positive → emerald`, `risk → coral`, `note → amber`) with a `Chip` for the linked metric name. Footer: `Shield` icon + "Generated locally" + model name + `timeAgo` + "History" button (opens `SummaryHistoryDrawer`) + "Ask follow-up" button (opens `FollowUpDrawer`). `onSummaryGenerated` callback drives the Dashboard hero block. Falls back to DB-persisted latest summary when no in-memory entry exists (PDA-61).
+
+**`SummaryHistoryDrawer`** (`src/components/ai/SummaryHistoryDrawer.tsx`) — Slide-in 520 px panel listing the last 20 persisted personal AI summaries newest-first (PDA-61). Each entry is an accordion row: collapsed shows date range + headline; expanded adds overview, insight rows, and recommendations. Fetches from `GET /api/ai/history` with `{ enabled: open, staleTime: 5 min }` so the list is only loaded on first open per navigation.
 
 **`AiMetricExplainDrawer`** — Slide-in panel. Receives `metricLabel`, `metricDescription`, `metricValue`, and the current `MetricsSummaryDto`. Shows metric description, current value, and up to 3 matching AI insights from the summary.
 
 **`AiTeamInsightCard`** — Team equivalent of `AiSummaryCard`. Shows team overview + per-member insights.
+
+**`ErrorBoundary`** (`src/components/ErrorBoundary.tsx`) — React class component using `getDerivedStateFromError` + `componentDidCatch` (PDA-61/T16). Catches any render-phase exception in its subtree and shows a centred "Something went wrong" screen with the error message and a "Reload" button (`window.location.reload()`). Accepts an optional `fallback` prop for custom fallback UI. Mounted at two levels: top-level in `App.tsx` (catches infrastructure failures) and inner in `AppShell.tsx` wrapping `<Outlet />` (isolates page crashes from the shell).
 
 **UI primitives (retained)**: `Avatar` (image / preset / initials fallback, deterministic colour), `Button` (primary/secondary/ghost/danger, sm/md/lg, loading spinner), `Input` (forwardRef, label, error), `Select` (forwardRef, label, options), `Badge` (6 colors, used for role pills in dropdowns), `Spinner` / `PageSpinner`.
 
@@ -1706,8 +1712,9 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 | `api/datasources.ts` | CRUD + collect + status polling; defines `SyncStatus` interface |
 | `api/repos.ts` | List, subscribe, unsubscribe |
 | `api/teams.ts` | CRUD, add/remove member, rename, delete |
-| `api/ai.ts` | `/summary`, `/team/{id}/summary`, `/explain`, `/summaries/latest` |
+| `api/ai.ts` | `/summary`, `/team/{id}/summary`, `/explain`, `/summaries/latest`, `/history`, `/teams/{id}/history` |
 | `api/issues.ts` | Issue listing |
+| `api/messaging.ts` | `send`, `inbox`, `conversation`, `unreadCount` (PDA-60) |
 | `api/users.ts` | Profile update, avatar, `notifications.get()`, `notifications.update(dto)` |
 
 ---
