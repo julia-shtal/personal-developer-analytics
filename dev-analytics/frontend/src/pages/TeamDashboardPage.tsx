@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import type { ComponentType, CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ChevronDown, Mail, Sparkles, AlertCircle, Shield } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Users, ChevronDown, MessageSquare, Sparkles, AlertCircle, Shield } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
 import { teamMetricsApi } from '@/api/metrics';
 import { aiApi } from '@/api/ai';
@@ -117,6 +118,7 @@ interface MemberDetailModalProps {
 }
 
 function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalProps) {
+  const navigate = useNavigate();
   const { range } = useDateRange();
   const { from, to } = range;
 
@@ -178,21 +180,13 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
           <span className="t-label">click any row to drill into other members</span>
           <div className="col gap-2" style={{ alignItems: 'flex-end' }}>
             <div className="row gap-2">
-              {member.email ? (
-                <a
-                  href={`mailto:${member.email}?subject=Dev%20Analytics%20%7C%20Quick%20note`}
-                  className="btn btn-sm"
-                  aria-label={`Email ${member.username}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Mail width={12} height={12} />message
-                </a>
-              ) : (
-                <button className="btn btn-sm" disabled aria-label="Message member (no email on file)">
-                  <Mail width={12} height={12} />message
-                </button>
-              )}
+              <button
+                className="btn btn-sm"
+                onClick={() => navigate(`/messages?to=${member.userId}`)}
+                aria-label={`Message ${member.username}`}
+              >
+                <MessageSquare width={12} height={12} />message
+              </button>
               <button
                 className="btn btn-sm btn-accent"
                 onClick={fetchMemberAi}
