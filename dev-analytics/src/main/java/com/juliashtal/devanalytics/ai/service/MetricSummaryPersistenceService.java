@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +51,18 @@ public class MetricSummaryPersistenceService {
     public Optional<MetricsSummaryDto> findLatestTeam(Team team) {
         return summaryRepository.findTopByTeam_IdOrderByGeneratedAtDesc(team.getId())
                 .map(this::toDto);
+    }
+
+    public List<MetricsSummaryDto> findHistoryPersonal(User user, int limit) {
+        return summaryRepository
+                .findByUser_IdOrderByGeneratedAtDesc(user.getId(), PageRequest.of(0, limit))
+                .stream().map(this::toDto).toList();
+    }
+
+    public List<MetricsSummaryDto> findHistoryTeam(Team team, int limit) {
+        return summaryRepository
+                .findByTeam_IdOrderByGeneratedAtDesc(team.getId(), PageRequest.of(0, limit))
+                .stream().map(this::toDto).toList();
     }
 
     private void upsert(User user, Team team, MetricsSummaryDto dto) {

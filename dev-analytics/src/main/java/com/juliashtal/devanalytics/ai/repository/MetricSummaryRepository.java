@@ -1,11 +1,13 @@
 package com.juliashtal.devanalytics.ai.repository;
 
 import com.juliashtal.devanalytics.ai.model.MetricSummaryEntity;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 public interface MetricSummaryRepository extends JpaRepository<MetricSummaryEntity, Long> {
@@ -16,6 +18,10 @@ public interface MetricSummaryRepository extends JpaRepository<MetricSummaryEnti
     Optional<MetricSummaryEntity> findTopByUser_IdOrderByGeneratedAtDesc(Long userId);
 
     Optional<MetricSummaryEntity> findTopByTeam_IdOrderByGeneratedAtDesc(Long teamId);
+
+    List<MetricSummaryEntity> findByUser_IdOrderByGeneratedAtDesc(Long userId, Pageable pageable);
+
+    List<MetricSummaryEntity> findByTeam_IdOrderByGeneratedAtDesc(Long teamId, Pageable pageable);
 
     /** Null-safe identity lookup mirroring the uix_metric_summaries_identity index. */
     @Query(value = """

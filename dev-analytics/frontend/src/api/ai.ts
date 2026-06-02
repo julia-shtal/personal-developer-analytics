@@ -29,4 +29,10 @@ export const aiApi = {
 
   getMessages: (conversationId: number): Promise<MessageDto[]> =>
     api.get<MessageDto[]>(`/ai/conversations/${conversationId}/messages`).then((r) => r.data),
+
+  summaryHistory: (limit = 10): Promise<MetricsSummaryDto[]> =>
+    api.get<MetricsSummaryDto[]>('/ai/summary/history', { params: { limit } }).then((r) => r.data),
+
+  teamSummaryHistory: (teamId: number, limit = 10): Promise<MetricsSummaryDto[]> =>
+    api.get<MetricsSummaryDto[]>(`/ai/summary/teams/${teamId}/history`, { params: { limit } }).then((r) => r.data),
 };
