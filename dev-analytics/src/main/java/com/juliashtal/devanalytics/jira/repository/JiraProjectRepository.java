@@ -26,7 +26,7 @@ public interface JiraProjectRepository extends JpaRepository<JiraProjectEntity, 
     /**
      * Global canonical-row lookup by normalized base URL + project key.
      * Used by {@link JiraProjectService#addProject} to detect cross-DS duplicates before insert,
-     * mirroring the git_repositories.repo_full_name UNIQUE constraint (ADR-004 / ADR-002).
+     * mirroring the git_repositories.repo_full_name UNIQUE constraint.
      */
     Optional<JiraProjectEntity> findByBaseUrlNormalizedAndProjectKey(String baseUrlNormalized, String projectKey);
 

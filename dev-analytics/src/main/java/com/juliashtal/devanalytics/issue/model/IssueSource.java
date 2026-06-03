@@ -1,6 +1,6 @@
 package com.juliashtal.devanalytics.issue.model;
 
-/** Discriminator for {@link IssueEntity} — see ADR-005 Option C. */
+/** Discriminator for issue source (JIRA or GITHUB). */
 public enum IssueSource {
     GITHUB,
     JIRA
