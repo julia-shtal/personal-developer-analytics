@@ -10,6 +10,7 @@ interface SparklineProps {
   width?: number;
   area?: boolean;
   responsive?: boolean;
+  ariaLabel?: string;
 }
 
 export function Sparkline({
@@ -19,6 +20,7 @@ export function Sparkline({
   width = 120,
   area = true,
   responsive = false,
+  ariaLabel,
 }: SparklineProps) {
   if (!data || data.length === 0) return null;
 
@@ -40,23 +42,26 @@ export function Sparkline({
   const areaPath = `${path} L${width},${height} L0,${height} Z`;
 
   return (
-    <svg
-      width={responsive ? '100%' : width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      style={{ display: 'block' }}
-    >
-      {area && <path d={areaPath} fill={color} opacity="0.12" />}
-      <path
-        d={path}
-        stroke={color}
-        strokeWidth="1.5"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
+    <figure aria-label={ariaLabel ?? 'Sparkline chart'} style={{ margin: 0 }}>
+      <figcaption className="sr-only">Sparkline: {data.length} data points</figcaption>
+      <svg
+        width={responsive ? '100%' : width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        style={{ display: 'block' }}
+      >
+        {area && <path d={areaPath} fill={color} opacity="0.12" />}
+        <path
+          d={path}
+          stroke={color}
+          strokeWidth="1.5"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+    </figure>
   );
 }

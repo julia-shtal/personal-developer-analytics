@@ -1,0 +1,10 @@
+.git
+.idea
+.vscode
+target/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.log
+.env
+.env.*

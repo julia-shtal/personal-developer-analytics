@@ -35,7 +35,7 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     // Team-repo variants: filter by explicit repo IDs, no author filter.
     // Issues are project-level; all team members share them.
     //
-    // ADR-005 Option C: COALESCE(i.repository_id, rm.repository_id) routes both
+    // COALESCE(i.repository_id, rm.repository_id) routes both
     // GitHub issues (direct repository_id FK) and Jira issues (via
     // jira_project_repo_mappings) through the same repo-scoped aggregation.
     // Native SQL is used because JPQL cannot express the LEFT JOIN + COALESCE
