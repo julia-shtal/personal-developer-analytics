@@ -51,7 +51,7 @@ public class GitRepositoryEntity {
     private RepoType repoType;
 
     /**
-     * Globally unique {@code "owner/repo"} identifier for GitHub/GitLab repos; {@code null} for local repos.
+     * Globally unique {@code "owner/repo"} identifier for GitHub repos; {@code null} for local repos.
      * The {@code UNIQUE} constraint prevents duplicate commit ingestion. Cross-datasource sharing
      * is handled via {@link UserRepoRegistration} subscriptions — never by duplicating this row.
      */
