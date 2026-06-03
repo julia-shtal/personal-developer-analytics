@@ -22,7 +22,7 @@ public class DataSourceValidator {
 
         switch (req.getType()) {
             case GIT_LOCAL -> validateGitLocal(req);
-            case GITHUB, JIRA -> validateHttp(req);
+            case GITHUB, GITLAB, JIRA -> validateHttp(req);
         }
     }
 

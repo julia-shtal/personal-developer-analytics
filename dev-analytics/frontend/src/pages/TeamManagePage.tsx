@@ -57,6 +57,7 @@ export function TeamManagePage() {
   // Seed config fields whenever the config modal opens
   useEffect(() => {
     if (mode === 'config' && activeTeam) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setConfigName(activeTeam.name);
       setConfigVisibility(activeTeam.visibility ?? 'PRIVATE');
       setConfigBriefSchedule(activeTeam.aiBriefSchedule ?? '');

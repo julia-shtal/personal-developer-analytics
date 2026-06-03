@@ -73,10 +73,11 @@ class RepoTypeDiscriminatorTest {
     }
 
     @Test
-    void repoTypeEnum_hasTwoValues() {
-        assertThat(RepoType.values()).hasSize(2);
+    void repoTypeEnum_hasThreeValues() {
+        assertThat(RepoType.values()).hasSize(3);
         assertThat(RepoType.valueOf("LOCAL")).isEqualTo(RepoType.LOCAL);
         assertThat(RepoType.valueOf("GITHUB")).isEqualTo(RepoType.GITHUB);
+        assertThat(RepoType.valueOf("GITLAB")).isEqualTo(RepoType.GITLAB);
     }
 
     @Test

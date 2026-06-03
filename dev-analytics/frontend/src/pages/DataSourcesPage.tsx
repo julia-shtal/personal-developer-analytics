@@ -15,7 +15,7 @@ import { teamsApi } from '@/api/teams';
 import { Chip } from '@/components/ui/Chip';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
-import { Jira, Folder, Branch, Github } from '@/components/icons';
+import { Jira, Folder, Branch, Github, Gitlab } from '@/components/icons';
 import type { DataSourceType, CreateDataSourceRequest, RepoDto, Team, TrackedJiraProjectDto } from '@/types';
 
 // ─── Type helpers ──────────────────────────────────────────────────────────────
@@ -23,40 +23,46 @@ import type { DataSourceType, CreateDataSourceRequest, RepoDto, Team, TrackedJir
 const TYPE_LABELS: Record<DataSourceType, string> = {
   GIT_LOCAL: 'Local Git',
   GITHUB: 'GitHub',
+  GITLAB: 'GitLab',
   JIRA: 'Jira',
 };
 
 const TYPE_CHIP_COLORS: Record<DataSourceType, 'violet' | 'cyan' | 'amber'> = {
   GITHUB: 'violet',
+  GITLAB: 'amber',
   JIRA: 'cyan',
   GIT_LOCAL: 'amber',
 };
 
 const TYPE_ACCENT: Record<DataSourceType, string> = {
   GITHUB: 'var(--violet)',
+  GITLAB: 'var(--coral)',
   JIRA: 'var(--cyan)',
   GIT_LOCAL: 'var(--amber)',
 };
 
 const TYPE_ACCENT_BG: Record<DataSourceType, string> = {
   GITHUB: 'var(--violet-bg)',
+  GITLAB: 'var(--coral-bg)',
   JIRA: 'var(--cyan-bg)',
   GIT_LOCAL: 'var(--amber-bg)',
 };
 
 const TYPE_DESCS: Record<DataSourceType, string> = {
   GITHUB: 'API · token',
+  GITLAB: 'API · token',
   JIRA: 'cloud · token',
   GIT_LOCAL: 'filesystem',
 };
 
-const NEEDS_BASEURL: DataSourceType[] = ['GITHUB', 'JIRA'];
+const NEEDS_BASEURL: DataSourceType[] = ['GITHUB', 'GITLAB', 'JIRA'];
 const NEEDS_PATH: DataSourceType[] = ['GIT_LOCAL'];
-const NEEDS_TOKEN: DataSourceType[] = ['GITHUB', 'JIRA'];
-const NEEDS_REPO_FULLNAME: DataSourceType[] = ['GITHUB'];
+const NEEDS_TOKEN: DataSourceType[] = ['GITHUB', 'GITLAB', 'JIRA'];
+const NEEDS_REPO_FULLNAME: DataSourceType[] = ['GITHUB', 'GITLAB'];
 
 function TypeIcon({ type, size = 18 }: { type: DataSourceType; size?: number }) {
   if (type === 'GITHUB') return <Github width={size} height={size} />;
+  if (type === 'GITLAB') return <Gitlab width={size} height={size} />;
   if (type === 'JIRA') return <Jira width={size} height={size} />;
   return <Folder width={size} height={size} />;
 }
@@ -233,6 +239,7 @@ function RepoIssuesSection({ repo, isGitHub }: { repo: RepoDto; isGitHub: boolea
 function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; sourceType: DataSourceType }) {
   const qc = useQueryClient();
   const isGitHub = sourceType === 'GITHUB';
+  const supportsDiscover = sourceType === 'GITHUB' || sourceType === 'GITLAB';
   const [showModal, setShowModal] = useState(false);
   const [confirmDetachId, setConfirmDetachId] = useState<number | null>(null);
   const [detachError, setDetachError] = useState<string | null>(null);
@@ -277,7 +284,7 @@ function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; source
 
   return (
     <>
-      {isGitHub && (
+      {supportsDiscover && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <button className="btn btn-sm" onClick={() => setShowModal(true)}>
             <Plus width={12} height={12} />
@@ -295,7 +302,7 @@ function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; source
 
       {!repos?.length ? (
         <p className="t-label" style={{ padding: '8px 0' }}>
-          {isGitHub ? 'No repositories attached. Use "Add repository" to get started.' : 'No repositories registered under this data source.'}
+          {supportsDiscover ? 'No repositories attached. Use "Add repository" to get started.' : 'No repositories registered under this data source.'}
         </p>
       ) : (
         <div className="col gap-2">
@@ -660,13 +667,13 @@ export function DataSourcesPage() {
             {/* Type picker */}
             <div className="t-eyebrow" style={{ marginBottom: 10 }}>type</div>
             <div className="row gap-3" style={{ marginBottom: 18, flexWrap: 'wrap' }}>
-              {(['GITHUB', 'JIRA', 'GIT_LOCAL'] as DataSourceType[]).map((t) => (
+              {(['GITHUB', 'GITLAB', 'JIRA', 'GIT_LOCAL'] as DataSourceType[]).map((t) => (
                 <button
                   key={t}
                   type="button"
                   className="col gap-2"
                   onClick={() => {
-                    const defaultBaseUrl = t === 'GITHUB' ? 'https://api.github.com' : '';
+                    const defaultBaseUrl = t === 'GITHUB' ? 'https://api.github.com' : t === 'GITLAB' ? 'https://gitlab.com' : '';
                     setShowToken(false);
                     setForm({ ...form, type: t, baseUrl: defaultBaseUrl, path: '', repoFullName: '', projectKey: '' });
                   }}
@@ -707,7 +714,7 @@ export function DataSourcesPage() {
                     className="input"
                     value={form.baseUrl}
                     onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
-                    placeholder={form.type === 'JIRA' ? 'https://yourcompany.atlassian.net' : 'https://api.github.com'}
+                    placeholder={form.type === 'JIRA' ? 'https://yourcompany.atlassian.net' : form.type === 'GITLAB' ? 'https://gitlab.com' : 'https://api.github.com'}
                     required
                   />
                 </div>
@@ -754,7 +761,7 @@ export function DataSourcesPage() {
 
               {NEEDS_REPO_FULLNAME.includes(form.type) && (
                 <div>
-                  <div className="t-eyebrow" style={{ marginBottom: 6 }}>github repository <span className="t-label" style={{ fontSize: 10 }}>(optional — owner/repo)</span></div>
+                  <div className="t-eyebrow" style={{ marginBottom: 6 }}>{form.type === 'GITLAB' ? 'gitlab' : 'github'} repository <span className="t-label" style={{ fontSize: 10 }}>(optional — namespace/project)</span></div>
                   <input
                     className="input"
                     value={form.repoFullName}

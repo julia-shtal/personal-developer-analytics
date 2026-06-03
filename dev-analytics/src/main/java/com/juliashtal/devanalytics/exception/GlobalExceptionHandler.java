@@ -177,6 +177,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_GATEWAY, "GitHub Error", ex.getMessage(), request);
     }
 
+    @ExceptionHandler(GitLabException.class)
+    public ResponseEntity<ApiError> handleGitLab(
+            GitLabException ex, HttpServletRequest request) {
+        log.warn("GitLab integration error on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_GATEWAY, "GitLab Error", ex.getMessage(), request);
+    }
+
     @ExceptionHandler(GitException.class)
     public ResponseEntity<ApiError> handleGit(
             GitException ex, HttpServletRequest request) {

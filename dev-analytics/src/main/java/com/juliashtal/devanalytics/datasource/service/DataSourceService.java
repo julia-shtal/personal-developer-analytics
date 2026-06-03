@@ -16,6 +16,7 @@ import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.git.service.GitRepositoryService;
 import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
+import com.juliashtal.devanalytics.gitlab.service.GitLabRepositoryService;
 import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
@@ -49,6 +50,7 @@ public class DataSourceService {
     private final DataSourceValidator validator;
     private final GitRepositoryService gitRepositoryService;
     private final GitHubRepositoryService gitHubRepositoryService;
+    private final GitLabRepositoryService gitLabRepositoryService;
     private final GitRepositoryEntityRepository gitRepoRepository;
     private final UserRepoRegistrationRepository userRepoRegRepository;
     private final JiraProjectService jiraProjectService;
@@ -104,16 +106,18 @@ public class DataSourceService {
             }
         }
 
-        // If the GitHub repo is already registered in the system, do not create a new DS.
-        // Instead, subscribe the user to the existing repo under its original DS so it appears
-        // in their Data Sources list without a zombie duplicate.
-        if (req.getType() == DataSourceType.GITHUB
+        // If the GitHub/GitLab repo is already registered in the system, subscribe instead of
+        // creating a duplicate datasource.
+        if ((req.getType() == DataSourceType.GITHUB || req.getType() == DataSourceType.GITLAB)
                 && req.getRepoFullName() != null && !req.getRepoFullName().isBlank()) {
             var existingRepo = gitRepoRepository.findByRepoFullName(req.getRepoFullName());
             if (existingRepo.isPresent()) {
                 Long existingDsId = existingRepo.get().getDataSourceConfig().getId();
-                gitHubRepositoryService.registerGitHubRepo(userId, existingDsId, req.getRepoFullName());
-                // Convert inside the transaction so lazy proxies are accessible.
+                if (req.getType() == DataSourceType.GITLAB) {
+                    gitLabRepositoryService.registerGitLabRepo(userId, existingDsId, req.getRepoFullName());
+                } else {
+                    gitHubRepositoryService.registerGitHubRepo(userId, existingDsId, req.getRepoFullName());
+                }
                 return toDto(existingRepo.get().getDataSourceConfig(), false);
             }
         }
@@ -156,6 +160,13 @@ public class DataSourceService {
                 gitHubRepositoryService.registerGitHubRepo(userId, saved.getId(), req.getRepoFullName());
             } catch (Exception e) {
                 log.warn("Auto-registration of GitHub repo failed: {}", e.getMessage());
+            }
+        } else if (saved.getType() == DataSourceType.GITLAB
+                && req.getRepoFullName() != null && !req.getRepoFullName().isBlank()) {
+            try {
+                gitLabRepositoryService.registerGitLabRepo(userId, saved.getId(), req.getRepoFullName());
+            } catch (Exception e) {
+                log.warn("Auto-registration of GitLab repo failed: {}", e.getMessage());
             }
         } else if (saved.getType() == DataSourceType.JIRA
                 && req.getProjectKey() != null && !req.getProjectKey().isBlank()) {
@@ -313,8 +324,8 @@ public class DataSourceService {
     @Transactional
     public RepoDto attachRepo(Long userId, Long dataSourceId, String repoFullName, boolean collectIssues) {
         DataSourceConfig cfg = loadForWrite(userId, dataSourceId);
-        if (cfg.getType() != DataSourceType.GITHUB) {
-            throw new BadRequestException("Only GITHUB datasources support repo attachment");
+        if (cfg.getType() != DataSourceType.GITHUB && cfg.getType() != DataSourceType.GITLAB) {
+            throw new BadRequestException("Only GITHUB and GITLAB datasources support repo attachment");
         }
 
         var existing = gitRepoRepository.findByRepoFullName(repoFullName);
@@ -343,7 +354,7 @@ public class DataSourceService {
 
         GitRepositoryEntity repo = new GitRepositoryEntity();
         repo.setDataSourceConfig(cfg);
-        repo.setRepoType(RepoType.GITHUB);
+        repo.setRepoType(cfg.getType() == DataSourceType.GITLAB ? RepoType.GITLAB : RepoType.GITHUB);
         repo.setName(repoFullName);
         repo.setRepoFullName(repoFullName);
         repo.setCollectIssues(collectIssues);
@@ -401,9 +412,12 @@ public class DataSourceService {
     private RepoDto toRepoDtoWithSubscribed(GitRepositoryEntity r, Set<Long> subscribedIds) {
         String repoUrl = null;
         var dsCfg = r.getDataSourceConfig();
-        if (dsCfg != null && dsCfg.getBaseUrl() != null
-                && r.getRepoType() == RepoType.GITHUB) {
-            repoUrl = githubWebUrl(dsCfg.getBaseUrl()) + "/" + r.getRepoFullName();
+        if (dsCfg != null && dsCfg.getBaseUrl() != null) {
+            if (r.getRepoType() == RepoType.GITHUB) {
+                repoUrl = githubWebUrl(dsCfg.getBaseUrl()) + "/" + r.getRepoFullName();
+            } else if (r.getRepoType() == RepoType.GITLAB) {
+                repoUrl = gitlabWebUrl(dsCfg.getBaseUrl()) + "/" + r.getRepoFullName();
+            }
         }
         return new RepoDto(r.getId(), r.getName(), r.getRepoFullName(), r.getLocalPath(),
                 dsCfg != null ? dsCfg.getId() : null,
@@ -415,6 +429,10 @@ public class DataSourceService {
         String url = apiBaseUrl.strip().replaceAll("/$", "");
         if (url.equalsIgnoreCase("https://api.github.com")) return "https://github.com";
         return url.replaceAll("/api/v3$", "");
+    }
+
+    private static String gitlabWebUrl(String baseUrl) {
+        return baseUrl.strip().replaceAll("/$", "");
     }
 
     /**

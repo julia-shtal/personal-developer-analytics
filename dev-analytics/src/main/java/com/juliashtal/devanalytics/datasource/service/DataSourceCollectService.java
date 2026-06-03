@@ -7,6 +7,8 @@ import com.juliashtal.devanalytics.git.service.GitLocalCollector;
 import com.juliashtal.devanalytics.github.service.GitHubCollector;
 import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
 import com.juliashtal.devanalytics.github.service.GitHubPrCollector;
+import com.juliashtal.devanalytics.gitlab.service.GitLabCollector;
+import com.juliashtal.devanalytics.gitlab.service.GitLabMrIngestService;
 import com.juliashtal.devanalytics.jira.service.JiraCollector;
 import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,8 @@ public class DataSourceCollectService {
     private final GitHubCollector gitHubCollector;
     private final GitHubPrCollector prCollector;
     private final GitHubIssuesCollector issuesCollector;
+    private final GitLabCollector gitLabCollector;
+    private final GitLabMrIngestService gitLabMrIngestService;
     private final JiraCollector jiraCollector;
     private final JiraProjectService jiraProjectService;
     private final DataSourceService dataSourceService;
@@ -50,10 +54,10 @@ public class DataSourceCollectService {
             jobState.totalPhases = switch (cfg.getType()) {
                 case GITHUB -> {
                     var repos = gitRepoRepository.findAllByDataSourceConfig(cfg);
-                    // phase 3 (issues) is added only if at least one repo has the flag on
                     boolean anyIssues = repos.stream().anyMatch(r -> r.isCollectIssues());
                     yield anyIssues ? 3 : 2;
                 }
+                case GITLAB -> 2;   // commits + MRs
                 default -> 1;
             };
         }
@@ -93,6 +97,23 @@ public class DataSourceCollectService {
                         summary.append(". ");
                     } catch (Exception e) {
                         log.warn("Collection failed for repo {}: {}", repo.getId(), e.getMessage());
+                    }
+                }
+            }
+            case GITLAB -> {
+                for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
+                    try {
+                        if (jobState != null) tracker.setPhase(jobState, "commits", -1);
+                        int commits = gitLabCollector.collectForRepository(repo.getId(), jobState);
+
+                        if (jobState != null) tracker.setPhase(jobState, "merge requests", -1);
+                        int mrs = gitLabMrIngestService.ingestForRepository(repo.getId(), jobState);
+
+                        total += commits + mrs;
+                        summary.append(repo.getName()).append(": ").append(commits)
+                               .append(" commits, ").append(mrs).append(" MRs. ");
+                    } catch (Exception e) {
+                        log.warn("GitLab collection failed for repo {}: {}", repo.getId(), e.getMessage());
                     }
                 }
             }

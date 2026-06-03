@@ -35,7 +35,7 @@
 
 | Capability | Details |
 |---|---|
-| Multi-source collection | Local Git (JGit), GitHub commits + PRs + Issues (Kohsuke), Jira Issues (REST) |
+| Multi-source collection | Local Git (JGit), GitHub commits + PRs + Issues (Kohsuke), GitLab commits + MRs (REST v4), Jira Issues (REST) |
 | Two-phase async enrichment | Fast ingest → immediate enrich top 150 → background scheduler for the rest |
 | Incremental sync | Resumes from last fetched commit hash; no full re-scans |
 | 19 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, merge frequency |
@@ -66,7 +66,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 ┌────────────────────────────▼────────────────────────────────────┐
 │                        Controllers (21)                         │
 │  Auth · UserProfile · User · Admin · Team · Avatar              │
-│  DataSource · GitLocal · Repo · GitHub · GitHubPR              │
+│  DataSource · GitLocal · Repo · GitHub · GitHubPR · GitLab     │
 │  Issues · Metrics · AiSummary · AiConversation · Messages       │
 │  TeamExport · JiraProject · SpaFallback                         │
 └────────────────────────────┬────────────────────────────────────┘
@@ -82,6 +82,9 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 │  GitHubCommitStatsEnrichmentService                             │
 │  GitHubPrCollector · GitHubPullRequestCollector                 │
 │  GitHubPrStatsEnrichmentService · GitHubIssuesCollector         │
+│  GitLabClientFactory · GitLabRepositoryService                  │
+│  GitLabCollector · GitLabCommitIngestService                    │
+│  GitLabMrIngestService                                          │
 │  JiraCollector · IssueService                                   │
 │  MetricsService · MetricSnapshotService · MetricsScheduler      │
 │  MetricsAiService · OllamaLlmClient                             │
@@ -279,12 +282,12 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 - `AccessDeniedException` / `ForbiddenException` → 403
 - `ConflictException` → 409
 - `RateLimitExceededException` → 429 with `Retry-After` header
-- `ExternalServiceException` / `GitHubException` / `GitException` / `JiraException` → 502/500
+- `ExternalServiceException` / `GitHubException` / `GitLabException` / `GitException` / `JiraException` → 502/500
 - `GeneralException` / uncaught `Exception` → 500
 
 **`ApiError`** — Response body: `timestamp`, `status`, `error`, `message`, `path`, `correlationId`.
 
-**Exception classes:** `BadRequestException`, `ConflictException`, `ForbiddenException`, `GeneralException`, `GitException`, `GitHubException`, `JiraException`, `NotFoundException`, `RateLimitExceededException`.
+**Exception classes:** `BadRequestException`, `ConflictException`, `ForbiddenException`, `GeneralException`, `GitException`, `GitHubException`, `GitLabException`, `JiraException`, `NotFoundException`, `RateLimitExceededException`.
 
 ---
 
@@ -406,7 +409,7 @@ CHECK constraints (added V35):
 
 `project_key` was dropped in V32 (migrated to `jira_projects`). `DataSourceValidator` provides pre-DB fast-fail with friendly messages; the CHECK constraints are the enforcement backstop.
 
-**`DataSourceType`** (Enum) — `GIT_LOCAL`, `GITHUB`, `JIRA`.
+**`DataSourceType`** (Enum) — `GIT_LOCAL`, `GITHUB`, `GITLAB`, `JIRA`.
 
 #### Repository
 
@@ -414,7 +417,7 @@ CHECK constraints (added V35):
 
 #### Services
 
-**`DataSourceService`** — Creates, reads, updates, deletes datasources. Validates ownership and team membership. Encrypts API tokens. Auto-registers `GitRepositoryEntity` on create for local/GitHub types. For GitHub repos already in the system, subscribes the user to the existing data source (no duplicate created). Sets `canDelete` flag in response DTOs (true for creator or ADMIN only; false for subscriptions).
+**`DataSourceService`** — Creates, reads, updates, deletes datasources. Validates ownership and team membership. Encrypts API tokens. Auto-registers `GitRepositoryEntity` on create for local/GitHub/GitLab types. For GitHub and GitLab repos already in the system, subscribes the user to the existing data source (no duplicate created). Sets `canDelete` flag in response DTOs (true for creator or ADMIN only; false for subscriptions).
 
 **`DataSourceValidator`** — `validateCreate(CreateDataSourceRequest)`: checks required fields per type, validates path exists (GIT_LOCAL), validates base URL format (HTTP types).
 
@@ -424,6 +427,7 @@ CHECK constraints (added V35):
 - `GIT_LOCAL` → `GitLocalCollector.collectForRepository()`
 - `GITHUB` → Phase 1: `GitHubCollector.collectForRepository()` (commits), Phase 2: `GitHubPrCollector.collectForRepository()` (PRs), Phase 3 (conditional): `GitHubIssuesCollector.collectIssuesForRepo()` if `repo.collectIssues`
 - `GITHUB_ISSUES` → `GitHubIssuesCollector.collectIssuesForRepo(cfg, repoFullName)` per repo
+- `GITLAB` → Phase 1: `GitLabCollector.collectForRepository()` (commits), Phase 2: `GitLabMrIngestService.ingestForRepository()` (MRs)
 - `JIRA` → iterates `JiraProjectService.listTrackedProjects(cfg)`; calls `JiraCollector.collectIssues(project)` per project. Logs a warning if no tracked projects exist.
 - Updates `lastSuccessSync` on success.
 
@@ -463,6 +467,7 @@ CHECK constraints (added V35):
 | GET | `/` | `List<RepoDto>` | List repos attached to this datasource |
 | POST | `/` | 201 / 200 RepoDto | Attach a repo (`{ repoFullName, collectIssues }`); 200 if already attached (idempotent), 409 if owned by another DS |
 | DELETE | `/{repoId}` | 204 | Detach a repo; 409 if other users are subscribed |
+| GET | `/discover` | `List<DiscoveredRepoDto>` | Discover repositories for GITHUB or GITLAB datasources (type-dispatched, cached 60s) |
 
 ---
 
@@ -631,7 +636,7 @@ alternatives (independent rows per DS, explicit attachment join table).
 |---|---|---|
 | `id` | BIGSERIAL PK | |
 | `data_source_id` | FK → data_source_configs CASCADE | Canonical owner datasource |
-| `repo_type` | VARCHAR(16) NOT NULL | `LOCAL` or `GITHUB`; discriminator column (ADR-003); enforced by CHECK constraints `chk_repo_local_path` and `chk_repo_github_fullname` (V36) |
+| `repo_type` | VARCHAR(16) NOT NULL | `LOCAL`, `GITHUB`, or `GITLAB`; discriminator column (ADR-003); enforced by CHECK constraints `chk_repo_local_path` and `chk_repo_github_fullname` (V36); unconstrained VARCHAR so GITLAB required no migration |
 | `name` | VARCHAR(255) | |
 | `local_path` | VARCHAR(1024) NULLABLE | Null for GitHub repos |
 | `repo_full_name` | VARCHAR(255) UNIQUE | `owner/repo`; globally unique (see ADR-004); null for local repos |
@@ -864,7 +869,50 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 ---
 
-### 3.10 Issues Domain
+### 3.10 GitLab Domain (PDA-62)
+
+GitLab reuses the same storage as GitHub: `git_repositories` (with `repo_type = GITLAB`) and `github_pull_requests` (MRs stored by `iid`). No new migrations needed.
+
+#### Services
+
+**`GitLabClientFactory`** — Decrypts token via `TokenEncryptor`, resolves API base via `ParsingHelper.resolveGitLabApiBase` (null/blank/`gitlab.com` → `https://gitlab.com/api/v4`; self-hosted → `baseUrl/api/v4`). Builds `java.net.http.HttpRequest` with `PRIVATE-TOKEN` header.
+
+**`GitLabRepositoryService`** — `registerGitLabRepo(userId, dsId, fullName)`: fast path subscribes existing repo, slow path creates new `GitRepositoryEntity` with `RepoType.GITLAB`. `discoverRepos(userId, dsId)`: paginates `GET /api/v4/projects?membership=true&per_page=100` using `X-Next-Page` header, maps `path_with_namespace` to `DiscoveredRepoDto`. `@Cacheable("gitlab-discover-repos", key="#dataSourceId")`.
+
+**`GitLabCommitIngestService`** — `ingestForRepository(repoId, JobState)` → `int`. Pages `GET /api/v4/projects/{encoded-path}/repository/commits?with_stats=true&per_page=100` via `X-Next-Page`. Stops at `lastFetchedCommitHash` watermark. Sets `statsStatus = COMPLETE` inline (stats available in the list response). Dates parsed with `OffsetDateTime.parse(dateStr).toInstant()`. `filesChanged` set to 0 (GitLab `stats.total` = additions + deletions). No background enrichment phase needed.
+
+**`GitLabMrIngestService`** — `ingestForRepository(repoId, JobState)` → `int`. Pages `GET /api/v4/projects/{encoded-path}/merge_requests?per_page=100` via `X-Next-Page`. Maps GitLab MR `iid` → `number`, `author.username` → `authorLogin`. State `merged` → `merged=true`; `closed`/`merged` → `"closed"` else `"open"`. Lead time computed inline when `merged && mergedAt != null`. All stats set to 0 with `COMPLETE`. Skips unchanged MRs (same `updated_at`). Upserts via `GitHubPullRequestRepository.findByRepositoryAndNumber`.
+
+**`GitLabCollector`** — Calls `GitLabCommitIngestService.ingestForRepository()`, returns commit count.
+
+#### Helpers
+
+**`ParsingHelper.resolveGitLabApiBase(String)`** — null/blank/`https://gitlab.com` → `https://gitlab.com/api/v4`; otherwise `stripped + "/api/v4"`.
+
+#### Exception
+
+**`GitLabException`** — Extends `RuntimeException`. Mapped by `GlobalExceptionHandler` to HTTP 502 Bad Gateway.
+
+#### Controllers
+
+**`GitLabController`** — `/api/gitlab`, `@PreAuthorize("isAuthenticated()")`
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/repos` | Register GitLab repo (`RegisterGitLabRepoRequest: dataSourceId, fullName`) |
+| POST | `/repos/{repoId}/collect` | Trigger commit collection for a repo |
+
+#### DTOs (Records)
+
+`RegisterGitLabRepoRequest` (dataSourceId, fullName).
+
+#### Cache
+
+`gitlab-discover-repos` (Caffeine, 60s TTL, max 200 entries) — keyed by `dataSourceId`.
+
+---
+
+### 3.11 Issues Domain
 
 #### Entity
 
@@ -908,7 +956,7 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 ---
 
-### 3.11 Metrics Domain
+### 3.12 Metrics Domain
 
 #### Entity
 
@@ -1046,7 +1094,7 @@ Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date
 
 ---
 
-### 3.12 AI Domain
+### 3.13 AI Domain
 
 The AI layer generates natural-language summaries and metric explanations from pre-aggregated metric snapshots using a locally running Ollama LLM. All inference is fully offline — no data leaves the machine.
 
@@ -1192,14 +1240,14 @@ Index: `(conversation_id, created_at)`.
 
 ---
 
-### 3.13 Email Service
+### 3.14 Email Service
 
 **`EmailService`** — Dependencies: `JavaMailSender`; config: `fromEmail` (from `spring.mail.username`).
 - `sendPasswordResetEmail(String toEmail, String resetLink)` — Sends via `SimpleMailMessage` over configured SMTP/STARTTLS.
 
 ---
 
-### 3.14 Messaging Domain (PDA-60)
+### 3.15 Messaging Domain (PDA-60)
 
 #### Entities
 
@@ -1246,7 +1294,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 ---
 
-### 3.15 Notification Domain (PDA-58)
+### 3.16 Notification Domain (PDA-58)
 
 **`NotificationDispatchService`** — Async notification delivery service (PDA-58/T3).
 - `dispatchSummaries()` — Called by `MetricsSummaryScheduler` on Monday 08:00 UTC. Iterates all users with `userNotificationPrefs.aiBrief = true`, sends email with summary headline + overview.
@@ -1255,7 +1303,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 ---
 
-### 3.16 Invitation Domain (PDA-52)
+### 3.17 Invitation Domain (PDA-52)
 
 #### Entities
 

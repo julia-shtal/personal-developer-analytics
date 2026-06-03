@@ -9,11 +9,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DataSourceTypeTest {
 
     @Test
-    void enum_hasExactlyThreeValues_githubIssuesRemoved() {
+    void enum_hasExactlyFourValues() {
         assertThat(DataSourceType.values())
                 .containsExactlyInAnyOrder(
                         DataSourceType.GIT_LOCAL,
                         DataSourceType.GITHUB,
+                        DataSourceType.GITLAB,
                         DataSourceType.JIRA
                 );
     }

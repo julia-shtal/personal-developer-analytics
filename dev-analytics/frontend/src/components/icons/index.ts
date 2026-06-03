@@ -21,3 +21,4 @@ export { default as Branch }        from './IconBranch';
 export { default as Jira }          from './IconJira';
 export { default as Folder }        from './IconFolder';
 export { default as Github }        from './IconGithub';
+export { Gitlab }                   from './IconGitlab';
