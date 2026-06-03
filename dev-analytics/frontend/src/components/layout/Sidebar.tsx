@@ -144,7 +144,7 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav style={{ padding: '4px 8px', flex: 1, overflowY: 'auto' }}>
+      <nav aria-label="Main navigation" style={{ padding: '4px 8px', flex: 1, overflowY: 'auto' }}>
         <div className="t-label" style={{ padding: '8px 10px 6px', fontSize: 9.5, color: 'var(--muted)' }}>
           ── workspace
         </div>
@@ -177,6 +177,7 @@ export function Sidebar() {
         {user && (
           <button
             onClick={() => navigate('/settings')}
+            aria-label="Open profile and settings"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -189,7 +190,7 @@ export function Sidebar() {
               cursor: 'pointer',
               textAlign: 'left',
             }}
-            title="Open profile & settings"
+            title="Open profile and settings"
           >
             <Avatar user={user} size="sm" />
             <div style={{ flex: 1, minWidth: 0 }}>

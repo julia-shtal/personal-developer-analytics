@@ -40,3 +40,34 @@ describe('Modal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe('Modal accessibility', () => {
+  it('has role=dialog and aria-modal', () => {
+    render(
+      <Modal open title="Test Modal" onClose={() => {}}>
+        <span>content</span>
+      </Modal>
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+  });
+
+  it('is labelled by its title text', () => {
+    render(
+      <Modal open title="My Modal" onClose={() => {}}>
+        <span>content</span>
+      </Modal>
+    );
+    expect(screen.getByRole('dialog')).toHaveAccessibleName('My Modal');
+  });
+
+  it('renders nothing when closed', () => {
+    render(
+      <Modal open={false} title="Closed Modal" onClose={() => {}}>
+        <span>content</span>
+      </Modal>
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
