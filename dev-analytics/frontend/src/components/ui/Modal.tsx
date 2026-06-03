@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -20,11 +20,18 @@ export function Modal({
   footer,
   width = 540,
 }: ModalProps) {
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+    const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    firstFocusable?.focus();
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
@@ -46,6 +53,10 @@ export function Modal({
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: width,
@@ -64,9 +75,9 @@ export function Modal({
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               {eyebrow && <div className="t-eyebrow" style={{ marginBottom: 6 }}>{eyebrow}</div>}
-              <div className="t-h2" style={{ fontSize: 18 }}>{title}</div>
+              <div id={titleId} className="t-h2" style={{ fontSize: 18 }}>{title}</div>
             </div>
-            <button className="btn btn-sm btn-icon" onClick={onClose} title="Close (Esc)" aria-label="Close">
+            <button className="btn btn-sm btn-icon" onClick={onClose} aria-label="Close dialog">
               <X width={13} height={13} />
             </button>
           </div>

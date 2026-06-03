@@ -1,16 +1,64 @@
-# docker-compose.yml
-version: '3.8'
+version: '3.9'
+
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: dev_analytics
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD:
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    # Start serve in background, wait for it, pull the model, then keep the process alive.
+    command: >
+      /bin/sh -c "
+        ollama serve &
+        until curl -sf http://localhost:11434/api/tags; do sleep 1; done &&
+        ollama list | grep -q llama3.2 || ollama pull llama3.2 &&
+        wait
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 120s
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dev_analytics
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      OLLAMA_BASE_URL: http://ollama:11434
+      COOKIE_SECURE: "true"
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
 
 volumes:
   postgres_data:
+  ollama_models:

@@ -1,0 +1,6 @@
+# Activated by --spring.profiles.active=demo
+# Seeds a fully-populated demo user on first startup.
+
+logging:
+  level:
+    com.juliashtal.devanalytics.demo: INFO
