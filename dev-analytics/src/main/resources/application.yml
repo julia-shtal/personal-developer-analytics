@@ -4,9 +4,9 @@ spring:
       max-file-size: 2MB
       max-request-size: 2MB
   datasource:
-    url:
-    username:
-    password:
+    url: ${SPRING_DATASOURCE_URL:}
+    username: ${SPRING_DATASOURCE_USERNAME:}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
   flyway:
     repair-on-migrate: true  # Spring Boot 3.x property
     enabled: true
