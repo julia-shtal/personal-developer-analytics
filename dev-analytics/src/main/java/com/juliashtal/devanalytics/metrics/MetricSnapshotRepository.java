@@ -126,6 +126,8 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
     // Upsert guard — includes team_id so personal and team snapshots never clash
     // -------------------------------------------------------------------------
 
+    long countByUserId(Long userId);
+
     @Query(nativeQuery = true, value = """
             SELECT * FROM metric_snapshots
             WHERE user_id       = :userId
