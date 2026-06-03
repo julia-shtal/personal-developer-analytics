@@ -33,7 +33,7 @@ public class IssueEntity {
     @Column(name = "source_issue_key", nullable = false)
     private String sourceIssueKey;
 
-    // Explicit source discriminator — set on every save path (see ADR-005).
+    // Explicit source discriminator — set on every save path.
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private IssueSource source;

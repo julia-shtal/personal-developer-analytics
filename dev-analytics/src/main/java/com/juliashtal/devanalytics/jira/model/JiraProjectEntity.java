@@ -16,7 +16,7 @@ import java.time.Instant;
  * The database enforces {@code UNIQUE (base_url_normalized, project_key)} (constraint
  * {@code uq_jira_project_global}), so the same upstream project can have at most one
  * canonical row in the system. This mirrors the {@code git_repositories.repo_full_name UNIQUE}
- * constraint (ADR-004, ADR-002). If two users track the same {@code (baseUrl, projectKey)} on
+ * constraint. If two users track the same {@code (baseUrl, projectKey)} on
  * separate datasources, {@link JiraProjectService#addProject}
  * returns the existing canonical row on the second call, and the caller is responsible for
  * subscribing the new user via {@link UserProjectRegistration}.
@@ -34,8 +34,6 @@ import java.time.Instant;
  * paths before querying issues.
  *
  * @see JiraUrl#normalize(String) for the URL normalization rule applied to {@link #baseUrlNormalized}
- * @see <a href="../../../../../../../../docs/adr/ADR-002-jira-project-first-class.md">ADR-002</a>
- * @see <a href="../../../../../../../../docs/adr/ADR-004-cross-ds-repo-sharing.md">ADR-004</a>
  */
 @Data
 @Entity
