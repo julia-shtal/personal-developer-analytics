@@ -31,7 +31,7 @@ public class RepoService {
         Long userId = SecurityUtils.getCurrentUserId();
 
         // Single view query replaces the three-path merge (owned + subscribed + team).
-        // See V38 migration and ADR-004 for the view design.
+        // View defined in V38 migration.
         List<Long> repoIds = dataSourceId != null
                 ? gitRepoRepository.findAccessibleRepoIdsByDataSource(userId, dataSourceId)
                 : gitRepoRepository.findAccessibleRepoIds(userId);
