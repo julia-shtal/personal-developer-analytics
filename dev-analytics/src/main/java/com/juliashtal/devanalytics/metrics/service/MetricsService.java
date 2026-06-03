@@ -582,7 +582,7 @@ public class MetricsService {
     /**
      * MERGE_WITHOUT_REVIEW_RATIO — fraction of merged PRs authored by this user
      * that had zero reviews recorded in github_pr_reviews.
-     * Requires githubLogin to be set and PR review data to have been collected (Ticket 4).
+     * Requires githubLogin to be set and PR review data to have been collected.
      */
     private void calcMergeWithoutReview(User user, Team team, List<Long> repoIds,
                                         LocalDate fromDate, LocalDate toDate,
