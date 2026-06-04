@@ -34,6 +34,10 @@ let refreshPromise: Promise<string> | null = null;
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
+    // Network error (no response) — backend is down; don't attempt refresh
+    if (!error.response) {
+      return Promise.reject(error);
+    }
     const original = error.config;
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;

@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { PageSpinner } from '@/components/ui/Spinner';
 
 export function AppShell() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isOffline } = useAuth();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
@@ -30,7 +30,18 @@ export function AppShell() {
     };
   }, []);
 
-  if (isLoading) return <PageSpinner />;
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <PageSpinner />
+        {isOffline && (
+          <span style={{ fontSize: 12, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>
+            reconnecting to server…
+          </span>
+        )}
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
 
   return (
