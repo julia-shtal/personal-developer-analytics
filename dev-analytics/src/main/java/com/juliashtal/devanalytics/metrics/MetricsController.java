@@ -8,6 +8,8 @@ import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.security.CheckHelper;
+import com.juliashtal.devanalytics.security.SecurityUtils;
+import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.service.TeamService;
@@ -255,15 +257,65 @@ public class MetricsController {
         metricsService.calculateForTeam(teamId, user.getId(), from, to);
     }
 
-    /** Per-member daily commits series + one "team" aggregate row. */
+    /**
+     * Per-member daily commits series + one "team" aggregate row.
+     * Managers and admins receive the full per-member breakdown; developers who are team members
+     * receive only the aggregate row (userId=null) — per-member rows are never sent to DEVELOPER role.
+     * Optional repoId scopes results to snapshots for that specific repository.
+     */
     @GetMapping("/teams/{teamId}/daily-commits")
-    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @PreAuthorize("@teamAccessGuard.canRead(#teamId, authentication)")
     public List<TeamMetricPointDto> getTeamDailyCommits(
             @PathVariable Long teamId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
     ) {
-        return buildTeamDailySeries(teamId, DAILY_COMMITS_COUNT, from, to);
+        List<TeamMetricPointDto> series = buildTeamDailySeries(teamId, DAILY_COMMITS_COUNT, from, to, repoId);
+        if (SecurityUtils.getCurrentUserRole() == Role.DEVELOPER) {
+            return series.stream().filter(p -> p.userId() == null).toList();
+        }
+        return series;
+    }
+
+    /**
+     * Aggregate-only team PR merged series. Accessible to team members (not just managers).
+     * Developers receive only the aggregate row; managers/admins receive per-member breakdown.
+     * Optional repoId scopes results to snapshots for that specific repository.
+     */
+    @GetMapping("/teams/{teamId}/daily-pr-merged")
+    @PreAuthorize("@teamAccessGuard.canRead(#teamId, authentication)")
+    public List<TeamMetricPointDto> getTeamDailyPrMerged(
+            @PathVariable Long teamId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        List<TeamMetricPointDto> series = buildTeamDailySeries(teamId, DAILY_PR_MERGED, from, to, repoId);
+        if (SecurityUtils.getCurrentUserRole() == Role.DEVELOPER) {
+            return series.stream().filter(p -> p.userId() == null).toList();
+        }
+        return series;
+    }
+
+    /**
+     * Aggregate-only team issues closed series. Accessible to team members (not just managers).
+     * Developers receive only the aggregate row; managers/admins receive per-member breakdown.
+     * Optional repoId scopes results to snapshots for that specific repository.
+     */
+    @GetMapping("/teams/{teamId}/daily-issues-closed")
+    @PreAuthorize("@teamAccessGuard.canRead(#teamId, authentication)")
+    public List<TeamMetricPointDto> getTeamDailyIssuesClosed(
+            @PathVariable Long teamId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        List<TeamMetricPointDto> series = buildTeamDailySeries(teamId, DAILY_ISSUES_CLOSED, from, to, repoId);
+        if (SecurityUtils.getCurrentUserRole() == Role.DEVELOPER) {
+            return series.stream().filter(p -> p.userId() == null).toList();
+        }
+        return series;
     }
 
     /** One MemberSummaryDto per member — all metric types summed over the window. */
@@ -417,12 +469,25 @@ public class MetricsController {
         User user = checkHelper.currentUser();
 
         if (repoId == null) {
-            Map<LocalDate, Double> sumByDate = new TreeMap<>();
+            // DAILY_CHURN_RATIO is a ratio: averaging per-repo daily values gives the correct cross-repo estimate.
+            // All other daily-series metrics are counts: summing per-repo values is correct.
+            boolean isRatio = type == DAILY_CHURN_RATIO;
+
+            Map<LocalDate, List<Double>> valuesByDate = new TreeMap<>();
             metricSnapshotService
                     .getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to)
-                    .forEach(s -> sumByDate.merge(s.getDate(), s.getValue(), Double::sum));
-            return sumByDate.entrySet().stream()
-                    .map(e -> new MetricPointDto(e.getKey(), e.getValue(), type.name(), null, null))
+                    .forEach(s -> valuesByDate
+                            .computeIfAbsent(s.getDate(), k -> new ArrayList<>())
+                            .add(s.getValue()));
+
+            return valuesByDate.entrySet().stream()
+                    .map(e -> {
+                        List<Double> vals = e.getValue();
+                        double agg = isRatio
+                                ? vals.stream().mapToDouble(Double::doubleValue).average().orElse(0.0)
+                                : vals.stream().mapToDouble(Double::doubleValue).sum();
+                        return new MetricPointDto(e.getKey(), agg, type.name(), null, null);
+                    })
                     .toList();
         }
 
@@ -450,20 +515,39 @@ public class MetricsController {
 
         if (list.isEmpty()) return new MetricAggregateDto(type, 0.0, null, null);
 
+        if (repoId == null && list.size() > 1) {
+            // Cross-repo: compute median of per-repo values rather than picking an arbitrary snapshot.
+            List<Double> sorted = list.stream().mapToDouble(MetricSnapshot::getValue).sorted().boxed().toList();
+            int n = sorted.size();
+            double median = (n % 2 == 0)
+                    ? (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0
+                    : sorted.get(n / 2);
+            return new MetricAggregateDto(type, median, from, to);
+        }
+
         MetricSnapshot last = list.stream().max(Comparator.comparing(MetricSnapshot::getDate)).orElseThrow();
         return new MetricAggregateDto(last.getMetricType(), last.getValue(), last.getPeriodFrom(), last.getPeriodTo());
     }
 
     private List<TeamMetricPointDto> buildTeamDailySeries(Long teamId, MetricType type,
-                                                          LocalDate from, LocalDate to) {
+                                                          LocalDate from, LocalDate to,
+                                                          Long repoId) {
         Team team = requireTeam(teamId);
         List<Long> memberIds = team.getMembers().stream().map(User::getId).toList();
         if (memberIds.isEmpty()) return List.of();
 
         // Team-scoped snapshots: each member's commits are attributed by authorEmail,
         // so data from shared repos is correctly split per developer.
-        List<MetricSnapshot> snapshots = metricSnapshotService
-                .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(memberIds, teamId, type, from, to);
+        List<MetricSnapshot> snapshots;
+        if (repoId != null) {
+            GitRepositoryEntity repo = repoService.getById(repoId);
+            snapshots = metricSnapshotService
+                    .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndRepositoryAndDateBetween(
+                            memberIds, teamId, type, repo, from, to);
+        } else {
+            snapshots = metricSnapshotService
+                    .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(memberIds, teamId, type, from, to);
+        }
 
         // Group by (userId, date) to collapse per-repo rows into per-member daily totals
         Map<Long, Map<LocalDate, Double>> perUserPerDay = new HashMap<>();

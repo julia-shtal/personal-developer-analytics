@@ -6,7 +6,7 @@ import {
   Eye, EyeOff, MessageSquare, AlertCircle, X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { datasourcesApi, type SyncStatus } from '@/api/datasources';
+import { datasourcesApi, jiraProjectsApi, type SyncStatus } from '@/api/datasources';
 import { issuesApi } from '@/api/issues';
 import { reposApi } from '@/api/repos';
 import { DiscoverReposModal } from './DiscoverReposModal';
@@ -344,6 +344,133 @@ function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; source
   );
 }
 
+// ─── Jira project → repo linking ──────────────────────────────────────────────
+
+function LinkRepoModal({ jiraProjectId, onClose }: { jiraProjectId: number; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const { data: allRepos } = useQuery({
+    queryKey: ['repos'],
+    queryFn: () => reposApi.list().then((r) => r.data),
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: linked } = useQuery({
+    queryKey: ['jira-linked-repos', jiraProjectId],
+    queryFn: () => jiraProjectsApi.listLinkedRepos(jiraProjectId).then((r) => r.data),
+  });
+
+  const subscribed = allRepos?.filter((r) => r.subscribed && r.repoFullName) ?? [];
+  const linkedIds = new Set(linked?.map((r) => r.id) ?? []);
+
+  const linkMutation = useMutation({
+    mutationFn: (repoId: number) => jiraProjectsApi.linkRepo(jiraProjectId, repoId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jira-linked-repos', jiraProjectId] });
+      setError('');
+    },
+    onError: () => setError('Failed to link repository.'),
+  });
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, padding: 24, width: 400, maxHeight: '80vh', overflowY: 'auto' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 16, alignItems: 'center' }}>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>Link GitHub repository</span>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close"><X width={14} height={14} /></button>
+        </div>
+
+        {error && (
+          <div style={{ fontSize: 11, color: 'var(--coral-strong)', background: 'var(--coral-bg)', borderRadius: 6, padding: '6px 10px', marginBottom: 10 }}>{error}</div>
+        )}
+
+        {subscribed.length === 0 ? (
+          <p className="t-label" style={{ padding: '8px 0' }}>No subscribed GitHub repositories found. Subscribe to a repo first.</p>
+        ) : (
+          <div className="col gap-2">
+            {subscribed.map((repo) => {
+              const isLinked = linkedIds.has(repo.id);
+              return (
+                <div key={repo.id} className="row" style={{ gap: 10, padding: '8px 10px', background: 'var(--bg-2)', borderRadius: 6, alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flex: 1 }}>{repo.repoFullName}</span>
+                  {isLinked ? (
+                    <Chip color="cyan">linked</Chip>
+                  ) : (
+                    <button
+                      className="btn btn-sm"
+                      disabled={linkMutation.isPending}
+                      onClick={() => linkMutation.mutate(repo.id)}
+                    >
+                      Link
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function JiraProjectLinkedReposSection({ jiraProjectId }: { jiraProjectId: number }) {
+  const qc = useQueryClient();
+  const [showLinkModal, setShowLinkModal] = useState(false);
+
+  const { data: linked } = useQuery({
+    queryKey: ['jira-linked-repos', jiraProjectId],
+    queryFn: () => jiraProjectsApi.listLinkedRepos(jiraProjectId).then((r) => r.data),
+  });
+
+  const unlinkMutation = useMutation({
+    mutationFn: (repoId: number) => jiraProjectsApi.unlinkRepo(jiraProjectId, repoId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jira-linked-repos', jiraProjectId] }),
+  });
+
+  return (
+    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--line-2)' }}>
+      <div className="row gap-2" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+        <span className="t-label" style={{ fontSize: 11, color: 'var(--fg-3)', flexShrink: 0 }}>linked repos:</span>
+        {linked && linked.length > 0 ? linked.map((repo) => (
+          <span key={repo.id} className="row gap-1" style={{ alignItems: 'center', background: 'var(--cyan-bg)', borderRadius: 4, padding: '2px 6px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>
+            {repo.repoFullName ?? repo.name}
+            <button
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--fg-3)', lineHeight: 1, display: 'flex' }}
+              title="Unlink"
+              aria-label={`Unlink ${repo.repoFullName ?? repo.name}`}
+              onClick={() => unlinkMutation.mutate(repo.id)}
+              disabled={unlinkMutation.isPending}
+            >
+              <X width={10} height={10} />
+            </button>
+          </span>
+        )) : (
+          <span className="t-label" style={{ fontSize: 11 }}>none</span>
+        )}
+        <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setShowLinkModal(true)}>
+          <Plus width={10} height={10} />
+          Link repo
+        </button>
+      </div>
+      {showLinkModal && <LinkRepoModal jiraProjectId={jiraProjectId} onClose={() => setShowLinkModal(false)} />}
+    </div>
+  );
+}
+
 // ─── Jira projects sub-panel ───────────────────────────────────────────────────
 
 function JiraProjectRow({
@@ -367,39 +494,42 @@ function JiraProjectRow({
   const projectUrl = p.dataSourceBaseUrl ? `${p.dataSourceBaseUrl}/browse/${p.projectKey}` : undefined;
 
   return (
-    <div className="row" style={{ background: 'var(--bg-card)', border: '1px solid var(--line-2)', padding: '10px 12px', borderRadius: 6, gap: 10 }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--cyan)', background: 'var(--cyan-bg)', padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
-        {p.projectKey}
-      </span>
-      <span style={{ fontSize: 12, color: 'var(--fg)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {p.projectName ?? p.projectKey}
-      </span>
-      {counts && (counts.open > 0 || counts.closed > 0) && (
-        <span className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
-          <span style={{ color: 'var(--emerald)', fontWeight: 500 }}>{counts.open.toLocaleString()}</span>
-          <span style={{ color: 'var(--line)', margin: '0 2px' }}>/</span>
-          {counts.closed.toLocaleString()}
-          <span className="t-label" style={{ marginLeft: 4 }}>issues</span>
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--line-2)', padding: '10px 12px', borderRadius: 6 }}>
+      <div className="row" style={{ gap: 10 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--cyan)', background: 'var(--cyan-bg)', padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
+          {p.projectKey}
         </span>
-      )}
-      <div className="row gap-1" style={{ flexShrink: 0 }}>
-        {projectUrl && (
-          <a href={projectUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-icon" title="Open project" aria-label="Open Jira project">
-            <ExternalLink width={11} height={11} />
-          </a>
+        <span style={{ fontSize: 12, color: 'var(--fg)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {p.projectName ?? p.projectKey}
+        </span>
+        {counts && (counts.open > 0 || counts.closed > 0) && (
+          <span className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+            <span style={{ color: 'var(--emerald)', fontWeight: 500 }}>{counts.open.toLocaleString()}</span>
+            <span style={{ color: 'var(--line)', margin: '0 2px' }}>/</span>
+            {counts.closed.toLocaleString()}
+            <span className="t-label" style={{ marginLeft: 4 }}>issues</span>
+          </span>
         )}
-        {isOwner && (isConfirming ? (
-          <div className="row gap-1">
-            <span className="t-label" style={{ color: 'var(--coral)', fontSize: 11 }}>Remove?</span>
-            <button className="btn btn-sm" style={{ color: 'var(--coral)' }} onClick={onConfirmDetach} disabled={isDetaching}>Yes</button>
-            <button className="btn btn-sm" onClick={onCancelDetach}>No</button>
-          </div>
-        ) : (
-          <button className="btn btn-sm btn-icon" onClick={onRequestDetach} title="Remove project" aria-label="Remove project">
-            <Trash2 width={12} height={12} />
-          </button>
-        ))}
+        <div className="row gap-1" style={{ flexShrink: 0 }}>
+          {projectUrl && (
+            <a href={projectUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-icon" title="Open project" aria-label="Open Jira project">
+              <ExternalLink width={11} height={11} />
+            </a>
+          )}
+          {isOwner && (isConfirming ? (
+            <div className="row gap-1">
+              <span className="t-label" style={{ color: 'var(--coral)', fontSize: 11 }}>Remove?</span>
+              <button className="btn btn-sm" style={{ color: 'var(--coral)' }} onClick={onConfirmDetach} disabled={isDetaching}>Yes</button>
+              <button className="btn btn-sm" onClick={onCancelDetach}>No</button>
+            </div>
+          ) : (
+            <button className="btn btn-sm btn-icon" onClick={onRequestDetach} title="Remove project" aria-label="Remove project">
+              <Trash2 width={12} height={12} />
+            </button>
+          ))}
+        </div>
       </div>
+      <JiraProjectLinkedReposSection jiraProjectId={p.id} />
     </div>
   );
 }
@@ -897,11 +1027,15 @@ export function DataSourcesPage() {
               {/* Expanded panel */}
               {isExpanded && (
                 <div style={{ borderTop: '1px solid var(--line-2)', background: 'var(--bg-2)', padding: 16 }}>
-                  <div className="t-eyebrow" style={{ marginBottom: 10 }}>── repositories</div>
-                  <ReposPanel dataSourceId={src.id} sourceType={src.type} />
+                  {src.type !== 'JIRA' && (
+                    <>
+                      <div className="t-eyebrow" style={{ marginBottom: 10 }}>── repositories</div>
+                      <ReposPanel dataSourceId={src.id} sourceType={src.type} />
+                    </>
+                  )}
                   {src.type === 'JIRA' && (
                     <>
-                      <div className="t-eyebrow" style={{ marginTop: 18, marginBottom: 10 }}>── jira projects</div>
+                      <div className="t-eyebrow" style={{ marginBottom: 10 }}>── jira projects</div>
                       <JiraProjectsPanel dataSourceId={src.id} syncing={isSyncing} isOwner={!!src.canDelete} />
                     </>
                   )}

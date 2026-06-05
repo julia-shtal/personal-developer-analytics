@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Users, ChevronDown, MessageSquare, Sparkles, AlertCircle, Shield } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
 import { teamMetricsApi } from '@/api/metrics';
+import { reposApi } from '@/api/repos';
 import { aiApi } from '@/api/ai';
 import { KpiTile } from '@/components/ui/KpiTile';
 import { Chip } from '@/components/ui/Chip';
@@ -17,9 +18,10 @@ import { PageSpinner, Spinner } from '@/components/ui/Spinner';
 import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
 import { ProseWithNumbers } from '@/components/ui/ProseWithNumbers';
 import { useDateRange } from '@/context/DateRangeContext';
+import { useAuth } from '@/context/AuthContext';
 import { formatDate, timeAgo } from '@/lib/dates';
 import { Commits, PRMerged, IssuesClosed, LeadTime, Churn, Focus } from '@/components/icons';
-import type { Team, MemberSummaryDto } from '@/types';
+import type { Team, TeamMembership, MemberSummaryDto, RepoDto } from '@/types';
 import type { MetricsSummaryDto } from '@/types/ai';
 
 function fmt(v: number | undefined, decimals = 1) {
@@ -288,35 +290,84 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
 export function TeamDashboardPage() {
   const qc = useQueryClient();
   const { range } = useDateRange();
+  const { isManager, isAdmin } = useAuth();
+  const isFullAccess = isManager || isAdmin;
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
+  const [teamRepoId, setTeamRepoId] = useState<number | null>(null);
   const [teamPickerOpen, setTeamPickerOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<MemberSummaryDto | null>(null);
   const { from, to } = range;
 
-  const { data: teams, isLoading: teamsLoading } = useQuery<Team[]>({
+  // Managers/admins see their managed teams; developers see teams they are members of.
+  const { data: managedTeams, isLoading: managedLoading } = useQuery<Team[]>({
     queryKey: ['teams'],
     queryFn: () => teamsApi.list().then((r) => r.data),
+    enabled: isFullAccess,
   });
+
+  const { data: memberTeams, isLoading: memberLoading } = useQuery<TeamMembership[]>({
+    queryKey: ['team-memberships'],
+    queryFn: () => teamsApi.myMemberships().then((r) => r.data),
+    enabled: !isFullAccess,
+  });
+
+  const teams: Array<{ id: number; name: string }> = isFullAccess
+    ? (managedTeams ?? [])
+    : (memberTeams ?? []);
+  const teamsLoading = isFullAccess ? managedLoading : memberLoading;
 
   const activeTeamId = selectedTeamId ?? teams?.[0]?.id ?? null;
   const activeTeam = teams?.find((t) => t.id === activeTeamId);
 
-  const { data: commitSeries, isLoading: commitsLoading } = useQuery({
-    queryKey: ['team-commits', activeTeamId, from, to],
+  // Reset repo filter whenever the active team changes.
+  useEffect(() => { setTeamRepoId(null); }, [activeTeamId]);
+
+  const { data: teamRepos } = useQuery<RepoDto[]>({
+    queryKey: ['team-repos', activeTeamId],
     queryFn: () =>
       activeTeamId
-        ? teamMetricsApi.dailyCommits(activeTeamId, from, to).then((r) => r.data)
+        ? reposApi.list(undefined, activeTeamId).then((r) => r.data)
+        : Promise.resolve([]),
+    enabled: !!activeTeamId,
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: commitSeries, isLoading: commitsLoading } = useQuery({
+    queryKey: ['team-commits', activeTeamId, from, to, teamRepoId],
+    queryFn: () =>
+      activeTeamId
+        ? teamMetricsApi.dailyCommits(activeTeamId, from, to, teamRepoId).then((r) => r.data)
         : Promise.resolve([]),
     enabled: !!activeTeamId,
   });
 
+  // Additional aggregate series for developer view — only fetched when not full access.
+  const { data: prMergedSeries } = useQuery({
+    queryKey: ['team-pr-merged', activeTeamId, from, to, teamRepoId],
+    queryFn: () =>
+      activeTeamId
+        ? teamMetricsApi.dailyPrMerged(activeTeamId, from, to, teamRepoId).then((r) => r.data)
+        : Promise.resolve([]),
+    enabled: !isFullAccess && !!activeTeamId,
+  });
+
+  const { data: issuesClosedSeries } = useQuery({
+    queryKey: ['team-issues-closed', activeTeamId, from, to, teamRepoId],
+    queryFn: () =>
+      activeTeamId
+        ? teamMetricsApi.dailyIssuesClosed(activeTeamId, from, to, teamRepoId).then((r) => r.data)
+        : Promise.resolve([]),
+    enabled: !isFullAccess && !!activeTeamId,
+  });
+
+  // Per-member summary: only fetched for manager/admin — developers don't have access.
   const { data: summary, isLoading: summaryLoading } = useQuery({
     queryKey: ['team-summary', activeTeamId, from, to],
     queryFn: () =>
       activeTeamId
         ? teamMetricsApi.summary(activeTeamId, from, to).then((r) => r.data)
         : Promise.resolve([]),
-    enabled: !!activeTeamId,
+    enabled: isFullAccess && !!activeTeamId,
   });
 
   const [calcError, setCalcError] = useState<string | null>(null);
@@ -355,26 +406,41 @@ export function TeamDashboardPage() {
     return (
       <div className="page fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
         <Users width={40} height={40} style={{ opacity: 0.2, marginBottom: 12 }} />
-        <p className="t-muted">No teams found. You need to be a manager of at least one team.</p>
+        <p className="t-muted">
+          {isFullAccess
+            ? 'No teams found. You need to be a manager of at least one team.'
+            : 'No teams found. You are not a member of any team yet.'}
+        </p>
       </div>
     );
   }
 
-  // Aggregate KPIs from summary
-  const totals = summary?.reduce(
-    (acc, m) => ({
-      commits:      acc.commits      + (m.metrics.DAILY_COMMITS_COUNT ?? 0),
-      prsMerged:    acc.prsMerged    + (m.metrics.DAILY_PR_MERGED     ?? 0),
-      issuesClosed: acc.issuesClosed + (m.metrics.DAILY_ISSUES_CLOSED ?? 0),
-    }),
-    { commits: 0, prsMerged: 0, issuesClosed: 0 }
-  ) ?? { commits: 0, prsMerged: 0, issuesClosed: 0 };
+  const aggregateSum = (series: typeof commitSeries) =>
+    series?.filter((p) => p.userId == null).reduce((s, p) => s + p.value, 0) ?? 0;
 
-  const topCommitter = summary?.length
+  // Aggregate KPIs from per-member summary (manager/admin) or aggregate series (developer)
+  const totals = isFullAccess
+    ? (summary?.reduce(
+        (acc, m) => ({
+          commits:      acc.commits      + (m.metrics.DAILY_COMMITS_COUNT ?? 0),
+          prsMerged:    acc.prsMerged    + (m.metrics.DAILY_PR_MERGED     ?? 0),
+          issuesClosed: acc.issuesClosed + (m.metrics.DAILY_ISSUES_CLOSED ?? 0),
+        }),
+        { commits: 0, prsMerged: 0, issuesClosed: 0 }
+      ) ?? { commits: 0, prsMerged: 0, issuesClosed: 0 })
+    : {
+        commits:      aggregateSum(commitSeries),
+        prsMerged:    aggregateSum(prMergedSeries),
+        issuesClosed: aggregateSum(issuesClosedSeries),
+      };
+
+  const topCommitter = isFullAccess && summary?.length
     ? [...summary].sort((a, b) => (b.metrics.DAILY_COMMITS_COUNT ?? 0) - (a.metrics.DAILY_COMMITS_COUNT ?? 0))[0]
     : null;
 
-  const memberCount = summary?.length ?? activeTeam?.members?.length ?? 0;
+  const memberCount = isFullAccess
+    ? (summary?.length ?? (activeTeam as Team | undefined)?.members?.length ?? 0)
+    : (activeTeam as TeamMembership | undefined)?.memberCount ?? 0;
 
   return (
     <div className="page fade-in">
@@ -385,10 +451,12 @@ export function TeamDashboardPage() {
             ── Team · {activeTeam?.name ?? '…'} · {memberCount} member{memberCount !== 1 ? 's' : ''}
           </div>
           <h1 className="t-h1">
-            {summaryLoading
+            {(isFullAccess ? summaryLoading : commitsLoading)
               ? 'Loading team data…'
               : totals.commits > 0
-                ? <><em>{fmtNumber(totals.commits)}</em> commits across the team{topCommitter && topCommitter.metrics.DAILY_COMMITS_COUNT ? <>, led by <em>{topCommitter.username}</em> at <em>{Math.round(topCommitter.metrics.DAILY_COMMITS_COUNT)}</em>.</> : '.'}</>
+                ? isFullAccess && topCommitter?.metrics.DAILY_COMMITS_COUNT
+                  ? <><em>{fmtNumber(totals.commits)}</em> commits across the team, led by <em>{topCommitter.username}</em> at <em>{Math.round(topCommitter.metrics.DAILY_COMMITS_COUNT)}</em>.</>
+                  : <><em>{fmtNumber(totals.commits)}</em> commits across the team.</>
                 : 'No data for this period — try recalculating.'}
           </h1>
         </div>
@@ -403,6 +471,47 @@ export function TeamDashboardPage() {
           }}>
             <AlertCircle width={13} height={13} style={{ flexShrink: 0 }} />
             {calcError}
+          </div>
+        )}
+
+        {/* Team repo selector */}
+        {teamRepos && teamRepos.length > 0 && (
+          <div style={{ position: 'relative', display: 'inline-block', flexShrink: 0 }}>
+            <select
+              value={teamRepoId ?? ''}
+              onChange={(e) => setTeamRepoId(e.target.value === '' ? null : Number(e.target.value))}
+              aria-label="Filter team metrics by repository"
+              style={{
+                appearance: 'none',
+                background: 'var(--bg-2)',
+                border: '1px solid var(--line)',
+                borderRadius: 6,
+                color: 'var(--fg)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                padding: '5px 28px 5px 10px',
+                cursor: 'pointer',
+                outline: 'none',
+                minWidth: 140,
+              }}
+            >
+              <option value="">all repos</option>
+              {teamRepos.map((repo) => (
+                <option key={repo.id} value={repo.id}>{repo.name}</option>
+              ))}
+            </select>
+            <ChevronDown
+              width={11}
+              height={11}
+              style={{
+                position: 'absolute',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                pointerEvents: 'none',
+                color: 'var(--fg-3)',
+              }}
+            />
           </div>
         )}
 
@@ -449,15 +558,15 @@ export function TeamDashboardPage() {
       {/* KPI row */}
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="grid-kpi">
-          <KpiTile label="team commits"       value={fmtNumber(totals.commits)}       sub="all members"         accent="violet"  icon={<Commits      width={16} height={16} />} tooltip="Sum of daily commits across all team members in the selected period" />
-          <KpiTile label="team prs merged"   value={Math.round(totals.prsMerged)}    sub="to default branch"   accent="violet"  icon={<PRMerged     width={16} height={16} />} tooltip="Sum of daily pull requests merged to the default branch by the team" />
-          <KpiTile label="team issues closed" value={Math.round(totals.issuesClosed)} sub="resolved · closed"  accent="emerald" icon={<IssuesClosed width={16} height={16} />} tooltip="Sum of daily Jira/GitHub issues resolved or closed by the team" />
-          <KpiTile label="active members"    value={memberCount}                      sub="≥ 1 commit / period" accent="cyan"    icon={<Users        width={16} height={16} />} tooltip="Members with at least one commit in the selected period" />
+            <KpiTile label="team commits"       value={fmtNumber(totals.commits)}                 sub="all members"         accent="violet"  icon={<Commits      width={16} height={16} />} tooltip="Sum of daily commits across all team members in the selected period" />
+          <KpiTile label="team prs merged"   value={String(Math.round(totals.prsMerged))}    sub="to default branch"   accent="violet"  icon={<PRMerged     width={16} height={16} />} tooltip="Sum of daily pull requests merged to the default branch by the team" />
+          <KpiTile label="team issues closed" value={String(Math.round(totals.issuesClosed))} sub="resolved · closed"  accent="emerald" icon={<IssuesClosed width={16} height={16} />} tooltip="Sum of daily Jira/GitHub issues resolved or closed by the team" />
+          <KpiTile label="members"           value={memberCount || '—'}                       sub="in this team"        accent="cyan"    icon={<Users        width={16} height={16} />} tooltip="Number of members in the team" />
         </div>
       </div>
 
-      {/* AI team insight */}
-      {activeTeamId && (
+      {/* AI team insight — managers/admins only; requires per-member summary data */}
+      {isFullAccess && activeTeamId && (
         <AiTeamInsightCard
           range={range}
           teamId={activeTeamId}
@@ -470,17 +579,32 @@ export function TeamDashboardPage() {
       <div className="card" style={{ padding: 22, marginBottom: 24 }}>
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
           <div>
-            <div className="t-eyebrow">commits — per member</div>
-            <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Daily commits by member</div>
+            <div className="t-eyebrow">
+              {isFullAccess ? 'commits — per member' : 'commits — team aggregate'}
+            </div>
+            <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>
+              {isFullAccess ? 'Daily commits by member' : 'Daily commits'}
+            </div>
           </div>
-          <Chip>{memberCount} member{memberCount !== 1 ? 's' : ''}</Chip>
+          {isFullAccess && <Chip>{memberCount} member{memberCount !== 1 ? 's' : ''}</Chip>}
         </div>
         {commitsLoading ? (
           <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span className="t-muted">Loading…</span>
           </div>
         ) : commitSeries?.length ? (
-          <MultiLineChart data={commitSeries.filter((d) => d.username !== 'team')} height={220} />
+          isFullAccess ? (
+            <MultiLineChart data={commitSeries.filter((d) => d.username !== 'team')} height={220} />
+          ) : (
+            <MetricBarChart
+              data={commitSeries
+                .filter((d) => d.userId == null)
+                .map((d) => ({ date: d.date, value: d.value, metricType: d.metricType }))}
+              color="var(--violet)"
+              label="commits"
+              height={220}
+            />
+          )
         ) : (
           <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span className="t-muted">No data — try recalculating for this period.</span>
@@ -488,91 +612,93 @@ export function TeamDashboardPage() {
         )}
       </div>
 
-      {/* Member table */}
-      <div className="card" style={{ overflow: 'hidden' }}>
-        <div className="row" style={{ padding: '14px 20px', justifyContent: 'space-between' }}>
-          <div>
-            <div className="t-eyebrow">members</div>
-            <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Per-member breakdown</div>
+      {/* Member table — managers/admins only */}
+      {isFullAccess && (
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div className="row" style={{ padding: '14px 20px', justifyContent: 'space-between' }}>
+            <div>
+              <div className="t-eyebrow">members</div>
+              <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Per-member breakdown</div>
+            </div>
           </div>
-        </div>
 
-        {summaryLoading ? (
-          <div style={{ padding: '48px 20px', textAlign: 'center' }}>
-            <span className="t-muted">Loading…</span>
-          </div>
-        ) : summary?.length ? (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>member</th>
-                <th style={{ textAlign: 'right' }}>commits</th>
-                <th style={{ textAlign: 'right' }}>prs merged</th>
-                <th style={{ textAlign: 'right' }}>prs opened</th>
-                <th style={{ textAlign: 'right' }}>issues closed</th>
-                <th style={{ textAlign: 'right' }}>pr lead</th>
-                <th style={{ textAlign: 'right' }}>churn</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {summary.map((m) => {
-                const churn = m.metrics.DAILY_CHURN_RATIO ?? 0;
-                const isActive = selectedMember?.userId === m.userId;
-                return (
-                  <tr
-                    key={m.userId}
-                    onClick={() => setSelectedMember(m)}
-                    style={{ cursor: 'pointer', background: isActive ? 'var(--bg-2)' : 'transparent' }}
-                  >
-                    <td>
-                      <div className="row gap-3">
-                        <Avatar
-                          user={{ id: m.userId, username: m.username, hasCustomAvatar: m.hasCustomAvatar, avatarPreset: m.avatarPreset }}
-                          size="sm"
-                        />
-                        <div>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg)', fontWeight: 500 }}>
-                            {m.username}
+          {summaryLoading ? (
+            <div style={{ padding: '48px 20px', textAlign: 'center' }}>
+              <span className="t-muted">Loading…</span>
+            </div>
+          ) : summary?.length ? (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>member</th>
+                  <th style={{ textAlign: 'right' }}>commits</th>
+                  <th style={{ textAlign: 'right' }}>prs merged</th>
+                  <th style={{ textAlign: 'right' }}>prs opened</th>
+                  <th style={{ textAlign: 'right' }}>issues closed</th>
+                  <th style={{ textAlign: 'right' }}>pr lead</th>
+                  <th style={{ textAlign: 'right' }}>churn</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {summary.map((m) => {
+                  const churn = m.metrics.DAILY_CHURN_RATIO ?? 0;
+                  const isActive = selectedMember?.userId === m.userId;
+                  return (
+                    <tr
+                      key={m.userId}
+                      onClick={() => setSelectedMember(m)}
+                      style={{ cursor: 'pointer', background: isActive ? 'var(--bg-2)' : 'transparent' }}
+                    >
+                      <td>
+                        <div className="row gap-3">
+                          <Avatar
+                            user={{ id: m.userId, username: m.username, hasCustomAvatar: m.hasCustomAvatar, avatarPreset: m.avatarPreset }}
+                            size="sm"
+                          />
+                          <div>
+                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg)', fontWeight: 500 }}>
+                              {m.username}
+                            </div>
+                            <div className="t-label" style={{ fontSize: 10, marginTop: 1 }}>contributor</div>
                           </div>
-                          <div className="t-label" style={{ fontSize: 10, marginTop: 1 }}>contributor</div>
                         </div>
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_COMMITS_COUNT, 0)}</td>
-                    <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_PR_MERGED, 0)}</td>
-                    <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_PR_CREATED, 0)}</td>
-                    <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_ISSUES_CLOSED, 0)}</td>
-                    <td style={{ textAlign: 'right' }} className="num">{fmtHours(m.metrics.PR_LEAD_TIME_HOURS_MEDIAN)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      {churn > 0 ? (
-                        <Chip color={churn > 0.25 ? 'coral' : churn > 0.15 ? 'amber' : 'emerald'}>
-                          {(churn * 100).toFixed(0)}%
-                        </Chip>
-                      ) : '—'}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <ChevronDown
-                        width={13} height={13}
-                        style={{ color: 'var(--fg-3)', transform: 'rotate(-90deg)' }}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <div style={{ padding: '48px 20px', textAlign: 'center' }}>
-            <span className="t-muted">No summary data — recalculate to populate.</span>
-          </div>
-        )}
-      </div>
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_COMMITS_COUNT, 0)}</td>
+                      <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_PR_MERGED, 0)}</td>
+                      <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_PR_CREATED, 0)}</td>
+                      <td style={{ textAlign: 'right' }} className="num">{fmt(m.metrics.DAILY_ISSUES_CLOSED, 0)}</td>
+                      <td style={{ textAlign: 'right' }} className="num">{fmtHours(m.metrics.PR_LEAD_TIME_HOURS_MEDIAN)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {churn > 0 ? (
+                          <Chip color={churn > 0.25 ? 'coral' : churn > 0.15 ? 'amber' : 'emerald'}>
+                            {(churn * 100).toFixed(0)}%
+                          </Chip>
+                        ) : '—'}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <ChevronDown
+                          width={13} height={13}
+                          style={{ color: 'var(--fg-3)', transform: 'rotate(-90deg)' }}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{ padding: '48px 20px', textAlign: 'center' }}>
+              <span className="t-muted">No summary data — recalculate to populate.</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ height: 32 }} />
 
-      {/* Member detail modal */}
-      {selectedMember && activeTeamId && (
+      {/* Member detail modal — managers/admins only */}
+      {isFullAccess && selectedMember && activeTeamId && (
         <MemberDetailModal
           member={selectedMember}
           teamId={activeTeamId}

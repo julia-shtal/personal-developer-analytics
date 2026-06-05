@@ -1,8 +1,9 @@
 import api from '@/lib/api';
-import type { Team } from '@/types';
+import type { Team, TeamMembership } from '@/types';
 
 export const teamsApi = {
   list: () => api.get<Team[]>('/teams'),
+  myMemberships: () => api.get<TeamMembership[]>('/teams/me/memberships'),
   get: (id: number) => api.get<Team>(`/teams/${id}`),
   create: (name: string) => api.post<Team>('/teams', { name }),
   addMember: (teamId: number, userId: number) =>
