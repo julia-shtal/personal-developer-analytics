@@ -29,8 +29,9 @@ public class RepoController {
 
     @GetMapping
     public List<RepoDto> listAccessible(
-            @RequestParam(required = false) Long dataSourceId) {
-        return repoService.listAccessible(dataSourceId);
+            @RequestParam(required = false) Long dataSourceId,
+            @RequestParam(required = false) Long teamId) {
+        return repoService.listAccessible(dataSourceId, teamId);
     }
 
     @PostMapping("/{repoId}/subscribe")

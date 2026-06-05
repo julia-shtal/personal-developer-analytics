@@ -10,6 +10,7 @@ import com.juliashtal.devanalytics.user.model.request.TeamConfigRequest;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.TeamDto;
+import com.juliashtal.devanalytics.user.model.TeamMembershipDto;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +53,16 @@ public class TeamService {
         return teamRepository.findByManagerId(managerId).stream()
                 .filter(t -> t.getArchivedAt() == null)
                 .map(TeamDto::from)
+                .toList();
+    }
+
+    /** Teams the current user is a member of (not manager). Returns lean DTOs — no member list exposed. */
+    @Transactional(readOnly = true)
+    public List<TeamMembershipDto> getMyMemberships() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        return teamRepository.findByMembersId(userId).stream()
+                .filter(t -> t.getArchivedAt() == null)
+                .map(TeamMembershipDto::from)
                 .toList();
     }
 

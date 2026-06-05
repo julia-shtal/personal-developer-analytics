@@ -9,6 +9,8 @@ import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.issue.model.IssueSource;
 import com.juliashtal.devanalytics.issue.model.JiraSearchResponse;
+import com.juliashtal.devanalytics.jira.model.JiraProjectRepoMapping;
+import com.juliashtal.devanalytics.jira.repository.JiraProjectRepoMappingRepository;
 import com.juliashtal.devanalytics.jira.repository.JiraProjectRepository;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.security.TokenEncryptor;
@@ -36,6 +38,7 @@ public class JiraCollector {
     private final RestTemplate restTemplate;
     private final IssueRepository issueRepository;
     private final JiraProjectRepository jiraProjectRepository;
+    private final JiraProjectRepoMappingRepository jiraProjectRepoMappingRepository;
     private final TokenEncryptor tokenEncryptor;
     ObjectMapper objectMapper = new ObjectMapper();
 
@@ -185,6 +188,15 @@ public class JiraCollector {
             if (f.getLabels() != null) {
                 issue.setLabels(String.join(",", f.getLabels()));
             }
+        }
+
+        // Attribute the issue to the first mapped GitHub repo, if one is configured.
+        List<JiraProjectRepoMapping> mappings = jiraProjectRepoMappingRepository.findAllByJiraProject(project);
+        if (!mappings.isEmpty()) {
+            issue.setRepository(mappings.get(0).getRepository());
+        } else {
+            log.debug("No GitHub repo mapped to Jira project {}, issue {} will have no repository attribution",
+                    project.getProjectKey(), sourceIssueKey);
         }
 
         issueRepository.save(issue);

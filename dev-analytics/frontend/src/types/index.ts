@@ -94,6 +94,7 @@ export interface RepoDto {
   repoUrl?: string;
   collectIssues: boolean;
   issuesLastSyncedAt?: string;
+  teamId?: number;
 }
 
 export interface DiscoveredRepoDto {
@@ -183,6 +184,13 @@ export interface Team {
   archivedAt?: string;
   visibility?: string;
   aiBriefSchedule?: string;
+}
+
+/** Lean team descriptor returned to developer-role members: id, name, and member count. */
+export interface TeamMembership {
+  id: number;
+  name: string;
+  memberCount: number;
 }
 
 // ─── Date range ──────────────────────────────────────────────────────────────

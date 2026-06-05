@@ -1,6 +1,15 @@
 import api from '@/lib/api';
 import type { DataSourceConfig, CreateDataSourceRequest, RepoDto, DiscoveredRepoDto, TrackedJiraProjectDto, DiscoveredProjectDto } from '@/types';
 
+export const jiraProjectsApi = {
+  listLinkedRepos: (jiraProjectId: number) =>
+    api.get<RepoDto[]>(`/jira-projects/${jiraProjectId}/repositories`),
+  linkRepo: (jiraProjectId: number, repoId: number) =>
+    api.post<void>(`/jira-projects/${jiraProjectId}/repositories/${repoId}`, null),
+  unlinkRepo: (jiraProjectId: number, repoId: number) =>
+    api.delete(`/jira-projects/${jiraProjectId}/repositories/${repoId}`),
+};
+
 export interface UpdateDataSourceRequest {
   name?: string;
   baseUrl?: string;
