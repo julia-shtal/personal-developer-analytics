@@ -260,6 +260,9 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 
 **`TokenReEncryptionRunner`** (`ApplicationRunner`, conditional on `app.encryption.migrate-on-startup=true`) — One-time migration that re-encrypts legacy-format `api_token_encrypted` rows with AES-GCM. Idempotent: already-encrypted rows are skipped. Logs migrated/skipped/failed counts; never logs token values.
 
+**`TeamAccessGuard`** (`@Component("teamAccessGuard")`) — SpEL-callable security guard used in `@PreAuthorize` expressions.
+- `canRead(Long teamId, Authentication)` → `boolean` — returns `true` if the authenticated user is the team manager **or** a team member. Used on team metric endpoints to give DEVELOPER-role members access to the aggregate row (without per-member breakdown).
+
 **`RateLimitInterceptor`** (`HandlerInterceptor`) — Per-user request rate limiter using Bucket4j (PDA-54/T2). Two token-bucket tiers: default (`app.rate-limit.default-rpm`, default 120/min) and AI endpoints under `/api/ai/` (`app.rate-limit.ai-rpm`, default 10/min). Buckets held in in-memory `ConcurrentHashMap<Long, Bucket>` (single-instance; Redis-backed Bucket4j is the multi-instance upgrade path). Exhausted bucket throws `RateLimitExceededException` → 429 with `Retry-After` header via `GlobalExceptionHandler`.
 
 **Refresh Token Rotation — Single-Flight Refresh (PDA-54/T3)** — Concurrent 401 responses from multiple requests are deduplicated: the first request triggers `POST /auth/refresh`; subsequent concurrent 401s wait for the first to complete before retrying with the new token. Prevents thundering-herd refresh storms.
@@ -344,11 +347,11 @@ Created lazily on first read (`UserNotificationPrefsService.getOrCreate`). Row i
 
 **`UserNotificationPrefsService`** — `getOrCreate(Long userId)` (creates a row with defaults on first call; idempotent), `update(Long userId, NotificationPrefsDto)` (persists all four toggles, returns updated DTO).
 
-**`TeamService`** — `getById(Long)`, `createTeam(String name)`, `getMyTeams()`, `addMember(Long teamId, Long userId)`, `removeMember(Long teamId, Long userId)`, `renameTeam(Long teamId, String name)`, `deleteTeam(Long teamId)`. All write operations verify that the current user is the team manager (or ADMIN). `deleteTeam` additionally checks for attached data sources and throws `ConflictException` (409) if any exist; on success it cascade-deletes `team_members` then the team row.
+**`TeamService`** — `getById(Long)`, `createTeam(String name)`, `getMyTeams()`, `getMyMemberships()` → `List<TeamMembershipDto>` (teams where the user is a member but not the manager — used by the DEVELOPER role to see team context), `addMember(Long teamId, Long userId)`, `removeMember(Long teamId, Long userId)`, `renameTeam(Long teamId, String name)`, `deleteTeam(Long teamId)`. All write operations verify that the current user is the team manager (or ADMIN). `deleteTeam` additionally checks for attached data sources and throws `ConflictException` (409) if any exist; on success it cascade-deletes `team_members` then the team row.
 
 #### DTOs
 
-`UserSummary` (id, username, email, role), `TeamDto`, `NotificationPrefsDto` (aiBrief, syncFailures, afterHours, newTeamMember — Boolean toggles; maps to `user_notification_prefs`), `UpdateProfileRequest`, `CreateTeamRequest`, `AddTeamMemberRequest`, `RenameTeamRequest`, `UpdateRoleRequest`.
+`UserSummary` (id, username, email, role), `TeamDto`, `TeamMembershipDto` (id, name, memberCount — lean view returned to DEVELOPER-role members; no member list), `NotificationPrefsDto` (aiBrief, syncFailures, afterHours, newTeamMember — Boolean toggles; maps to `user_notification_prefs`), `UpdateProfileRequest`, `CreateTeamRequest`, `AddTeamMemberRequest`, `RenameTeamRequest`, `UpdateRoleRequest`.
 
 #### Controllers
 
@@ -358,19 +361,20 @@ Created lazily on first read (`UserNotificationPrefsService.getOrCreate`). Row i
 
 **`AdminController`** — `/api/admin` — `GET /stats` (active users 24h, DB size bytes, AI calls today — ADMIN only), `GET /users?q=` (list or search users by email/username), `PUT /users/{id}/role`, `DELETE /users/{id}` (ADMIN only).
 
-**`TeamController`** — `/api/teams` — MANAGER/ADMIN only.
+**`TeamController`** — `/api/teams` — most routes MANAGER/ADMIN only; membership routes open to any authenticated user.
 
-| Method | Path | Status | Description |
-|---|---|---|---|
-| POST | `/` | 200 | Create team |
-| GET | `/` | 200 | List caller's non-archived teams |
-| POST | `/{teamId}/members` | 200 | Add member |
-| DELETE | `/{teamId}/members/{userId}` | 200 | Remove member |
-| PUT | `/{teamId}` | 200 | Rename team |
-| DELETE | `/{id}` | 204 | Delete team permanently; 403 if not manager/admin; 409 if data sources attached |
-| PATCH | `/{id}/archive` | 200 | Set `archivedAt = now()`; team disappears from list; 403 if not manager/admin |
-| PUT | `/{id}/config` | 200 | Update `visibility` + `aiBriefSchedule`; 400 if invalid visibility; 403 if not manager/admin |
-| POST | `/{id}/duplicate` | 201 | New team: same members, name + " (copy)", requesting user as manager |
+| Method | Path | Auth | Status | Description |
+|---|---|---|---|---|
+| POST | `/` | MANAGER/ADMIN | 200 | Create team |
+| GET | `/` | MANAGER/ADMIN | 200 | List caller's non-archived teams |
+| GET | `/me/memberships` | authenticated | 200 | List `TeamMembershipDto` for teams the user is a member of (not manager) |
+| POST | `/{teamId}/members` | MANAGER/ADMIN | 200 | Add member |
+| DELETE | `/{teamId}/members/{userId}` | MANAGER/ADMIN | 200 | Remove member |
+| PUT | `/{teamId}` | MANAGER/ADMIN | 200 | Rename team |
+| DELETE | `/{id}` | MANAGER/ADMIN | 204 | Delete team permanently; 403 if not manager/admin; 409 if data sources attached |
+| PATCH | `/{id}/archive` | MANAGER/ADMIN | 200 | Set `archivedAt = now()`; team disappears from list; 403 if not manager/admin |
+| PUT | `/{id}/config` | MANAGER/ADMIN | 200 | Update `visibility` + `aiBriefSchedule`; 400 if invalid visibility; 403 if not manager/admin |
+| POST | `/{id}/duplicate` | MANAGER/ADMIN | 201 | New team: same members, name + " (copy)", requesting user as manager |
 
 **`TeamExportController`** — `/api/teams` — MANAGER/ADMIN only.
 
@@ -542,8 +546,13 @@ Metric queries in T4.2 join through this table to include Jira issues in reposit
 - User B creates a Jira DS with the same `baseUrl` + `projectKey` → instead of a duplicate DS, `DataSourceService.create` finds the existing project via `findByBaseUrlAndProjectKey` and calls `subscribeUser` → `user_project_registrations` row for user B is created. The existing DS is returned.
 - User B sees the DS in their list via `findSubscribedDataSourceConfigs`, can sync, but cannot delete.
 
+**`JiraProjectMappingService`** — Manages repo-to-Jira-project links stored in `jira_project_repo_mappings`.
+- `link(userId, jiraProjectId, repositoryId)` — verifies the user has a subscription to the Jira project and a `UserRepoRegistration` for the repo; creates the mapping row idempotently.
+- `unlink(userId, jiraProjectId, repositoryId)` — verifies project ownership; deletes the mapping row.
+- `listMappings(jiraProjectId, userId)` → `List<RepoDto>` — returns repos mapped to the project; verifies project access.
+
 **`JiraCollector`** — Collects issues for a single `JiraProjectEntity`.
-- `collectIssues(JiraProjectEntity project)` — authenticates via Basic Auth (email:token), builds JQL scoped to the project key, paginates through results, upserts `IssueEntity` rows keyed by `(jira_project_id, external_id)`.
+- `collectIssues(JiraProjectEntity project)` — authenticates via Basic Auth (email:token), builds JQL scoped to the project key, paginates through results, upserts `IssueEntity` rows keyed by `(jira_project_id, external_id)`. Resolves the mapped `GitRepositoryEntity` via `JiraProjectRepoMappingRepository` and sets `repository_id` on each collected issue so it appears in repo-scoped metric queries.
 
 #### DTOs
 
@@ -574,6 +583,9 @@ Metric queries in T4.2 join through this table to include Jira issues in reposit
 | DELETE | `/{id}` | 204 | Remove a tracked project (DS owner only) |
 | POST | `/{id}/subscribe` | 200 | Subscribe current user to the project |
 | DELETE | `/{id}/subscribe` | 204 | Unsubscribe current user |
+| GET | `/{id}/repositories` | `List<RepoDto>` | List repos linked to this Jira project |
+| POST | `/{id}/repositories/{repoId}` | 204 | Link a repo to this Jira project (idempotent; user must be subscribed to both) |
+| DELETE | `/{id}/repositories/{repoId}` | 204 | Unlink a repo from this Jira project |
 
 #### Migration history
 
@@ -718,7 +730,7 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 **`RepoService`** — Unified subscription layer.
 - `getById(Long repoId)` → `GitRepositoryEntity`.
-- `listAccessible(Long dataSourceId?)` → `List<RepoDto>` — merges repos from user's own data sources + team data sources + subscriptions; deduplicates; sets `subscribed` flag; generates `repoUrl` from API base URL.
+- `listAccessible(Long dataSourceId?, Long teamId?)` → `List<RepoDto>` — merges repos from user's own data sources + team data sources + subscriptions; deduplicates; sets `subscribed` flag; generates `repoUrl` from API base URL. When `teamId` is provided, filters to repos belonging to that team's data sources only (used by `TeamDashboardPage` repo filter).
 - `subscribe(Long repoId)` / `unsubscribe(Long repoId)` — creates/removes `UserRepoRegistration`.
 
 #### Controllers
@@ -737,13 +749,13 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/?dataSourceId?` | List accessible repos |
+| GET | `/?dataSourceId?&teamId?` | List accessible repos; optional `teamId` filters to a specific team's data sources |
 | POST | `/{repoId}/subscribe` | Subscribe |
 | DELETE | `/{repoId}/subscribe` | Unsubscribe |
 
 #### DTOs (Records)
 
-`GitRepositoryDto` (id, dataSourceId, name, localPath, lastFetchedCommitHash, lastScanAt), `GitCommitDto` (id, hash, authorName, authorEmail, authorDate, message, additions, deletions, filesChanged, parentHash), `RegisterLocalRepoRequest`, `RepoDto` (id, name, repoFullName, localPath, dataSourceId, subscribed, repoUrl).
+`GitRepositoryDto` (id, dataSourceId, name, localPath, lastFetchedCommitHash, lastScanAt), `GitCommitDto` (id, hash, authorName, authorEmail, authorDate, message, additions, deletions, filesChanged, parentHash), `RegisterLocalRepoRequest`, `RepoDto` (id, name, repoFullName, localPath, dataSourceId, subscribed, repoUrl, teamId — `teamId` carries the owning team so the frontend can distinguish personal vs team repos in the `RepoSelector`).
 
 ---
 
@@ -1520,7 +1532,8 @@ Phase C — Background sweep (every 2 minutes, 50 items/run)
 ### 8.2 Read-Side Aggregation
 
 - **Without `repoId`**: sum daily snapshots across all repos by date in-memory. Returns one point per calendar day.
-- **With `repoId`**: returns per-repo snapshots directly.
+- **With `repoId`**: returns per-repo snapshots directly. All personal daily-count endpoints (`daily-commits`, `daily-pr-merged`, `daily-issues-closed`, `daily-issues-created`, `daily-churn-ratio`) and all personal aggregate endpoints accept an optional `?repoId=` query parameter. Team endpoints `GET /metrics/teams/{id}/daily-commits`, `/daily-pr-merged`, `/daily-issues-closed` also accept `?repoId=` to scope the team series to a single repository. `MetricSnapshotRepository` has a native-SQL batch query filtered by `(team_id, repository_id)` for this.
+- **Team endpoint DEVELOPER access**: `GET /metrics/teams/{id}/daily-commits`, `daily-pr-merged`, `daily-issues-closed` are guarded by `@PreAuthorize("@teamAccessGuard.canRead(#teamId, authentication)")` — team members (DEVELOPER role) can call them. DEVELOPER callers receive only the aggregate row (`userId = null`); per-member rows are filtered out.
 - **Focus ratio**: controller computes `count(FOCUS_RATIO_DAYS_TASKS snapshots) / count(weekdays in range)` — the backend only stores active days.
 
 ### 8.3 Notable Calculation Details
@@ -1616,7 +1629,7 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 **`WelcomePage`** — Post-login splash. Background: `radial-gradient(ellipse at top, var(--violet-bg) 0%, var(--bg) 60%)`. `Logo` with `wel-float` keyframe animation (translateY 0 → −8 px → 0, 2.4 s). "── welcome back" eyebrow, "Hi, {firstName}." heading with firstName in `var(--violet-strong)`, "Spinning up your workspace." body. Step list with check / pulse-dot / idle-dot indicators cycling at 900 ms. Three progress dots with pulse on active step. Skip button. Auto-redirects to `/dashboard` after 3.5 s (bumped from 2.8 s in PDA-47/T9.2 to match animation timing).
 
-**`DashboardPage`** — Personal metrics. Editorial layout. Date range via `TopBar` (`useDateRange()`). Recalculate via `da:recalculate` CustomEvent.
+**`DashboardPage`** — Personal metrics. Editorial layout. Date range via `TopBar` (`useDateRange()`). Repo filter via `RepoSelector` (reads/writes `RepoScopeContext`; all metric fetch calls pass the selected `repoId`). Recalculate via `da:recalculate` CustomEvent.
 - **Hero block**: `t-h1` headline interpolates live totals (commits, PRs merged, deep-work streak); appended with `aiSummary.headline` when a summary is available. `t-body` overview paragraph from `aiSummary.overview` (placeholder when none).
 - **Commits hero card**: total count + `<Sparkline>` of daily commit activity.
 - **Velocity group** (`hr-label velocity`): 8 `<KpiTile>` in 2 rows of 4 with a `.divider` between rows — commits, prs merged, pr lead time, focus ratio, prs created, issues closed, review response, 1st commit→merge. Each tile shows a red anomaly badge if the current metric value deviates >2σ from the historical mean (PDA-58/T1).
@@ -1628,9 +1641,10 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 - **Hero**: `N sources, M repos feed the metrics.` with a `Connect source` button that expands an in-page collapsible add form.
 - **Add form**: 3-button type picker (GitHub / Jira / Local Git with accent highlight on selected), `.input` fields for name, base URL, path, API token (eye-toggle show/hide), team assignment, repo full name, Jira project key.
 - **Sources list**: each source in a `<div className="card">` with type chip (`Chip` component), sync status using editorial `.dot-live / .dot-warn / .dot-fail`, play/delete `.btn-icon` buttons, expand-panel for repos.
-- **Repos panel**: subscribe/unsubscribe per repo, external link, collect-issues toggle. Jira panel shows tracked projects with subscribe/unsubscribe.
+- **Repos panel**: subscribe/unsubscribe per repo, external link, collect-issues toggle. The "── repositories" expand panel is hidden for Jira data sources — Jira never owns Git repos; linking is per-project.
+- **Jira panel**: tracked projects with subscribe/unsubscribe. Each project shows dismissible linked-repo chips for repos mapped via `jira_project_repo_mappings`. A `LinkRepoModal` (triggered per project) lets the user select any subscribed repo from a dropdown and call `POST /api/jira-projects/{id}/repositories/{repoId}`; chips with `×` call `DELETE` to unlink.
 
-**`TeamDashboardPage`** — Team selector dropdown (hidden when only one team). Team KPI strip: 4 `KpiTile` (team commits, PRs merged, issues closed, active members) each with a descriptive `tooltip`. `MultiLineChart` for per-member daily commits. Member summary table with per-row click → `MemberDetailModal`; each row has a "message" button that navigates to `/messages` pre-filled with that member's ID (PDA-60/T1). `AiTeamInsightCard` shows AI-generated team summary. Recalculate wired via `da:recalculate` CustomEvent; `onError` surfaces backend errors in a coral banner; `onSuccess` calls `qc.invalidateQueries()` (no-arg) to refetch all active queries.
+**`TeamDashboardPage`** — Team selector dropdown (hidden when only one team). Per-repo filter dropdown scoped to the active team's data sources (fetched via `GET /api/repos?teamId=X`); resets to "all repos" on team switch. Team KPI strip: 4 `KpiTile` (team commits, PRs merged, issues closed, active members) each with a descriptive `tooltip`. PRs merged, issues closed, and member count are now populated for DEVELOPER-role members via the `@teamAccessGuard.canRead`-guarded aggregate endpoints (previously showed "—"). `MultiLineChart` for per-member daily commits. Member summary table with per-row click → `MemberDetailModal`; each row has a "message" button that navigates to `/messages` pre-filled with that member's ID (PDA-60/T1). `AiTeamInsightCard` shows AI-generated team summary. Recalculate wired via `da:recalculate` CustomEvent; `onError` surfaces backend errors in a coral banner; `onSuccess` calls `qc.invalidateQueries()` (no-arg) to refetch all active queries.
 
 **`MemberDetailModal`** (inner component of `TeamDashboardPage`) — `Modal` (620 px). Title: `{username} — {formatDate(from)} – {formatDate(to)}` (concrete date range). Header shows `<span class="dot dot-live" />active {timeAgo(lastActiveAt)}` if `lastActiveAt` is present, otherwise "no activity recorded". 3 × 2 KPI grid with 6 metrics; each icon wrapped in `Tooltip` showing metric description. Daily commits rendered as `MetricBarChart` (last 60 data points, `var(--violet)` bars, 140 px height). `MemberSummaryDto` carries `lastActiveAt?: string` (ISO timestamp) populated by `MetricsController.getTeamSummary` from `User.lastActiveAt`.
 
@@ -1644,7 +1658,7 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 ### 10.3 Components
 
-**`AppShell`** — Auth guard (`useAuth().user` → redirect to `/login` if null). Composes `Sidebar`, `TopBar`, `<Outlet>`, and `StatusBar` in a full-height flex layout. Listens for `da:open-palette` CustomEvent and global `Ctrl+K` / `⌘K` keydown to open `CommandPalette` (PDA-48/T1). Sidebar now displays unread message count badge (PDA-60/T1).
+**`AppShell`** — Auth guard (`useAuth().user` → redirect to `/login` if null). Composes `Sidebar`, `TopBar`, `<Outlet>`, and `StatusBar` in a full-height flex layout. Listens for `da:open-palette` CustomEvent and global `Ctrl+K` / `⌘K` keydown to open `CommandPalette` (PDA-48/T1). Sidebar now displays unread message count badge (PDA-60/T1). While `isLoading && isOffline`, renders `PageSpinner` with a "reconnecting to server…" monospace label underneath instead of redirecting to `/login`.
 
 **`CommandPalette`** (`src/components/ui/CommandPalette.tsx`) — Keyboard-navigable command palette rendered as an overlay (not a `Modal`). Opens on `da:open-palette` event or `Ctrl+K`/`⌘K`. Commands list (8 entries): Go to Dashboard, Go to Team (MANAGER+), Go to Manage Teams (MANAGER+), Go to Data Sources, Go to Settings, Go to Admin (ADMIN), Toggle dark mode, Open date range picker. Text input filters by `label.toLowerCase().includes(query)`. `↑`/`↓` moves selection (accent left border on selected row); `Enter` fires the action; `Escape` closes (PDA-48/T1).
 
@@ -1657,6 +1671,10 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 **`DateRangePicker`** — Dropdown with preset ranges (last 7/30/90 days) and custom from/to inputs. Retained for components that haven't been migrated to `DateRangeModal`.
 
 **`DateRangeModal`** — Modal-based range picker used by `TopBar`. Preset grid (Today, Yesterday, Last 7/14 days, 4/8 weeks, Last quarter, Year to date, Custom) + from/to date inputs.
+
+**`RepoSelector`** (`src/components/RepoSelector.tsx`) — Native `<select>` dropdown for scoping the personal dashboard to a single repository. Reads all accessible repos from `GET /api/repos` (including team repos). When both personal and team repos are present, renders `<optgroup label="personal">` and `<optgroup label="team">` separating them. Reads/writes `RepoScopeContext`; selecting "all repos" sets `repoId = null`.
+
+**`RepoScopeContext`** (`src/context/RepoScopeContext.tsx`) — React context holding the currently selected `repoId: number | null` for the personal dashboard. Persisted to `localStorage` under key `da-repo-scope-v1` so the filter survives page reloads. Provided by `RepoScopeProvider` at the app root.
 
 **`KpiTile`** — Editorial metric tile. Props: `label`, `value`, `sub?`, `icon?`, `tooltip?`, `accent?`, `size?`, `emphasis?`. When both `icon` and `tooltip` are provided, the icon is wrapped in `Tooltip`. Used in all metric grids across Dashboard, TeamDashboard, and AdminPage. Replaces the removed `KpiCard`.
 
@@ -1698,9 +1716,15 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 ### 10.4 State & Data Fetching
 
-**`AuthContext`** — `user`, `isLoading`, `login()`, `register()`, `logout()`, `isManager`, `isAdmin`. Initializes from `GET /users/me` on mount. `login()` clears React Query cache before setting tokens. `logout()` clears tokens and cache.
+**`AuthContext`** — `user`, `isLoading`, `isOffline`, `login()`, `register()`, `logout()`, `isManager`, `isAdmin`. Initializes from `GET /users/me` on mount via a silent refresh attempt against the httpOnly cookie. Additional session lifecycle behaviours:
 
-**`lib/api.ts`** — Axios instance with `baseURL='/api'`. Request interceptor attaches `Bearer` token. Response interceptor auto-refreshes on 401, retries original request; on refresh failure clears tokens and redirects to `/login`.
+- **Idle timeout**: 15-minute inactivity timer driven by `mousemove / keydown / pointerdown / scroll / touchstart` listeners. On expiry, calls `clearTokens() + qc.clear() + setUser(null)`. Last activity time is persisted as `last_activity_ts` in `localStorage` so the timeout survives tab close/reopen.
+- **Bootstrap guard**: on page load, if `last_activity_ts` is ≥ 15 min old, skips the cookie refresh and stays unauthenticated (no redirect loop).
+- **Backend-down resilience**: bootstrap distinguishes network errors (`!err.response`) from real auth failures (`err.response` set). Network errors set `isOffline = true` and keep `isLoading = true`; a retry effect polls every 5 s while offline and restores the session automatically when the backend comes back. Real HTTP errors (e.g. 401) stop retrying and let `AppShell` redirect to `/login`. `logout()` sets `isOffline = false` to cancel any in-progress retry and removes `last_activity_ts`.
+
+`login()` clears the React Query cache before setting tokens. `logout()` clears tokens and cache.
+
+**`lib/api.ts`** — Axios instance with `baseURL='/api'`. Request interceptor attaches `Bearer` token. Response interceptor: network errors (`!err.response`) early-return `Promise.reject` before the 401/retry path — this makes the "no response = don't refresh" contract explicit. Auth failures (401) trigger a single-flight refresh via the httpOnly cookie; on success retries the original request; on refresh failure clears tokens and redirects to `/login`.
 
 **React Query** — `staleTime: 2 min`, `retry: 1`. Recalculate mutation invalidates all queries via `qc.invalidateQueries()` (no-arg form — unambiguously matches all keys).
 
@@ -1708,10 +1732,10 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 | Module | Endpoints covered |
 |---|---|
-| `api/metrics.ts` | All 20 personal metric endpoints + 5 team metric endpoints |
+| `api/metrics.ts` | All 20 personal metric endpoints (all accept optional `?repoId=`) + 5 team metric endpoints (daily-commits / daily-pr-merged / daily-issues-closed accept optional `?repoId=`) |
 | `api/datasources.ts` | CRUD + collect + status polling; defines `SyncStatus` interface |
-| `api/repos.ts` | List, subscribe, unsubscribe |
-| `api/teams.ts` | CRUD, add/remove member, rename, delete |
+| `api/repos.ts` | `list(?dataSourceId, ?teamId)`, subscribe, unsubscribe |
+| `api/teams.ts` | CRUD, add/remove member, rename, delete, `getMyMemberships()` → `TeamMembershipDto[]` |
 | `api/ai.ts` | `/summary`, `/team/{id}/summary`, `/explain`, `/summaries/latest`, `/history`, `/teams/{id}/history` |
 | `api/issues.ts` | Issue listing |
 | `api/messaging.ts` | `send`, `inbox`, `conversation`, `unreadCount` (PDA-60) |
