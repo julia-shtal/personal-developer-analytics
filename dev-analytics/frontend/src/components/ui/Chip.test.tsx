@@ -17,4 +17,15 @@ describe('Chip', () => {
     const { container } = render(<Chip dot>D</Chip>);
     expect(container.querySelector('.chip-dot')).toBeTruthy();
   });
+
+  it('applies chip-accent class when accent=true', () => {
+    const { container } = render(<Chip accent>Generating…</Chip>);
+    expect(container.firstChild).toHaveClass('chip-accent');
+  });
+
+  it('accent prop overrides color prop', () => {
+    const { container } = render(<Chip accent color="violet">X</Chip>);
+    expect(container.firstChild).toHaveClass('chip-accent');
+    expect(container.firstChild).not.toHaveClass('chip-violet');
+  });
 });

@@ -36,7 +36,7 @@ export function AiMetricExplainDrawer({
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
-            <Brain className="h-4 w-4 text-violet-500" />
+            <Brain className="h-4 w-4" style={{ color: 'var(--accent)' }} />
             <span className="text-sm font-semibold text-gray-900">Metric Explanation</span>
           </div>
           <button
@@ -60,7 +60,10 @@ export function AiMetricExplainDrawer({
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
               Current Value
             </div>
-            <span className="inline-flex px-4 py-2 bg-violet-50 rounded-lg text-2xl font-semibold text-violet-700">
+            <span
+              className="inline-flex px-4 py-2 rounded-lg text-2xl font-semibold"
+              style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}
+            >
               {metricValue}
             </span>
           </div>
@@ -74,7 +77,10 @@ export function AiMetricExplainDrawer({
               <ul className="space-y-2">
                 {summary.insights.slice(0, 3).map((insight, i) => (
                   <li key={i} className="flex items-start gap-2.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0 mt-1.5" />
+                    <span
+                      className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+                      style={{ background: 'var(--accent)' }}
+                    />
                     <span className="text-sm text-gray-700">{insight.text}</span>
                   </li>
                 ))}

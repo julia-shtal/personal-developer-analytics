@@ -18,6 +18,7 @@ interface MultiLineChartProps {
   ariaLabel?: string;
 }
 
+// Semantic violet: first data series — intentional fixed color, not an accent surface
 const COLORS = ['#7c3aed', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 export function MultiLineChart({ data, height = 280, unit = '', ariaLabel }: MultiLineChartProps) {

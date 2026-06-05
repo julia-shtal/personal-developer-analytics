@@ -125,8 +125,8 @@ export function FollowUpDrawer({ open, onClose, summary }: Props) {
           >
             <X width={14} height={14} />
           </button>
-          <AI width={14} height={14} style={{ color: 'var(--violet-strong)' }} />
-          <span className="t-label" style={{ color: 'var(--violet-strong)', letterSpacing: '0.06em' }}>
+          <AI width={14} height={14} style={{ color: 'var(--accent-strong)' }} />
+          <span className="t-label" style={{ color: 'var(--accent-strong)', letterSpacing: '0.06em' }}>
             ASK FOLLOW-UP
           </span>
           <span className="tick">·</span>

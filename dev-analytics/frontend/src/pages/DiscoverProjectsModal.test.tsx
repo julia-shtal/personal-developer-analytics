@@ -43,7 +43,7 @@ describe('DiscoverProjectsModal', () => {
       expect(screen.getByText('DONE')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('✓ Attached')).toBeInTheDocument();
+    expect(screen.getByText('attached')).toBeInTheDocument();
   });
 
   it('already-attached project checkbox is disabled', async () => {

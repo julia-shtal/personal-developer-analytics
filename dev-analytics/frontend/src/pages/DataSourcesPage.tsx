@@ -26,21 +26,15 @@ const TYPE_LABELS: Record<DataSourceType, string> = {
   JIRA: 'Jira',
 };
 
-const TYPE_CHIP_COLORS: Record<DataSourceType, 'violet' | 'cyan' | 'amber'> = {
-  GITHUB: 'violet',
-  JIRA: 'cyan',
-  GIT_LOCAL: 'amber',
-};
-
 const TYPE_ACCENT: Record<DataSourceType, string> = {
-  GITHUB: 'var(--violet)',
-  JIRA: 'var(--cyan)',
+  GITHUB:    'var(--brand-github)',
+  JIRA:      'var(--brand-jira)',
   GIT_LOCAL: 'var(--amber)',
 };
 
 const TYPE_ACCENT_BG: Record<DataSourceType, string> = {
-  GITHUB: 'var(--violet-bg)',
-  JIRA: 'var(--cyan-bg)',
+  GITHUB:    'var(--brand-github-bg)',
+  JIRA:      'var(--brand-jira-bg)',
   GIT_LOCAL: 'var(--amber-bg)',
 };
 
@@ -214,7 +208,7 @@ function RepoIssuesSection({ repo, isGitHub }: { repo: RepoDto; isGitHub: boolea
           className={clsx(
             'relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent',
             'transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1',
-            enabled ? 'bg-violet-500' : 'bg-gray-200',
+            enabled ? 'bg-[var(--accent)]' : 'bg-gray-200',
             toggleMutation.isPending && 'opacity-50 cursor-not-allowed'
           )}
         >
@@ -305,7 +299,7 @@ function ReposPanel({ dataSourceId, sourceType }: { dataSourceId: number; source
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {repo.repoFullName ?? repo.name}
               </span>
-              {repo.subscribed && <Chip color="violet">subscribed</Chip>}
+              {repo.subscribed && <Chip accent>subscribed</Chip>}
               <div className="row gap-1" style={{ flexShrink: 0 }}>
                 {repo.subscribed ? (
                   <button className="btn btn-sm btn-icon" onClick={() => unsubscribeMutation.mutate(repo.id)} title="Unsubscribe" aria-label="Unsubscribe">
@@ -951,7 +945,6 @@ export function DataSourcesPage() {
       <div className="col gap-3" style={{ marginBottom: 24 }}>
         {sources?.map((src) => {
           const isExpanded = expandedIds.has(src.id);
-          const chipColor = TYPE_CHIP_COLORS[src.type];
           const displayUrl = src.baseUrl ?? src.path;
           const isSyncing = syncingIds.has(src.id);
 
@@ -977,7 +970,7 @@ export function DataSourcesPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="row gap-2" style={{ flexWrap: 'wrap', marginBottom: 4 }}>
                     <span style={{ fontWeight: 500, fontSize: 14, color: 'var(--fg)' }}>{src.name}</span>
-                    <Chip color={chipColor}>{TYPE_LABELS[src.type]}</Chip>
+                    <span className="chip" style={{ background: TYPE_ACCENT_BG[src.type], color: TYPE_ACCENT[src.type], borderColor: 'transparent' }}>{TYPE_LABELS[src.type]}</span>
                     {src.teamId && <Chip>team</Chip>}
                   </div>
                   {displayUrl && (

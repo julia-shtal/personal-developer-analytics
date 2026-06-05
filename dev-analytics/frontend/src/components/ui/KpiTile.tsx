@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Tooltip } from './Tooltip';
 
-type AccentColor = 'violet' | 'cyan' | 'amber' | 'emerald' | 'coral';
+type AccentColor = 'violet' | 'cyan' | 'amber' | 'emerald' | 'coral' | 'accent';
 
 interface KpiTileProps {
   label: string;

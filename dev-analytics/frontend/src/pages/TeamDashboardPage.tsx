@@ -94,7 +94,7 @@ function MemberAiSummaryModal({ member, summary, onClose }: {
           <div className="col gap-2">
             {summary.recommendations.map((rec, i) => (
               <div key={i} className="row gap-3" style={{ alignItems: 'flex-start', padding: '4px 0' }}>
-                <span className="chip-dot" style={{ color: 'var(--violet)', marginTop: 7, flexShrink: 0 }} />
+                <span className="chip-dot" style={{ color: 'var(--accent)', marginTop: 7, flexShrink: 0 }} />
                 <ProseWithNumbers text={rec} className="t-body" style={{ margin: 0, lineHeight: 1.55 }} />
               </div>
             ))}
@@ -161,8 +161,8 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
   const churn = m.DAILY_CHURN_RATIO ?? 0;
 
   const kpiItems: Array<[string, string, string, ComponentType<{ width?: number; height?: number; style?: CSSProperties }>, string]> = [
-    ['commits',       fmt(m.DAILY_COMMITS_COUNT, 0),                       'violet',  Commits,      'Avg daily commits in the selected period'],
-    ['prs merged',    fmt(m.DAILY_PR_MERGED, 0),                           'violet',  PRMerged,     'Avg daily pull requests merged to the default branch'],
+    ['commits',       fmt(m.DAILY_COMMITS_COUNT, 0),                       'accent',  Commits,      'Avg daily commits in the selected period'],
+    ['prs merged',    fmt(m.DAILY_PR_MERGED, 0),                           'accent',  PRMerged,     'Avg daily pull requests merged to the default branch'],
     ['issues closed', fmt(m.DAILY_ISSUES_CLOSED, 0),                       'emerald', IssuesClosed, 'Avg daily Jira/GitHub issues resolved or closed'],
     ['pr lead time',  fmtHours(m.PR_LEAD_TIME_HOURS_MEDIAN),               'cyan',    LeadTime,     'Median time from PR open to first merge'],
     ['churn',         churn > 0 ? `${(churn * 100).toFixed(0)}%` : '—',   churn > 0.25 ? 'coral' : 'amber', Churn, 'Ratio of deleted + churned lines to total changed lines. High values indicate rework.'],
@@ -217,7 +217,7 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
             {member.username}
           </div>
           <div className="row gap-2" style={{ marginTop: 4, flexWrap: 'wrap' }}>
-            <Chip color="violet">contributor</Chip>
+            <Chip accent>contributor</Chip>
             {member.lastActiveAt
               ? <span className="t-label" style={{ fontSize: 11 }}><span className="dot dot-live" style={{ marginRight: 6 }} />active {timeAgo(new Date(member.lastActiveAt))}</span>
               : <span className="t-label" style={{ fontSize: 11 }}>no activity recorded</span>
@@ -267,7 +267,7 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
         ) : (
           <MetricBarChart
             data={(commits.data ?? []).slice(-60)}
-            color="var(--violet)"
+            color="var(--accent)"
             label="commits"
             height={140}
           />
@@ -558,8 +558,8 @@ export function TeamDashboardPage() {
       {/* KPI row */}
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="grid-kpi">
-            <KpiTile label="team commits"       value={fmtNumber(totals.commits)}                 sub="all members"         accent="violet"  icon={<Commits      width={16} height={16} />} tooltip="Sum of daily commits across all team members in the selected period" />
-          <KpiTile label="team prs merged"   value={String(Math.round(totals.prsMerged))}    sub="to default branch"   accent="violet"  icon={<PRMerged     width={16} height={16} />} tooltip="Sum of daily pull requests merged to the default branch by the team" />
+            <KpiTile label="team commits"       value={fmtNumber(totals.commits)}                 sub="all members"         accent="accent"  icon={<Commits      width={16} height={16} />} tooltip="Sum of daily commits across all team members in the selected period" />
+          <KpiTile label="team prs merged"   value={String(Math.round(totals.prsMerged))}    sub="to default branch"   accent="accent"  icon={<PRMerged     width={16} height={16} />} tooltip="Sum of daily pull requests merged to the default branch by the team" />
           <KpiTile label="team issues closed" value={String(Math.round(totals.issuesClosed))} sub="resolved · closed"  accent="emerald" icon={<IssuesClosed width={16} height={16} />} tooltip="Sum of daily Jira/GitHub issues resolved or closed by the team" />
           <KpiTile label="members"           value={memberCount || '—'}                       sub="in this team"        accent="cyan"    icon={<Users        width={16} height={16} />} tooltip="Number of members in the team" />
         </div>
@@ -600,7 +600,7 @@ export function TeamDashboardPage() {
               data={commitSeries
                 .filter((d) => d.userId == null)
                 .map((d) => ({ date: d.date, value: d.value, metricType: d.metricType }))}
-              color="var(--violet)"
+              color="var(--accent)"
               label="commits"
               height={220}
             />

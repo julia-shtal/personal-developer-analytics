@@ -260,10 +260,10 @@ export function DashboardPage() {
               <em style={{ fontSize: '0.4em', marginLeft: 8, color: 'var(--fg-3)', fontStyle: 'normal' }}>total</em>
             </div>
           </div>
-          <Chip color="violet" dot>{commits.data?.length ?? 0} days</Chip>
+          <Chip accent dot>{commits.data?.length ?? 0} days</Chip>
         </div>
         <div style={{ overflow: 'hidden' }}>
-          <Sparkline data={commits.data ?? []} color="var(--violet)" height={70} width={800} area responsive />
+          <Sparkline data={commits.data ?? []} color="var(--accent)" height={70} width={800} area responsive />
         </div>
         <div className="row" style={{ justifyContent: 'space-between', marginTop: 6 }}>
           <span className="t-label">{formatDate(from)}</span>
@@ -279,7 +279,7 @@ export function DashboardPage() {
             label="commits"
             value={totalCommits}
             sub={`in ${commits.data?.length ?? 0} days`}
-            accent="violet"
+            accent="accent"
             icon={<Commits />}
             tooltip="Number of Git commits authored in the selected period."
             anomaly={anomalies.data?.DAILY_COMMITS_COUNT}
@@ -288,7 +288,7 @@ export function DashboardPage() {
             label="prs merged"
             value={totalPrsMerged}
             sub="to default branch"
-            accent="violet"
+            accent="accent"
             icon={<PRMerged />}
             tooltip="Pull requests merged to a target branch in the selected period."
             anomaly={anomalies.data?.DAILY_PR_MERGED}
@@ -308,7 +308,7 @@ export function DashboardPage() {
             sub="coding days / working"
             accent="emerald"
             icon={<Focus />}
-            tooltip="Fraction of Mon–Fri working days with at least one commit."
+            tooltip="Coding days ÷ working days (Mon–Fri)."
             anomaly={anomalies.data?.FOCUS_RATIO_DAYS_TASKS}
           />
         </div>
@@ -318,7 +318,7 @@ export function DashboardPage() {
             label="prs created"
             value={sum(prCreated.data ?? [])}
             sub=""
-            accent="violet"
+            accent="accent"
             icon={<PRCreated />}
             tooltip="Pull requests opened by you in the selected period."
             anomaly={anomalies.data?.DAILY_PR_CREATED}
@@ -347,7 +347,7 @@ export function DashboardPage() {
             sub="lead time · median"
             accent="cyan"
             icon={<FirstCommit />}
-            tooltip="Median time from first branch commit to PR merge."
+            tooltip="Median hours from first commit on a PR branch to its merge."
             anomaly={anomalies.data?.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN}
           />
         </div>
@@ -385,9 +385,9 @@ export function DashboardPage() {
             label="merge frequency"
             value={numSuffix(mergeToMain.data?.value, '/wk')}
             sub="dora proxy"
-            accent="violet"
+            accent="accent"
             icon={<MergeFreq />}
-            tooltip="Avg. merges to the main branch per week (DORA deployment frequency proxy)."
+            tooltip="Merges to the default branch per week."
           />
         </div>
         <div className="divider" />
@@ -429,7 +429,7 @@ export function DashboardPage() {
             sub="lines per commit"
             accent="amber"
             icon={<PRSize />}
-            tooltip="Median (adds + deletes) per PR commit. Lower = smaller, more focused changes."
+            tooltip="Median lines changed per PR (additions + deletions)."
           />
         </div>
       </div>
@@ -463,14 +463,14 @@ export function DashboardPage() {
             <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Commit cadence</div>
           </div>
           <div className="row gap-2">
-            <Chip color="violet" dot>{commits.data?.length ?? 0} days</Chip>
+            <Chip accent dot>{commits.data?.length ?? 0} days</Chip>
             {peakCommits > 0 && <Chip>peak: {peakCommits}</Chip>}
           </div>
         </div>
         <MetricBarChart
           data={commits.data ?? []}
           label="commits/day"
-          color="var(--violet)"
+          color="var(--accent)"
           height={160}
         />
       </div>
@@ -487,9 +487,11 @@ export function DashboardPage() {
           <div className="col gap-3">
             <div>
               <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                {/* Semantic: violet = PR created (open state). Do not replace with var(--accent). */}
                 <span className="t-label" style={{ color: 'var(--violet)' }}>created</span>
                 <span className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{sum(prCreated.data ?? [])}</span>
               </div>
+              {/* Semantic: violet = created/open, emerald = merged/done — do not replace with var(--accent) */}
               <Sparkline data={prCreated.data ?? []} color="var(--violet)" height={36} width={500} responsive />
             </div>
             <div>

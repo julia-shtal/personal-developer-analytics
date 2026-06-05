@@ -23,7 +23,7 @@ export function WelcomePage() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setStep((s) => (s + 1 < STEPS.length ? s + 1 : s));
+      setStep((s) => (s < STEPS.length ? s + 1 : s));
     }, STEP_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
@@ -38,7 +38,7 @@ export function WelcomePage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'radial-gradient(ellipse at top, var(--violet-bg) 0%, var(--bg) 60%)',
+      background: 'radial-gradient(ellipse at top, var(--accent-bg) 0%, var(--bg) 60%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24,
     }}>
@@ -57,7 +57,7 @@ export function WelcomePage() {
             fontSize: 30, lineHeight: 1.1, fontWeight: 500,
             letterSpacing: '-0.02em', color: 'var(--fg)', marginBottom: 6,
           }}>
-            Hi, <span style={{ color: 'var(--violet-strong)' }}>{firstName}</span>.
+            Hi, <span style={{ color: 'var(--accent-strong)' }}>{firstName}</span>.
           </h1>
           <p className="t-body" style={{ color: 'var(--fg-3)' }}>
             Spinning up your workspace.
@@ -71,7 +71,7 @@ export function WelcomePage() {
             return (
               <div key={i} className="row gap-3" style={{
                 fontFamily: 'var(--font-mono)', fontSize: 12,
-                color: done ? 'var(--emerald)' : active ? 'var(--violet-strong)' : 'var(--muted)',
+                color: done ? 'var(--emerald)' : active ? 'var(--accent-strong)' : 'var(--muted)',
                 opacity: done || active ? 1 : 0.5,
                 transition: 'all .2s',
               }}>
@@ -93,7 +93,7 @@ export function WelcomePage() {
           {STEPS.map((_, i) => (
             <span key={i} style={{
               width: 6, height: 6, borderRadius: 999,
-              background: i <= step ? 'var(--violet-strong)' : 'var(--bg-inset)',
+              background: i <= step ? 'var(--accent-strong)' : 'var(--bg-inset)',
               animation: i === step ? 'pulse 1.2s ease-in-out infinite' : 'none',
               transition: 'background .2s',
             }} />

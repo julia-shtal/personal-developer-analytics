@@ -37,6 +37,12 @@
   --accent-strong: var(--violet-strong);
   --accent-bg:     var(--violet-bg);
 
+  /* Brand — fixed identity colors, not theme-adaptive */
+  --brand-github:    #24292e;
+  --brand-github-bg: #eaeef2;
+  --brand-jira:      #0052cc;
+  --brand-jira-bg:   #e8f0fb;
+
   /* Typography */
   --font-sans:  'Geist', system-ui, -apple-system, sans-serif;
   --font-mono:  'Geist Mono', ui-monospace, SFMono-Regular, monospace;
@@ -78,6 +84,11 @@ html[data-theme="dark"] {
   --coral:         oklch(76% 0.16 28);
   --coral-strong:  oklch(88% 0.13 28);
   --coral-bg:      oklch(28% 0.07 28);
+
+  --brand-github:    #e6edf3;
+  --brand-github-bg: #21262d;
+  --brand-jira:      #4d8cf5;
+  --brand-jira-bg:   #1a2846;
 }
 
 * { box-sizing: border-box; }
@@ -272,6 +283,7 @@ body {
 .chip-amber   { background: var(--amber-bg);   color: var(--amber);   border-color: transparent; }
 .chip-emerald { background: var(--emerald-bg); color: var(--emerald); border-color: transparent; }
 .chip-coral   { background: var(--coral-bg);   color: var(--coral);   border-color: transparent; }
+.chip-accent  { background: var(--accent-bg);  color: var(--accent);  border-color: transparent; }
 .chip-dot {
   display: inline-block;
   width: 6px; height: 6px; border-radius: 999px;

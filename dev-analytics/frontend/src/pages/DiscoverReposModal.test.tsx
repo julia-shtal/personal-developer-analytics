@@ -61,7 +61,7 @@ describe('DiscoverReposModal', () => {
       expect(screen.getByText('owner/repo-c')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('✓ Attached')).toBeInTheDocument();
+    expect(screen.getByText('attached')).toBeInTheDocument();
     expect(screen.getByText('private')).toBeInTheDocument();
   });
 
