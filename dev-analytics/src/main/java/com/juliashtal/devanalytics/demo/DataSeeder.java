@@ -93,6 +93,7 @@ public class DataSeeder implements ApplicationRunner {
         ds.setUser(owner);
         ds.setType(DataSourceType.GIT_LOCAL);
         ds.setName("demo-source");
+        ds.setPath("/demo/repo");
         return dsRepo.save(ds);
     }
 
@@ -102,6 +103,7 @@ public class DataSeeder implements ApplicationRunner {
         repo.setRepoType(RepoType.LOCAL);
         repo.setName("demo-repo");
         repo.setRepoFullName("demo/demo-repo");
+        repo.setLocalPath("/demo/repo");
         return gitRepoRepo.save(repo);
     }
 
