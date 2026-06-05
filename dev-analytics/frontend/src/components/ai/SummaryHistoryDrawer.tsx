@@ -101,7 +101,7 @@ function HistoryItem({ summary }: { summary: MetricsSummaryDto }) {
               <div className="col gap-1">
                 {summary.recommendations.map((r, i) => (
                   <div key={i} className="row gap-2" style={{ alignItems: 'flex-start' }}>
-                    <span className="chip-dot" style={{ color: 'var(--violet)', marginTop: 6, flexShrink: 0 }} />
+                    <span className="chip-dot" style={{ color: 'var(--accent)', marginTop: 6, flexShrink: 0 }} />
                     <span style={{ fontSize: 12, color: 'var(--fg)', lineHeight: 1.5 }}>{r}</span>
                   </div>
                 ))}
@@ -163,8 +163,8 @@ export function SummaryHistoryDrawer({ open, onClose }: Props) {
           >
             <X width={14} height={14} />
           </button>
-          <History width={14} height={14} style={{ color: 'var(--violet-strong)' }} />
-          <span className="t-label" style={{ color: 'var(--violet-strong)', letterSpacing: '0.06em' }}>
+          <History width={14} height={14} style={{ color: 'var(--accent-strong)' }} />
+          <span className="t-label" style={{ color: 'var(--accent-strong)', letterSpacing: '0.06em' }}>
             INSIGHT HISTORY
           </span>
         </div>

@@ -23,7 +23,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           {...props}
           className={clsx(
             'block w-full px-3 py-2 text-sm rounded-lg border bg-white text-gray-900',
-            'focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500',
+            'focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]',
             'transition-colors duration-150',
             error ? 'border-red-400' : 'border-gray-300',
             className

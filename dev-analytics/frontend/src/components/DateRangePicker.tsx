@@ -30,7 +30,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
         className={clsx(
           'inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border',
           'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 shadow-sm',
-          'focus:outline-none focus:ring-2 focus:ring-violet-500',
+          'focus:outline-none focus:ring-2 focus:ring-[var(--accent)]',
           'transition-colors duration-150'
         )}
       >
@@ -51,7 +51,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                   className={clsx(
                     'w-full text-left px-3 py-2 text-sm rounded-lg transition-colors',
                     p.range.from === value.from && p.range.to === value.to
-                      ? 'bg-violet-50 text-violet-700 font-medium'
+                      ? 'bg-[var(--accent-bg)] text-[var(--accent-strong)] font-medium'
                       : 'text-gray-700 hover:bg-gray-50'
                   )}
                 >
@@ -62,7 +62,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                 onClick={() => { setCustom(true); }}
                 className={clsx(
                   'w-full text-left px-3 py-2 text-sm rounded-lg transition-colors',
-                  custom ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-700 hover:bg-gray-50'
+                  custom ? 'bg-[var(--accent-bg)] text-[var(--accent-strong)] font-medium' : 'text-gray-700 hover:bg-gray-50'
                 )}
               >
                 Custom range…
@@ -78,7 +78,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                     value={value.from}
                     max={value.to}
                     onChange={(e) => onChange({ ...value, from: e.target.value })}
-                    className="mt-1 block w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    className="mt-1 block w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                   />
                 </div>
                 <div>
@@ -88,12 +88,12 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                     value={value.to}
                     min={value.from}
                     onChange={(e) => onChange({ ...value, to: e.target.value })}
-                    className="mt-1 block w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    className="mt-1 block w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                   />
                 </div>
                 <button
                   onClick={() => setOpen(false)}
-                  className="mt-1 w-full py-1.5 text-sm font-medium bg-violet-600 text-white rounded-lg hover:bg-violet-700"
+                  className="mt-1 w-full py-1.5 text-sm font-medium bg-[var(--accent)] text-white rounded-lg hover:brightness-90"
                 >
                   Apply
                 </button>

@@ -216,9 +216,9 @@ export function LoginPage() {
 
           {/* AI summary card */}
           <div className="card" style={{ padding: 14 }}>
-            <div className="row gap-2" style={{ color: 'var(--violet-strong)', marginBottom: 8 }}>
+            <div className="row gap-2" style={{ color: 'var(--accent-strong)', marginBottom: 8 }}>
               <AI width={14} height={14} />
-              <span className="t-label" style={{ color: 'var(--violet-strong)', fontSize: 10 }}>AI SUMMARY</span>
+              <span className="t-label" style={{ color: 'var(--accent-strong)', fontSize: 10 }}>AI SUMMARY</span>
               <span style={{ flex: 1 }} />
               <Chip color="emerald">Fresh</Chip>
             </div>

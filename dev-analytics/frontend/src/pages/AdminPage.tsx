@@ -395,7 +395,7 @@ export function AdminPage() {
                     }}
                   >
                     <span className="avatar avatar-sm" style={{
-                      background: 'var(--violet-bg)', color: 'var(--violet)', borderColor: 'transparent',
+                      background: 'var(--accent-bg)', color: 'var(--accent)', borderColor: 'transparent',
                     }}>
                       {(u.email ?? u.username ?? '?').slice(0, 2).toUpperCase()}
                     </span>
@@ -407,7 +407,7 @@ export function AdminPage() {
                         current role · {u.role.toLowerCase()}
                       </div>
                     </div>
-                    {active && <Chip color="violet">selected</Chip>}
+                    {active && <Chip accent>selected</Chip>}
                   </button>
                 );
               })}

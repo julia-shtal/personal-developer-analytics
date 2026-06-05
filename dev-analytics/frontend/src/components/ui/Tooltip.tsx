@@ -11,7 +11,12 @@ export function Tooltip({ children, content }: TooltipProps) {
 
   const handleEnter = useCallback((e: React.MouseEvent<HTMLSpanElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    setPos({ x: rect.left + rect.width / 2, y: rect.top });
+    const cx = rect.left + rect.width / 2;
+    // Clamp so the tooltip (max 320px wide) stays 8px inside the viewport on both sides
+    const half = 320 / 2;
+    const margin = 8;
+    const clamped = Math.max(margin + half, Math.min(cx, window.innerWidth - margin - half));
+    setPos({ x: clamped, y: rect.top });
   }, []);
 
   const handleLeave = useCallback(() => setPos(null), []);
@@ -28,12 +33,12 @@ export function Tooltip({ children, content }: TooltipProps) {
           style={{
             position: 'fixed',
             left: pos.x,
-            top: pos.y - 8,
+            top: pos.y - 10,
             transform: 'translate(-50%, -100%)',
             background: 'var(--fg)', color: 'var(--bg)',
             padding: '6px 10px', borderRadius: 6,
             fontFamily: 'var(--font-mono)', fontSize: 10.5,
-            whiteSpace: 'normal', maxWidth: 260, lineHeight: 1.45,
+            whiteSpace: 'normal', maxWidth: 320, minWidth: 200, lineHeight: 1.45,
             textAlign: 'left', zIndex: 9999, pointerEvents: 'none',
           }}
         >

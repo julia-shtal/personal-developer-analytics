@@ -210,7 +210,7 @@ export function TeamManagePage() {
                 <div className="row gap-3">
                   <div
                     className="avatar avatar-lg"
-                    style={{ background: 'var(--violet-bg)', color: 'var(--violet)', borderColor: 'transparent' }}
+                    style={{ background: 'var(--accent-bg)', color: 'var(--accent)', borderColor: 'transparent' }}
                   >
                     {team.name[0].toUpperCase()}
                   </div>
@@ -344,7 +344,7 @@ export function TeamManagePage() {
                 <div className="t-label" style={{ fontSize: 10, marginTop: 1 }}>{member.email}</div>
               </div>
               {member.role === 'MANAGER' || member.role === 'ADMIN' ? (
-                <Chip color="violet">{member.role.toLowerCase()}</Chip>
+                <Chip accent>{member.role.toLowerCase()}</Chip>
               ) : null}
               <button
                 className="btn btn-sm btn-icon"

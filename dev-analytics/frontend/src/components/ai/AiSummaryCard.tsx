@@ -130,9 +130,9 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
       {/* ── Top row ── */}
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, gap: 12, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0, flex: '1 1 auto' }}>
-          <div className="row gap-2" style={{ color: 'var(--violet-strong)', marginBottom: 8, flexWrap: 'wrap' }}>
+          <div className="row gap-2" style={{ color: 'var(--accent-strong)', marginBottom: 8, flexWrap: 'wrap' }}>
             <AI width={16} height={16} />
-            <span className="t-label" style={{ color: 'var(--violet-strong)', letterSpacing: '0.08em' }}>AI SUMMARY</span>
+            <span className="t-label" style={{ color: 'var(--accent-strong)', letterSpacing: '0.08em' }}>AI SUMMARY</span>
             <span className="tick">·</span>
             <span className="t-label" style={{ fontSize: 10.5 }}>Automatic overview for the selected period</span>
           </div>
@@ -144,7 +144,7 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
         </div>
         <div className="row gap-2" style={{ flexShrink: 0 }}>
           {isLoading && (
-            <Chip color="violet">Generating…</Chip>
+            <Chip accent>Generating…</Chip>
           )}
           {summary && !isLoading && (
             <Chip color={isOutdated ? 'amber' : 'emerald'} dot>
@@ -238,7 +238,7 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
               <div className="col gap-2">
                 {summary.recommendations.map((rec, i) => (
                   <div key={i} className="row gap-3" style={{ alignItems: 'flex-start', padding: '6px 0' }}>
-                    <span className="chip-dot" style={{ color: 'var(--violet)', marginTop: 7, flexShrink: 0 }} />
+                    <span className="chip-dot" style={{ color: 'var(--accent)', marginTop: 7, flexShrink: 0 }} />
                     <ProseWithNumbers text={rec} className="t-body" style={{ margin: 0, lineHeight: 1.55 }} />
                   </div>
                 ))}

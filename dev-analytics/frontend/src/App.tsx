@@ -29,11 +29,24 @@ const queryClient = new QueryClient({
 });
 
 function FaviconSync() {
-  const { logo } = useTheme();
+  const { logo, accent } = useTheme();
   useEffect(() => {
-    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (link) link.href = `/favicons/${logo}.svg`;
-  }, [logo]);
+    const resolvedAccent =
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#7a5ae0';
+
+    fetch(`/favicons/${logo}.svg`)
+      .then((r) => r.text())
+      .then((svg) => {
+        const tinted = svg.replace(/currentColor/g, resolvedAccent);
+        const b64 = btoa(unescape(encodeURIComponent(tinted)));
+        const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+        if (link) link.href = `data:image/svg+xml;base64,${b64}`;
+      })
+      .catch(() => {
+        const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+        if (link) link.href = `/favicons/${logo}.svg`;
+      });
+  }, [logo, accent]);
   return null;
 }
 

@@ -108,7 +108,7 @@ export function DiscoverReposModal({ dsId, onClose }: Props) {
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', minHeight: 0 }}>
           {isLoading && (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
-              <span className="t-label" style={{ color: 'var(--violet)' }}>Discovering repositories…</span>
+              <span className="t-label" style={{ color: 'var(--accent)' }}>Discovering repositories…</span>
             </div>
           )}
           {isError && (
@@ -142,8 +142,8 @@ export function DiscoverReposModal({ dsId, onClose }: Props) {
                     key={repo.fullName}
                     style={{
                       padding: '8px 12px', borderRadius: 6,
-                      border: `1px solid ${isSelected ? 'var(--violet)' : 'var(--line-2)'}`,
-                      background: isSelected ? 'var(--violet-bg)' : isAttached ? 'var(--bg-2)' : 'var(--bg-card)',
+                      border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--line-2)'}`,
+                      background: isSelected ? 'var(--accent-bg)' : isAttached ? 'var(--bg-2)' : 'var(--bg-card)',
                       opacity: isAttached ? 0.6 : 1,
                       cursor: isAttached ? 'default' : 'pointer',
                       display: 'flex', alignItems: 'center', gap: 10,
@@ -156,7 +156,7 @@ export function DiscoverReposModal({ dsId, onClose }: Props) {
                       disabled={isAttached}
                       onChange={() => !isAttached && toggle(repo.fullName)}
                       onClick={(e) => e.stopPropagation()}
-                      style={{ flexShrink: 0, accentColor: 'var(--violet)', width: 14, height: 14 }}
+                      style={{ flexShrink: 0, accentColor: 'var(--accent)', width: 14, height: 14 }}
                       aria-label={`Select ${repo.fullName}`}
                     />
                     <BookOpen width={12} height={12} style={{ color: 'var(--fg-3)', flexShrink: 0 }} />

@@ -165,9 +165,9 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
     <div className="card" style={{ padding: 22, marginBottom: 24, display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 24 }}>
       {/* Left — label + headline */}
       <div>
-        <div className="row gap-2" style={{ color: 'var(--violet)', marginBottom: 10 }}>
+        <div className="row gap-2" style={{ color: 'var(--accent)', marginBottom: 10 }}>
           <AI width={16} height={16} />
-          <span className="t-label" style={{ color: 'var(--violet)' }}>TEAM INSIGHT</span>
+          <span className="t-label" style={{ color: 'var(--accent)' }}>TEAM INSIGHT</span>
         </div>
         {summary ? (
           <h3 className="t-h2" style={{ fontSize: 20, lineHeight: 1.3 }}>
@@ -184,7 +184,7 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
           {summary && !isLoading && (
             <Chip color={isOutdated ? 'amber' : 'emerald'}>{isOutdated ? 'Outdated' : 'Fresh'}</Chip>
           )}
-          {isLoading && <Chip color="violet">Generating…</Chip>}
+          {isLoading && <Chip accent>Generating…</Chip>}
           {summary && !isLoading && (
             <button
               className="btn btn-sm btn-icon"

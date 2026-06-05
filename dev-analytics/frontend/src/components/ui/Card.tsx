@@ -14,7 +14,7 @@ export function Card({ children, className, onClick, hoverable }: CardProps) {
       onClick={onClick}
       className={clsx(
         'bg-white rounded-xl border border-gray-200 shadow-sm',
-        hoverable && 'cursor-pointer hover:shadow-md hover:border-violet-200 transition-all duration-200',
+        hoverable && 'cursor-pointer hover:shadow-md hover:border-[var(--accent-bg)] transition-all duration-200',
         onClick && 'cursor-pointer',
         className
       )}
