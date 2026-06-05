@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.issue.model.IssueEntity;
 import com.juliashtal.devanalytics.issue.model.IssueSource;
 import com.juliashtal.devanalytics.jira.service.JiraCollector;
+import com.juliashtal.devanalytics.jira.repository.JiraProjectRepoMappingRepository;
 import com.juliashtal.devanalytics.jira.repository.JiraProjectRepository;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.security.TokenEncryptor;
@@ -34,6 +35,7 @@ class IssueSourceDiscriminatorTest {
     @Mock RestTemplate restTemplate;
     @Mock IssueRepository issueRepository;
     @Mock JiraProjectRepository jiraProjectRepository;
+    @Mock JiraProjectRepoMappingRepository jiraProjectRepoMappingRepository;
     @Mock TokenEncryptor tokenEncryptor;
     @Spy  ObjectMapper objectMapper;
 
@@ -85,6 +87,8 @@ class IssueSourceDiscriminatorTest {
                 eq(HttpMethod.GET), any(), eq(String.class)))
             .thenReturn(ResponseEntity.ok(oneIssue));
 
+        lenient().when(jiraProjectRepoMappingRepository.findAllByJiraProject(any()))
+            .thenReturn(java.util.List.of());
         lenient().when(issueRepository.findByJiraProjectAndSourceIssueKey(any(), any()))
             .thenReturn(Optional.empty());
         lenient().when(issueRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));

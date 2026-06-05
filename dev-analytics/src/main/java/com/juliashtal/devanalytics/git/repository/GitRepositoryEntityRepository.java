@@ -2,7 +2,6 @@ package com.juliashtal.devanalytics.git.repository;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
-import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,13 +25,14 @@ public interface GitRepositoryEntityRepository extends JpaRepository<GitReposito
     Optional<GitRepositoryEntity> findByIdWithDataSourceConfig(@Param("id") Long id);
 
     /**
-     * Loads repos by IDs with their data source eagerly fetched.
-     * Used to include subscribed repos that live under another user's data source.
+     * Loads repos by IDs with their data source and team eagerly fetched.
+     * LEFT JOIN FETCH on team avoids LazyInitializationException when building RepoDtos
+     * that expose the team FK for UI grouping.
      */
-    @Query("SELECT r FROM GitRepositoryEntity r JOIN FETCH r.dataSourceConfig WHERE r.id IN :ids")
+    @Query("SELECT r FROM GitRepositoryEntity r JOIN FETCH r.dataSourceConfig ds LEFT JOIN FETCH ds.team WHERE r.id IN :ids")
     List<GitRepositoryEntity> findAllByIdWithDataSourceConfig(@Param("ids") Collection<Long> ids);
 
-    // ── user_accessible_repos view queries (T4.3) ─────────────────────────────
+    // ── user_accessible_repos view queries ─────────────────────────────
 
     /** All repo IDs the user can access across owned, subscribed, and team paths. */
     @Query(value = "SELECT DISTINCT repo_id FROM user_accessible_repos WHERE user_id = :userId",

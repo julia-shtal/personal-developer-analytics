@@ -3,9 +3,11 @@ package com.juliashtal.devanalytics.jira;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.service.DataSourceService;
+import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.jira.model.dto.CreateTrackedJiraProjectRequest;
 import com.juliashtal.devanalytics.jira.model.dto.JiraProjectResponseDto;
+import com.juliashtal.devanalytics.jira.service.JiraProjectMappingService;
 import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.user.model.User;
@@ -29,6 +31,7 @@ import java.util.List;
 public class JiraProjectController {
 
     private final JiraProjectService jiraProjectService;
+    private final JiraProjectMappingService jiraProjectMappingService;
     private final DataSourceService dataSourceService;
     private final UserRepository userRepository;
 
@@ -88,6 +91,29 @@ public class JiraProjectController {
     public ResponseEntity<Void> unsubscribe(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();
         jiraProjectService.unsubscribeUser(id, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/repositories")
+    @Operation(summary = "List GitHub repos linked to a Jira project")
+    public List<RepoDto> listLinkedRepos(@PathVariable Long id) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        return jiraProjectMappingService.listMappings(id, userId);
+    }
+
+    @PostMapping("/{id}/repositories/{repoId}")
+    @Operation(summary = "Link a GitHub repo to a Jira project")
+    public ResponseEntity<Void> linkRepo(@PathVariable Long id, @PathVariable Long repoId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        jiraProjectMappingService.link(userId, id, repoId);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{id}/repositories/{repoId}")
+    @Operation(summary = "Unlink a GitHub repo from a Jira project")
+    public ResponseEntity<Void> unlinkRepo(@PathVariable Long id, @PathVariable Long repoId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        jiraProjectMappingService.unlink(userId, id, repoId);
         return ResponseEntity.noContent().build();
     }
 

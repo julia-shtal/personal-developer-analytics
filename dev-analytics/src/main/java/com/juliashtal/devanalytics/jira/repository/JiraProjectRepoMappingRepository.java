@@ -10,5 +10,6 @@ public interface JiraProjectRepoMappingRepository
         extends JpaRepository<JiraProjectRepoMapping, JiraProjectRepoMapping.PK> {
 
     List<JiraProjectRepoMapping> findAllByJiraProject(JiraProjectEntity project);
+    boolean existsByJiraProject_IdAndRepository_Id(Long jiraProjectId, Long repositoryId);
     void deleteByJiraProjectAndRepository_Id(JiraProjectEntity project, Long repositoryId);
 }

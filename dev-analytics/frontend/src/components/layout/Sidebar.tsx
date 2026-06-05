@@ -21,6 +21,7 @@ import { Logo } from '@/components/brand/Logo';
 import { Avatar } from '@/components/ui/Avatar';
 import { APP_VERSION } from '@/config/branding';
 import { messagingApi } from '@/api/messaging';
+import { teamsApi } from '@/api/teams';
 
 const NAV_LINK_BASE: CSSProperties = {
   position: 'relative',
@@ -91,6 +92,15 @@ export function Sidebar() {
     enabled: !!user,
   });
 
+  // Developer-role users: check if they belong to any team as a member
+  const { data: memberships } = useQuery({
+    queryKey: ['team-memberships'],
+    queryFn: () => teamsApi.myMemberships().then((r) => r.data),
+    enabled: !!user && !isManager && !isAdmin,
+    staleTime: 5 * 60_000,
+  });
+  const isMember = !isManager && !isAdmin && !!memberships?.length;
+
   function handleSearch() {
     window.dispatchEvent(new CustomEvent('da:open-palette'));
   }
@@ -149,7 +159,7 @@ export function Sidebar() {
           ── workspace
         </div>
         <NavItem to="/dashboard" icon={<Home width={15} height={15} />} label="Personal" />
-        {(isManager || isAdmin) && (
+        {(isManager || isAdmin || isMember) && (
           <NavItem to="/team" icon={<Users width={15} height={15} />} label="Team" />
         )}
         {(isManager || isAdmin) && (

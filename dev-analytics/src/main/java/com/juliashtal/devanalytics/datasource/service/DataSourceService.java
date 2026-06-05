@@ -405,10 +405,11 @@ public class DataSourceService {
                 && r.getRepoType() == RepoType.GITHUB) {
             repoUrl = githubWebUrl(dsCfg.getBaseUrl()) + "/" + r.getRepoFullName();
         }
+        Long teamId = (dsCfg != null && dsCfg.getTeam() != null) ? dsCfg.getTeam().getId() : null;
         return new RepoDto(r.getId(), r.getName(), r.getRepoFullName(), r.getLocalPath(),
                 dsCfg != null ? dsCfg.getId() : null,
                 subscribedIds.contains(r.getId()),
-                repoUrl, r.isCollectIssues(), r.getIssuesLastSyncedAt());
+                repoUrl, r.isCollectIssues(), r.getIssuesLastSyncedAt(), teamId);
     }
 
     private static String githubWebUrl(String apiBaseUrl) {

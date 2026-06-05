@@ -8,8 +8,11 @@ import { KpiTile } from '@/components/ui/KpiTile';
 import { Chip } from '@/components/ui/Chip';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useDateRange } from '@/context/DateRangeContext';
+import { useRepoScope } from '@/context/RepoScopeContext';
+import { RepoSelector } from '@/components/RepoSelector';
 import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
 import { formatDate } from '@/lib/dates';
+import { reposApi } from '@/api/repos';
 import type { MetricsSummaryDto } from '@/types/ai';
 import {
   Commits, PRMerged, LeadTime, Focus, PRCreated, IssuesClosed,
@@ -52,44 +55,54 @@ function avg(data: { value: number }[]) {
 
 export function DashboardPage() {
   const { range } = useDateRange();
+  const { repoId } = useRepoScope();
   const qc = useQueryClient();
   const { from, to } = range;
 
   const [aiSummary, setAiSummary] = useState<MetricsSummaryDto | null>(null);
 
+  const { data: allRepos } = useQuery({
+    queryKey: ['repos'],
+    queryFn: () => reposApi.list().then((r) => r.data),
+    staleTime: 5 * 60_000,
+  });
+  const selectedRepo = allRepos?.find((r) => r.id === repoId) ?? null;
+
+  const rId = repoId ?? undefined;
+
   const commits = useQuery({
-    queryKey: ['daily-commits', from, to],
-    queryFn: () => metricsApi.dailyCommits(from, to).then((r) => r.data),
+    queryKey: ['daily-commits', from, to, repoId],
+    queryFn: () => metricsApi.dailyCommits(from, to, rId).then((r) => r.data),
   });
 
   const prCreated = useQuery({
-    queryKey: ['daily-pr-created', from, to],
-    queryFn: () => metricsApi.dailyPrCreated(from, to).then((r) => r.data),
+    queryKey: ['daily-pr-created', from, to, repoId],
+    queryFn: () => metricsApi.dailyPrCreated(from, to, rId).then((r) => r.data),
   });
 
   const prMerged = useQuery({
-    queryKey: ['daily-pr-merged', from, to],
-    queryFn: () => metricsApi.dailyPrMerged(from, to).then((r) => r.data),
+    queryKey: ['daily-pr-merged', from, to, repoId],
+    queryFn: () => metricsApi.dailyPrMerged(from, to, rId).then((r) => r.data),
   });
 
   const churn = useQuery({
-    queryKey: ['daily-churn', from, to],
-    queryFn: () => metricsApi.dailyChurn(from, to).then((r) => r.data),
+    queryKey: ['daily-churn', from, to, repoId],
+    queryFn: () => metricsApi.dailyChurn(from, to, rId).then((r) => r.data),
   });
 
   const issuesClosed = useQuery({
-    queryKey: ['daily-issues-closed', from, to],
-    queryFn: () => metricsApi.dailyIssuesClosed(from, to).then((r) => r.data),
+    queryKey: ['daily-issues-closed', from, to, repoId],
+    queryFn: () => metricsApi.dailyIssuesClosed(from, to, rId).then((r) => r.data),
   });
 
   const prLeadTime = useQuery({
-    queryKey: ['pr-lead-time', from, to],
-    queryFn: () => metricsApi.prLeadTime(from, to).then((r) => r.data),
+    queryKey: ['pr-lead-time', from, to, repoId],
+    queryFn: () => metricsApi.prLeadTime(from, to, rId).then((r) => r.data),
   });
 
   const reviewTime = useQuery({
-    queryKey: ['review-response-time', from, to],
-    queryFn: () => metricsApi.reviewResponseTime(from, to).then((r) => r.data),
+    queryKey: ['review-response-time', from, to, repoId],
+    queryFn: () => metricsApi.reviewResponseTime(from, to, rId).then((r) => r.data),
   });
 
   const focusRatio = useQuery({
@@ -98,18 +111,18 @@ export function DashboardPage() {
   });
 
   const issuesCreated = useQuery({
-    queryKey: ['daily-issues-created', from, to],
-    queryFn: () => metricsApi.dailyIssuesCreated(from, to).then((r) => r.data),
+    queryKey: ['daily-issues-created', from, to, repoId],
+    queryFn: () => metricsApi.dailyIssuesCreated(from, to, rId).then((r) => r.data),
   });
 
   const issueLeadTime = useQuery({
-    queryKey: ['issue-lead-time', from, to],
-    queryFn: () => metricsApi.issueLeadTime(from, to).then((r) => r.data),
+    queryKey: ['issue-lead-time', from, to, repoId],
+    queryFn: () => metricsApi.issueLeadTime(from, to, rId).then((r) => r.data),
   });
 
   const prFirstCommitLeadTime = useQuery({
-    queryKey: ['pr-first-commit-lead-time', from, to],
-    queryFn: () => metricsApi.prFirstCommitLeadTime(from, to).then((r) => r.data),
+    queryKey: ['pr-first-commit-lead-time', from, to, repoId],
+    queryFn: () => metricsApi.prFirstCommitLeadTime(from, to, rId).then((r) => r.data),
   });
 
   const afterHours = useQuery({
@@ -133,18 +146,18 @@ export function DashboardPage() {
   });
 
   const mergeWithoutReview = useQuery({
-    queryKey: ['merge-without-review', from, to],
-    queryFn: () => metricsApi.mergeWithoutReview(from, to).then((r) => r.data),
+    queryKey: ['merge-without-review', from, to, repoId],
+    queryFn: () => metricsApi.mergeWithoutReview(from, to, rId).then((r) => r.data),
   });
 
   const prSizeComplexity = useQuery({
-    queryKey: ['pr-size-complexity', from, to],
-    queryFn: () => metricsApi.prSizeComplexity(from, to).then((r) => r.data),
+    queryKey: ['pr-size-complexity', from, to, repoId],
+    queryFn: () => metricsApi.prSizeComplexity(from, to, rId).then((r) => r.data),
   });
 
   const knowledgeSilo = useQuery({
-    queryKey: ['knowledge-silo', from, to],
-    queryFn: () => metricsApi.knowledgeSilo(from, to).then((r) => r.data),
+    queryKey: ['knowledge-silo', from, to, repoId],
+    queryFn: () => metricsApi.knowledgeSilo(from, to, rId).then((r) => r.data),
   });
 
   const freshness = useQuery({
@@ -213,11 +226,17 @@ export function DashboardPage() {
 
       {/* ── Hero ──────────────────────────────────────────── */}
       <div style={{ marginBottom: 36 }}>
-        <div className="row" style={{ marginBottom: 14, gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="t-eyebrow">── Personal · {formatDate(from)} → {formatDate(to)}</div>
-          {freshness.data?.metricsComputedThrough && (
-            <Chip color="amber">metrics through {freshness.data.metricsComputedThrough}</Chip>
-          )}
+        <div className="row" style={{ marginBottom: 14, gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="t-eyebrow">── Personal · {formatDate(from)} → {formatDate(to)}</div>
+            {freshness.data?.metricsComputedThrough && (
+              <Chip color="amber">metrics through {freshness.data.metricsComputedThrough}</Chip>
+            )}
+            {selectedRepo && (
+              <Chip color="cyan">{selectedRepo.name}</Chip>
+            )}
+          </div>
+          <RepoSelector />
         </div>
         <h1 className="t-h1" style={{ textAlign: 'justify' }}>
           <em>{totalCommits} commits</em>, <em>{totalPrsMerged} PRs merged</em>,
@@ -225,7 +244,9 @@ export function DashboardPage() {
           {aiSummary?.headline ? ` — ${aiSummary.headline}` : '.'}
         </h1>
         <p className="t-body" style={{ marginTop: 18, textAlign: 'justify' }}>
-          {aiSummary?.overview ?? 'Generate an AI summary to see your narrative overview.'}
+          {selectedRepo
+            ? `Showing metrics for ${selectedRepo.name}.`
+            : (aiSummary?.overview ?? 'Generate an AI summary to see your narrative overview.')}
         </p>
       </div>
 

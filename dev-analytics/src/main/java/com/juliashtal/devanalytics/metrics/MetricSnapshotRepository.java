@@ -74,6 +74,23 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
 
+    /** Team-scoped snapshots filtered to a specific repository. Used when team dashboard has a repo filter active. */
+    @Query("""
+            SELECT s FROM MetricSnapshot s
+            WHERE s.user.id IN :userIds
+              AND s.team.id = :teamId
+              AND s.metricType = :metricType
+              AND s.repository = :repository
+              AND s.date BETWEEN :from AND :to
+            """)
+    List<MetricSnapshot> findByUserIdsAndTeamIdAndMetricTypeAndRepositoryAndDateBetween(
+            @Param("userIds") List<Long> userIds,
+            @Param("teamId") Long teamId,
+            @Param("metricType") MetricType metricType,
+            @Param("repository") GitRepositoryEntity repository,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
+
     // -------------------------------------------------------------------------
     // Period-overlap queries — for aggregate metrics where `date` = fromDate
     // and may predate the UI's requested range

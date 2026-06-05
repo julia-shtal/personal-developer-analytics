@@ -9,5 +9,6 @@ public record RepoDto(
         boolean subscribed,
         String repoUrl,
         boolean collectIssues,
-        java.time.Instant issuesLastSyncedAt
+        java.time.Instant issuesLastSyncedAt,
+        Long teamId
 ) {}

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { AuthProvider } from '@/context/AuthContext';
 import { DateRangeProvider } from '@/context/DateRangeContext';
+import { RepoScopeProvider } from '@/context/RepoScopeContext';
 import { AppShell } from '@/components/layout/AppShell';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
@@ -46,7 +47,7 @@ function AppRoutes() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/welcome" element={<WelcomePage />} />
 
-        <Route element={<DateRangeProvider><AppShell /></DateRangeProvider>}>
+        <Route element={<DateRangeProvider><RepoScopeProvider><AppShell /></RepoScopeProvider></DateRangeProvider>}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/team" element={<TeamDashboardPage />} />
           <Route path="/team-manage" element={<TeamManagePage />} />

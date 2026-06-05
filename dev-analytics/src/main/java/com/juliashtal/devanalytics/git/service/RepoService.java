@@ -28,6 +28,10 @@ public class RepoService {
     }
 
     public List<RepoDto> listAccessible(Long dataSourceId) {
+        return listAccessible(dataSourceId, null);
+    }
+
+    public List<RepoDto> listAccessible(Long dataSourceId, Long teamId) {
         Long userId = SecurityUtils.getCurrentUserId();
 
         // Single view query replaces the three-path merge (owned + subscribed + team).
@@ -35,6 +39,11 @@ public class RepoService {
         List<Long> repoIds = dataSourceId != null
                 ? gitRepoRepository.findAccessibleRepoIdsByDataSource(userId, dataSourceId)
                 : gitRepoRepository.findAccessibleRepoIds(userId);
+
+        if (teamId != null) {
+            Set<Long> teamRepoIds = new HashSet<>(gitRepoRepository.findIdsByTeamIds(List.of(teamId)));
+            repoIds = repoIds.stream().filter(teamRepoIds::contains).toList();
+        }
 
         if (repoIds.isEmpty()) return List.of();
 
@@ -106,6 +115,7 @@ public class RepoService {
                             && r.getRepoType() == RepoType.GITHUB) {
                         repoUrl = toWebBaseUrl(dsCfg.getBaseUrl()) + "/" + r.getRepoFullName();
                     }
+                    Long teamId = (dsCfg != null && dsCfg.getTeam() != null) ? dsCfg.getTeam().getId() : null;
                     return new RepoDto(
                             r.getId(),
                             r.getName(),
@@ -115,7 +125,8 @@ public class RepoService {
                             subscribedIds.contains(r.getId()),
                             repoUrl,
                             r.isCollectIssues(),
-                            r.getIssuesLastSyncedAt()
+                            r.getIssuesLastSyncedAt(),
+                            teamId
                     );
                 })
                 .toList();

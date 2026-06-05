@@ -62,6 +62,17 @@ public class MetricSnapshotService {
         return repository.findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(userIds, teamId, metricType, from, to);
     }
 
+    public List<MetricSnapshot> getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndRepositoryAndDateBetween(
+            List<Long> userIds,
+            Long teamId,
+            MetricType metricType,
+            GitRepositoryEntity repo,
+            LocalDate from,
+            LocalDate to) {
+        return repository.findByUserIdsAndTeamIdAndMetricTypeAndRepositoryAndDateBetween(
+                userIds, teamId, metricType, repo, from, to);
+    }
+
     public MetricSnapshot getExisting(
             Long userId,
             Long teamId,

@@ -59,14 +59,14 @@ export const metricsApi = {
   deepWorkStreak: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/deep-work-streak', { params: { from, to } }),
 
-  mergeWithoutReview: (from: string, to: string) =>
-    api.get<MetricAggregateDto>('/metrics/merge-without-review', { params: { from, to } }),
+  mergeWithoutReview: (from: string, to: string, repoId?: number) =>
+    api.get<MetricAggregateDto>('/metrics/merge-without-review', { params: { from, to, repoId } }),
 
-  prSizeComplexity: (from: string, to: string) =>
-    api.get<MetricAggregateDto>('/metrics/pr-size-complexity', { params: { from, to } }),
+  prSizeComplexity: (from: string, to: string, repoId?: number) =>
+    api.get<MetricAggregateDto>('/metrics/pr-size-complexity', { params: { from, to, repoId } }),
 
-  knowledgeSilo: (from: string, to: string) =>
-    api.get<MetricAggregateDto>('/metrics/knowledge-silo', { params: { from, to } }),
+  knowledgeSilo: (from: string, to: string, repoId?: number) =>
+    api.get<MetricAggregateDto>('/metrics/knowledge-silo', { params: { from, to, repoId } }),
 
   freshness: () =>
     api.get<{ metricsComputedThrough?: string }>('/metrics/freshness'),
@@ -84,8 +84,20 @@ export const teamMetricsApi = {
   calculate: (teamId: number, from: string, to: string) =>
     api.post(`/metrics/teams/${teamId}/calculate`, null, { params: { from, to } }),
 
-  dailyCommits: (teamId: number, from: string, to: string) =>
-    api.get<TeamMetricPointDto[]>(`/metrics/teams/${teamId}/daily-commits`, { params: { from, to } }),
+  dailyCommits: (teamId: number, from: string, to: string, repoId?: number | null) =>
+    api.get<TeamMetricPointDto[]>(`/metrics/teams/${teamId}/daily-commits`, {
+      params: { from, to, ...(repoId != null && { repoId }) },
+    }),
+
+  dailyPrMerged: (teamId: number, from: string, to: string, repoId?: number | null) =>
+    api.get<TeamMetricPointDto[]>(`/metrics/teams/${teamId}/daily-pr-merged`, {
+      params: { from, to, ...(repoId != null && { repoId }) },
+    }),
+
+  dailyIssuesClosed: (teamId: number, from: string, to: string, repoId?: number | null) =>
+    api.get<TeamMetricPointDto[]>(`/metrics/teams/${teamId}/daily-issues-closed`, {
+      params: { from, to, ...(repoId != null && { repoId }) },
+    }),
 
   summary: (teamId: number, from: string, to: string) =>
     api.get<MemberSummaryDto[]>(`/metrics/teams/${teamId}/summary`, { params: { from, to } }),

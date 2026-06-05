@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.user.controller;
 
 import com.juliashtal.devanalytics.user.model.TeamDto;
+import com.juliashtal.devanalytics.user.model.TeamMembershipDto;
 import com.juliashtal.devanalytics.user.model.request.TeamConfigRequest;
 import com.juliashtal.devanalytics.user.service.TeamService;
 import com.juliashtal.devanalytics.user.model.request.AddTeamMemberRequest;
@@ -31,6 +32,13 @@ public class TeamController {
     @GetMapping
     public ResponseEntity<List<TeamDto>> getMyTeams() {
         return ResponseEntity.ok(teamService.getMyTeams());
+    }
+
+    /** Teams the current user is a member of (not manager). Accessible to any authenticated role. */
+    @GetMapping("/me/memberships")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<TeamMembershipDto>> getMyMemberships() {
+        return ResponseEntity.ok(teamService.getMyMemberships());
     }
 
     @PostMapping("/{teamId}/members")
