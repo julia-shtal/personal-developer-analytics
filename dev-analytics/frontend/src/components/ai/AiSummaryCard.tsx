@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Shield, Copy, Check, RefreshCw, Sparkles, History } from 'lucide-react';
+import axios from 'axios';
+import { clsx } from 'clsx';
+import { Shield, Copy, Check, RefreshCw, Sparkles, History, Square, Download, FileDown, FileCode, FileText, FileJson, Printer } from 'lucide-react';
 import { Chip } from '@/components/ui/Chip';
 import { ProseWithNumbers } from '@/components/ui/ProseWithNumbers';
 import { FollowUpDrawer } from '@/components/ai/FollowUpDrawer';
@@ -8,25 +10,13 @@ import { SummaryHistoryDrawer } from '@/components/ai/SummaryHistoryDrawer';
 import { aiApi } from '@/api/ai';
 import { AI } from '@/components/icons';
 import { timeAgo } from '@/lib/dates';
+import { summaryToText, summaryToMarkdown, summaryToHtml, downloadFile } from '@/lib/export';
 import type { MetricsSummaryDto } from '@/types/ai';
 import type { DateRange } from '@/types';
 
 interface Props {
   range: DateRange;
   onSummaryGenerated?: (summary: MetricsSummaryDto) => void;
-}
-
-function summaryToText(s: MetricsSummaryDto): string {
-  const lines: string[] = [];
-  if (s.headline) lines.push(s.headline);
-  if (s.overview) lines.push('\nOverview\n' + s.overview);
-  if (s.insights.length) {
-    lines.push('\nKey Insights\n' + s.insights.map((i) => `• ${i.text}`).join('\n'));
-  }
-  if (s.recommendations.length) {
-    lines.push('\nRecommendations\n' + s.recommendations.map((r) => `• ${r}`).join('\n'));
-  }
-  return lines.join('');
 }
 
 const KIND_COLOR: Record<string, string> = {
@@ -59,6 +49,8 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
   const [copied, setCopied] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const exportMenuRef = useRef<HTMLDetailsElement>(null);
 
   const { data: dbLatest } = useQuery({
     queryKey: ['ai-summary-latest'],
@@ -100,21 +92,35 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
     (generatedForRange.from !== range.from || generatedForRange.to !== range.to);
 
   async function generate() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsLoading(true);
     setError(null);
     try {
-      const result = await aiApi.generateSummary(range.from, range.to);
+      const result = await aiApi.generateSummary(range.from, range.to, undefined, controller.signal);
       const now = Date.now();
       setSummary(result);
       setGeneratedForRange(range);
       setGeneratedAt(new Date(now));
       qc.setQueryData(cacheKey, { summary: result, generatedAt: now, range });
       onSummaryGenerated?.(result);
-    } catch {
-      setError('AI summary is temporarily unavailable. Metrics remain accessible.');
+    } catch (err) {
+      if (axios.isCancel(err)) {
+        // User aborted — reset to idle silently (no error banner).
+      } else {
+        setError('AI summary is temporarily unavailable. Metrics remain accessible.');
+      }
     } finally {
-      setIsLoading(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setIsLoading(false);
+      }
     }
+  }
+
+  function stop() {
+    abortRef.current?.abort();
   }
 
   async function copyToClipboard() {
@@ -122,6 +128,45 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
     await navigator.clipboard.writeText(summaryToText(summary));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    closeExportMenu();
+  }
+
+  function closeExportMenu() {
+    if (exportMenuRef.current) exportMenuRef.current.open = false;
+  }
+
+  // Close the export menu when the user clicks outside it
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (exportMenuRef.current?.open && !exportMenuRef.current.contains(e.target as Node)) {
+        exportMenuRef.current.open = false;
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  function exportAs(format: 'md' | 'html' | 'pdf' | 'txt' | 'json') {
+    if (!summary) return;
+    const stamp = summary.to;
+    if (format === 'md') {
+      downloadFile(`ai-summary-${stamp}.md`, summaryToMarkdown(summary), 'text/markdown');
+    } else if (format === 'html') {
+      downloadFile(`ai-summary-${stamp}.html`, summaryToHtml(summary), 'text/html');
+    } else if (format === 'txt') {
+      downloadFile(`ai-summary-${stamp}.txt`, summaryToText(summary), 'text/plain');
+    } else if (format === 'json') {
+      downloadFile(`ai-summary-${stamp}.json`, JSON.stringify(summary, null, 2), 'application/json');
+    } else if (format === 'pdf') {
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(summaryToHtml(summary));
+        w.document.close();
+        w.focus();
+        w.print();
+      }
+    }
+    closeExportMenu();
   }
 
   return (
@@ -142,7 +187,7 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
             </h3>
           )}
         </div>
-        <div className="row gap-2" style={{ flexShrink: 0 }}>
+        <div className="row gap-2" style={{ flexShrink: 0, alignItems: 'center' }}>
           {isLoading && (
             <Chip accent>Generating…</Chip>
           )}
@@ -151,20 +196,81 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
               {isOutdated ? 'Outdated' : 'Fresh'}
             </Chip>
           )}
+
+          {/* Export menu — only when a summary exists and we're idle */}
           {summary && !isLoading && (
-            <button
-              className="btn btn-sm btn-icon"
-              onClick={copyToClipboard}
-              title="Copy to clipboard"
-              aria-label="Copy summary to clipboard"
-            >
-              {copied ? <Check width={12} height={12} /> : <Copy width={12} height={12} />}
-            </button>
+            <details className="export-menu" ref={exportMenuRef} style={{ position: 'relative' }}>
+              <summary
+                className="btn btn-sm btn-icon"
+                style={{ listStyle: 'none', cursor: 'pointer' }}
+                title="Export summary"
+                aria-label="Export summary"
+              >
+                <Download width={12} height={12} />
+              </summary>
+              <div className="card export-menu-panel">
+                <span className="t-label export-menu-label">Share</span>
+                <button className="menu-item" onClick={copyToClipboard}>
+                  {copied ? <Check width={13} height={13} style={{ color: 'var(--emerald)' }} /> : <Copy width={13} height={13} />}
+                  <span>{copied ? 'Copied to clipboard' : 'Copy to clipboard'}</span>
+                </button>
+
+                <span className="divider-2 export-menu-divider" />
+
+                <span className="t-label export-menu-label">Download</span>
+                <button className="menu-item" onClick={() => exportAs('md')}>
+                  <FileDown width={13} height={13} />
+                  <span>Markdown</span>
+                  <span className="export-menu-ext font-mono">.md</span>
+                </button>
+                <button className="menu-item" onClick={() => exportAs('html')}>
+                  <FileCode width={13} height={13} />
+                  <span>HTML document</span>
+                  <span className="export-menu-ext font-mono">.html</span>
+                </button>
+                <button className="menu-item" onClick={() => exportAs('pdf')}>
+                  <Printer width={13} height={13} />
+                  <span>Print to PDF…</span>
+                </button>
+                <button className="menu-item" onClick={() => exportAs('txt')}>
+                  <FileText width={13} height={13} />
+                  <span>Plain text</span>
+                  <span className="export-menu-ext font-mono">.txt</span>
+                </button>
+                <button className="menu-item" onClick={() => exportAs('json')}>
+                  <FileJson width={13} height={13} />
+                  <span>Raw JSON</span>
+                  <span className="export-menu-ext font-mono">.json</span>
+                </button>
+              </div>
+            </details>
           )}
-          <button className="btn btn-sm" onClick={generate} disabled={isLoading} aria-label={summary ? 'Regenerate AI summary' : 'Generate AI summary'}>
-            <RefreshCw width={12} height={12} />
+
+          {/* Regenerate stays visible but is clearly disabled while generating */}
+          <button
+            className={clsx('btn btn-sm', isLoading && 'is-disabled')}
+            onClick={generate}
+            disabled={isLoading}
+            aria-disabled={isLoading}
+            title={isLoading ? 'Generating…' : undefined}
+            aria-label={summary ? 'Regenerate AI summary' : 'Generate AI summary'}
+          >
+            <RefreshCw width={12} height={12} className={clsx(isLoading && 'animate-spin')} />
             {summary ? 'Regenerate' : 'Generate'}
           </button>
+
+          {/* Stop button — only while generating */}
+          {isLoading && (
+            <button
+              className="btn btn-sm"
+              onClick={stop}
+              aria-label="Stop generating summary"
+              style={{ color: 'var(--coral)', borderColor: 'var(--coral)' }}
+            >
+              <Square width={12} height={12} />
+              Stop
+            </button>
+          )}
         </div>
       </div>
 

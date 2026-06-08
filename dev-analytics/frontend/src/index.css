@@ -239,6 +239,57 @@ body {
 .btn-ghost:hover { background: var(--bg-2); color: var(--fg); border-color: transparent; }
 .btn-sm { padding: 5px 9px; font-size: 11px; }
 .btn-icon { padding: 6px; }
+.btn.is-disabled { opacity: 0.5; cursor: not-allowed; }
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition: background .1s ease;
+}
+.menu-item:hover { background: var(--bg-2); }
+.menu-item svg { color: var(--fg-3); flex-shrink: 0; }
+.menu-item:hover svg { color: var(--accent-strong); }
+details.export-menu > summary::-webkit-details-marker { display: none; }
+
+.export-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 220px;
+  padding: 8px;
+  box-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.32);
+}
+.export-menu-label {
+  padding: 6px 10px 4px;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.export-menu-divider {
+  display: block;
+  margin: 4px 6px;
+}
+.export-menu-ext {
+  margin-left: auto;
+  padding-left: 10px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--fg-3);
+}
 
 .input {
   font-family: var(--font-sans);
