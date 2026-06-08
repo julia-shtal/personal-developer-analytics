@@ -54,9 +54,9 @@ class NotificationPrefsControllerTest {
 
             mvc.perform(get("/api/users/me/notifications"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.aiBrief").value(true))
-                    .andExpect(jsonPath("$.syncFailures").value(true))
-                    .andExpect(jsonPath("$.afterHours").value(true))
+                    .andExpect(jsonPath("$.aiBrief").value(false))
+                    .andExpect(jsonPath("$.syncFailures").value(false))
+                    .andExpect(jsonPath("$.afterHours").value(false))
                     .andExpect(jsonPath("$.newTeamMember").value(false));
         }
     }

@@ -48,9 +48,9 @@ class UserNotificationPrefsServiceTest {
 
         UserNotificationPrefsEntity result = service.getOrCreate(1L);
 
-        assertThat(result.isAiBrief()).isTrue();
-        assertThat(result.isSyncFailures()).isTrue();
-        assertThat(result.isAfterHours()).isTrue();
+        assertThat(result.isAiBrief()).isFalse();
+        assertThat(result.isSyncFailures()).isFalse();
+        assertThat(result.isAfterHours()).isFalse();
         assertThat(result.isNewTeamMember()).isFalse();
         verify(prefsRepository).save(any());
     }

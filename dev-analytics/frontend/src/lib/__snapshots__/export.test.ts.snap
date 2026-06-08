@@ -1,0 +1,56 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`summaryToHtml > matches snapshot 1`] = `
+"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Strong delivery week</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #1a1a2e; line-height: 1.6; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .period { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; margin-top: 28px; }
+  ul { padding-left: 18px; }
+  li { margin: 6px 0; }
+  .sym { font-family: monospace; font-weight: 700; margin-right: 4px; }
+  code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+  <h1>Strong delivery week</h1>
+  <div class="period">Period: 2026-06-01 → 2026-06-07</div>
+  <h2>Overview</h2><p>You shipped 290 commits across 3 repositories.</p>
+  <h2>Key Insights</h2><ul><li><span class="sym" style="color:#059669">+</span> Merge rate climbed to 84%. <code>merge-rate</code></li>
+<li><span class="sym" style="color:#dc2626">!</span> After-hours work rose sharply. <code>after-hours</code></li>
+<li><span class="sym" style="color:#d97706">~</span> PR size held steady.</li></ul>
+  <h2>Recommendations</h2><ul><li>Protect focus time on Mondays.</li>
+<li>Review large PRs earlier.</li></ul>
+  <footer>Generated locally from metrics only · llama3.2 via Ollama</footer>
+</body>
+</html>"
+`;
+
+exports[`summaryToMarkdown > matches snapshot 1`] = `
+"# Strong delivery week
+
+_Period: 2026-06-01 → 2026-06-07_
+
+## Overview
+
+You shipped 290 commits across 3 repositories.
+
+## Key Insights
+
+- + Merge rate climbed to 84%. \`merge-rate\`
+- ! After-hours work rose sharply. \`after-hours\`
+- ~ PR size held steady.
+
+## Recommendations
+
+- Protect focus time on Mondays.
+- Review large PRs earlier.
+"
+`;

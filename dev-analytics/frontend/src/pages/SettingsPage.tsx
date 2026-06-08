@@ -244,7 +244,7 @@ export function SettingsPage() {
   }
 
   // ── Notification prefs — use query data directly with optimistic cache update ──
-  const DEFAULT_NOTIFS = { aiBrief: true, syncFailures: true, afterHours: true, newTeamMember: false };
+  const DEFAULT_NOTIFS = { aiBrief: false, syncFailures: false, afterHours: false, newTeamMember: false };
 
   const { data: notifData } = useQuery({
     queryKey: ['notification-prefs'],

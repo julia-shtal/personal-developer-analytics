@@ -316,12 +316,14 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | Column | Type | Notes |
 |---|---|---|
 | `user_id` | BIGINT PK FK → users CASCADE | Shares PK with `users` via `@MapsId` / `@OneToOne` |
-| `ai_brief` | BOOLEAN DEFAULT TRUE | Weekly AI summary email toggle |
-| `sync_failures` | BOOLEAN DEFAULT TRUE | Datasource sync error alert toggle |
-| `after_hours` | BOOLEAN DEFAULT TRUE | After-hours activity alert toggle |
+| `ai_brief` | BOOLEAN DEFAULT FALSE | Weekly AI summary email toggle |
+| `sync_failures` | BOOLEAN DEFAULT FALSE | Datasource sync error alert toggle |
+| `after_hours` | BOOLEAN DEFAULT FALSE | After-hours activity alert toggle |
 | `new_team_member` | BOOLEAN DEFAULT FALSE | New team member notification toggle |
 
 Created lazily on first read (`UserNotificationPrefsService.getOrCreate`). Row is shared across sessions; partial updates are not supported (all four fields are replaced on PUT).
+
+`V53__backfill_notification_prefs.sql` backfilled an all-FALSE row for every user lacking one and flipped the `ai_brief`/`sync_failures`/`after_hours` column (and entity-field) defaults from `TRUE` to `FALSE`, aligning new-row creation with an opt-out notification policy (PDA-68).
 
 **`Team`** — Table `teams`
 
@@ -1306,7 +1308,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 ## 4. Database Design
 
-### 4.1 Schema Evolution — 52 Flyway Migrations
+### 4.1 Schema Evolution — 53 Flyway Migrations
 
 | Version | File | What it does |
 |---|---|---|
@@ -1362,6 +1364,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 | V50 | `V50__metric_summaries_headline_team.sql` | ALTER `metric_summaries` ADD `headline` TEXT, ADD `team_id` FK → teams, ALTER user_id DROP NOT NULL; add unique index on (COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,'')); add index on (team_id, generated_at DESC) — persist team summaries (PDA-53/T3) |
 | V51 | `V51__sync_jobs.sql` | Create `sync_jobs` (id, data_source_id FK, status, phase, total_processed, started_at, completed_at, result, error); indexes on (data_source_id) and partial on (status='RUNNING') — persistent job state for backfill detection (PDA-56/T2) |
 | V52 | `V52__direct_messages.sql` | Create `messages` (id, sender_id FK, recipient_id FK, body, created_at, read_at); indexes on (sender_id, recipient_id, created_at) and (recipient_id, read_at) — 1:1 direct messaging (PDA-60/T1) |
+| V53 | `V53__backfill_notification_prefs.sql` | Backfill an all-FALSE `user_notification_prefs` row for every user lacking one (idempotent `INSERT ... WHERE NOT EXISTS` guard preserves existing custom rows); ALTER COLUMN `ai_brief`/`sync_failures`/`after_hours` SET DEFAULT FALSE — aligns new-row defaults with the opt-out notification policy (PDA-68/T7) |
 
 ### 4.2 Entity-Relationship Overview
 
@@ -1702,7 +1705,7 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 **`MultiLineChart`** — Multi-series for team data. Pivots by (date, username). 7-color palette.
 
-**`AiSummaryCard`** — Fetches personal AI summary for the current date range. Editorial layout: `AI SUMMARY` eyebrow, italic `t-h2` headline, `Fresh / Outdated` chip, copy button, Regenerate button. Insight rows use `+/!/~` symbols coloured by `insight.kind` (`positive → emerald`, `risk → coral`, `note → amber`) with a `Chip` for the linked metric name. Footer: `Shield` icon + "Generated locally" + model name + `timeAgo` + "History" button (opens `SummaryHistoryDrawer`) + "Ask follow-up" button (opens `FollowUpDrawer`). `onSummaryGenerated` callback drives the Dashboard hero block. Falls back to DB-persisted latest summary when no in-memory entry exists (PDA-61).
+**`AiSummaryCard`** — Fetches personal AI summary for the current date range. Editorial layout: `AI SUMMARY` eyebrow, italic `t-h2` headline, `Fresh / Outdated` chip, an export `<details>` menu (replacing the old standalone copy button), and a Regenerate button that is visibly disabled (`is-disabled`, `aria-disabled`, greyed/`cursor:not-allowed`) while generating, paired with a Stop button to abort. Insight rows use `+/!/~` symbols coloured by `insight.kind` (`positive → emerald`, `risk → coral`, `note → amber`) with a `Chip` for the linked metric name. Footer: `Shield` icon + "Generated locally" + model name + `timeAgo` + "History" button (opens `SummaryHistoryDrawer`) + "Ask follow-up" button (opens `FollowUpDrawer`). `onSummaryGenerated` callback drives the Dashboard hero block. Falls back to DB-persisted latest summary when no in-memory entry exists (PDA-61). The Stop button cancels an in-flight generation via `AbortController`, and the export menu offers Copy to clipboard, Markdown (.md), HTML (.html), Save-as-PDF (browser print), Plain text (.txt), and JSON (.json) using pure helpers in `src/lib/export.ts` (`summaryToText`, `summaryToMarkdown`, `summaryToHtml`, `downloadFile`) (PDA-68/T6).
 
 **`SummaryHistoryDrawer`** (`src/components/ai/SummaryHistoryDrawer.tsx`) — Slide-in 520 px panel listing the last 20 persisted personal AI summaries newest-first (PDA-61). Each entry is an accordion row: collapsed shows date range + headline; expanded adds overview, insight rows, and recommendations. Fetches from `GET /api/ai/history` with `{ enabled: open, staleTime: 5 min }` so the list is only loaded on first open per navigation.
 
@@ -1901,4 +1904,4 @@ Ollama must be running separately: `ollama serve` (and `ollama pull llama3.2` on
 
 ---
 
-*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 19-metric calculation engine with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries and 2σ anomaly detection, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (21 controllers, 52 Flyway migrations, 18+ repositories).*
+*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 19-metric calculation engine with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries and 2σ anomaly detection, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (21 controllers, 53 Flyway migrations, 18+ repositories).*

@@ -19,13 +19,13 @@ public class UserNotificationPrefsEntity {
     private User user;
 
     @Column(nullable = false)
-    private boolean aiBrief = true;
+    private boolean aiBrief = false;
 
     @Column(nullable = false)
-    private boolean syncFailures = true;
+    private boolean syncFailures = false;
 
     @Column(nullable = false)
-    private boolean afterHours = true;
+    private boolean afterHours = false;
 
     @Column(nullable = false)
     private boolean newTeamMember = false;
