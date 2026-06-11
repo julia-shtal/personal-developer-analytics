@@ -3,10 +3,8 @@ package com.juliashtal.devanalytics.issue;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.service.DataSourceService;
-import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
-import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
+import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
 import com.juliashtal.devanalytics.issue.model.IssueDto;
 import com.juliashtal.devanalytics.issue.service.IssueService;
@@ -23,7 +21,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/api/issues")
@@ -36,8 +33,7 @@ public class IssuesController {
     private final JiraProjectService jiraProjectService;
     private final GitHubIssuesCollector gitHubIssuesCollector;
     private final DataSourceService dataSourceService;
-    private final GitRepositoryEntityRepository gitRepoRepository;
-    private final UserRepoRegistrationRepository userRepoRegRepository;
+    private final RepoService repoService;
 
     @GetMapping("/count")
     @Operation(summary = "Open/closed issue count for a GitHub repository")
@@ -97,14 +93,7 @@ public class IssuesController {
             @RequestParam(defaultValue = "50") int size
     ) {
         Long userId = SecurityUtils.getCurrentUserId();
-        GitRepositoryEntity repo = gitRepoRepository.findById(repoId)
-                .orElseThrow(() -> new NoSuchElementException("Repository not found: " + repoId));
-
-        boolean owned = repo.getDataSourceConfig().getUser().getId().equals(userId);
-        boolean subscribed = userRepoRegRepository.existsByUserIdAndRepositoryId(userId, repoId);
-        if (!owned && !subscribed) {
-            throw new ForbiddenException("Access denied to repository: " + repoId);
-        }
+        GitRepositoryEntity repo = repoService.getAccessibleRepo(userId, repoId);
 
         return issueService.getByRepository(repo, PageRequest.of(page, size))
                 .map(IssueDto::fromEntity);

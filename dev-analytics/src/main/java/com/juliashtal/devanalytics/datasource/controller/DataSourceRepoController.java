@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.datasource;
+package com.juliashtal.devanalytics.datasource.controller;
 
 import com.juliashtal.devanalytics.datasource.model.dto.AttachRepoRequest;
 import com.juliashtal.devanalytics.datasource.service.DataSourceService;

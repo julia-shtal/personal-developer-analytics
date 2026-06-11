@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.git;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
+import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.dto.RepoDto;
@@ -9,6 +10,7 @@ import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
+import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,9 +22,11 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -108,6 +112,48 @@ class RepoServiceAccessibleTest {
         assertThat(subscribed.subscribed()).isTrue();
     }
 
+    // ── getAccessibleRepo ────────────────────────────────────────────────────
+
+    @Test
+    void getAccessibleRepo_owner_returnsRepo() {
+        GitRepositoryEntity repo = repoOwnedBy(5L, USER_ID);
+        when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+
+        GitRepositoryEntity result = repoService.getAccessibleRepo(USER_ID, 5L);
+
+        assertThat(result).isSameAs(repo);
+        verify(userRepoRegRepository, never()).existsByUserIdAndRepositoryId(any(), any());
+    }
+
+    @Test
+    void getAccessibleRepo_subscribedNonOwner_returnsRepo() {
+        GitRepositoryEntity repo = repoOwnedBy(5L, 99L);
+        when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+        when(userRepoRegRepository.existsByUserIdAndRepositoryId(USER_ID, 5L)).thenReturn(true);
+
+        GitRepositoryEntity result = repoService.getAccessibleRepo(USER_ID, 5L);
+
+        assertThat(result).isSameAs(repo);
+    }
+
+    @Test
+    void getAccessibleRepo_neitherOwnerNorSubscribed_throwsForbidden() {
+        GitRepositoryEntity repo = repoOwnedBy(5L, 99L);
+        when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+        when(userRepoRegRepository.existsByUserIdAndRepositoryId(USER_ID, 5L)).thenReturn(false);
+
+        assertThatThrownBy(() -> repoService.getAccessibleRepo(USER_ID, 5L))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void getAccessibleRepo_repoNotFound_throwsNoSuchElement() {
+        when(gitRepoRepository.findById(5L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> repoService.getAccessibleRepo(USER_ID, 5L))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private GitRepositoryEntity repo(Long id, Long dsId) {
@@ -120,6 +166,24 @@ class RepoServiceAccessibleTest {
         r.setName("repo-" + id);
         r.setRepoType(RepoType.GITHUB);
         r.setRepoFullName("owner/repo-" + id);
+        r.setDataSourceConfig(ds);
+        return r;
+    }
+
+    private GitRepositoryEntity repoOwnedBy(Long repoId, Long ownerId) {
+        User owner = new User();
+        owner.setId(ownerId);
+
+        DataSourceConfig ds = new DataSourceConfig();
+        ds.setId(10L);
+        ds.setType(DataSourceType.GITHUB);
+        ds.setUser(owner);
+
+        GitRepositoryEntity r = new GitRepositoryEntity();
+        r.setId(repoId);
+        r.setName("repo-" + repoId);
+        r.setRepoType(RepoType.GITHUB);
+        r.setRepoFullName("owner/repo-" + repoId);
         r.setDataSourceConfig(ds);
         return r;
     }

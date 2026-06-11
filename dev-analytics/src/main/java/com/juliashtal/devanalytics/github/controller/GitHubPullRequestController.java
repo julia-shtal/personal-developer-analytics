@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.github.model.dto.GitHubPullRequestDto;
 
 import com.juliashtal.devanalytics.github.service.GitHubPrCollector;
 import com.juliashtal.devanalytics.github.service.GitHubPullRequestCollector;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -20,12 +21,14 @@ public class GitHubPullRequestController {
     private final GitHubPrCollector prCollector;
     private final GitHubPullRequestCollector prQueryService;
 
+    @Operation(summary = "Synchronously collect new and updated pull requests for a GitHub repository")
     @PostMapping("/repos/{repoId}/pull-requests/collect")
     public ResponseEntity<String> collectPrs(@PathVariable Long repoId) {
         int processed = prCollector.collectForRepository(repoId, null);
         return ResponseEntity.ok("Processed " + processed + " pull requests");
     }
 
+    @Operation(summary = "List pull requests for a repository, paginated")
     @GetMapping("/repos/{repoId}/pull-requests")
     public Page<GitHubPullRequestDto> listPrs(
             @PathVariable Long repoId,

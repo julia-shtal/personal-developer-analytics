@@ -11,6 +11,7 @@ import com.juliashtal.devanalytics.exception.NotFoundException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
+import com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest;
 import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
@@ -35,6 +36,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -73,51 +75,84 @@ public class DataSourceService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
 
-        // If a Jira DS for this base URL already exists, subscribe instead of creating a duplicate.
-        // Checked at the instance level (baseUrl) rather than per-project, so it works even when
-        // the caller leaves projectKey blank.
-        if (req.getType() == DataSourceType.JIRA && req.getBaseUrl() != null) {
-            var existingProjects = jiraProjectService.findProjectsByBaseUrl(req.getBaseUrl());
-            if (!existingProjects.isEmpty()) {
-                DataSourceConfig canonicalDs = existingProjects.get(0).getDataSource();
-                String normalizedKey = req.getProjectKey() != null
-                        ? req.getProjectKey().trim().toUpperCase() : null;
-
-                if (normalizedKey != null && !normalizedKey.isBlank()) {
-                    // Caller specified a project key — subscribe to that project if tracked,
-                    // otherwise subscribe to all (user can add the missing project later).
-                    existingProjects.stream()
-                            .filter(p -> p.getProjectKey().equals(normalizedKey))
-                            .findFirst()
-                            .ifPresentOrElse(
-                                    p -> jiraProjectService.subscribeUser(p.getId(), userId),
-                                    () -> existingProjects.forEach(
-                                            p -> jiraProjectService.subscribeUser(p.getId(), userId)));
-                } else {
-                    // No project key — subscribe to all tracked projects for this Jira instance.
-                    existingProjects.forEach(p -> jiraProjectService.subscribeUser(p.getId(), userId));
-                }
-
-                log.info("User {} subscribed to existing Jira DS {} (baseUrl: {})",
-                        userId, canonicalDs.getId(), req.getBaseUrl());
-                return toDto(canonicalDs, false);
-            }
+        Optional<DataSourceResponseDto> reusedJiraDs = reuseExistingJiraDataSource(userId, req);
+        if (reusedJiraDs.isPresent()) {
+            return reusedJiraDs.get();
         }
 
-        // If the GitHub repo is already registered in the system, do not create a new DS.
-        // Instead, subscribe the user to the existing repo under its original DS so it appears
-        // in their Data Sources list without a zombie duplicate.
-        if (req.getType() == DataSourceType.GITHUB
-                && req.getRepoFullName() != null && !req.getRepoFullName().isBlank()) {
-            var existingRepo = gitRepoRepository.findByRepoFullName(req.getRepoFullName());
-            if (existingRepo.isPresent()) {
-                Long existingDsId = existingRepo.get().getDataSourceConfig().getId();
-                gitHubRepositoryService.registerGitHubRepo(userId, existingDsId, req.getRepoFullName());
-                // Convert inside the transaction so lazy proxies are accessible.
-                return toDto(existingRepo.get().getDataSourceConfig(), false);
-            }
+        Optional<DataSourceResponseDto> reusedGitHubDs = reuseExistingGitHubRepo(userId, req);
+        if (reusedGitHubDs.isPresent()) {
+            return reusedGitHubDs.get();
         }
 
+        DataSourceConfig saved = buildAndSaveDataSource(userId, user, req);
+
+        Optional<DataSourceResponseDto> canonicalJiraDs = autoRegisterAttachedResource(userId, saved, req);
+        return canonicalJiraDs.orElseGet(() -> toDto(saved, true));
+
+    }
+
+    /**
+     * If a Jira DS for this base URL already exists, subscribes the user instead of creating a
+     * duplicate. Checked at the instance level (baseUrl) rather than per-project, so it works even
+     * when the caller leaves projectKey blank.
+     */
+    private Optional<DataSourceResponseDto> reuseExistingJiraDataSource(Long userId, CreateDataSourceRequest req) {
+        if (req.getType() != DataSourceType.JIRA || req.getBaseUrl() == null) {
+            return Optional.empty();
+        }
+
+        var existingProjects = jiraProjectService.findProjectsByBaseUrl(req.getBaseUrl());
+        if (existingProjects.isEmpty()) {
+            return Optional.empty();
+        }
+
+        DataSourceConfig canonicalDs = existingProjects.get(0).getDataSource();
+        String normalizedKey = req.getProjectKey() != null
+                ? req.getProjectKey().trim().toUpperCase() : null;
+
+        if (normalizedKey != null && !normalizedKey.isBlank()) {
+            // Caller specified a project key — subscribe to that project if tracked,
+            // otherwise subscribe to all (user can add the missing project later).
+            existingProjects.stream()
+                    .filter(p -> p.getProjectKey().equals(normalizedKey))
+                    .findFirst()
+                    .ifPresentOrElse(
+                            p -> jiraProjectService.subscribeUser(p.getId(), userId),
+                            () -> existingProjects.forEach(
+                                    p -> jiraProjectService.subscribeUser(p.getId(), userId)));
+        } else {
+            // No project key — subscribe to all tracked projects for this Jira instance.
+            existingProjects.forEach(p -> jiraProjectService.subscribeUser(p.getId(), userId));
+        }
+
+        log.info("User {} subscribed to existing Jira DS {} (baseUrl: {})",
+                userId, canonicalDs.getId(), req.getBaseUrl());
+        return Optional.of(toDto(canonicalDs, false));
+    }
+
+    /**
+     * If the GitHub repo is already registered in the system, subscribes the user to the existing
+     * repo under its original DS instead of creating a new DS, avoiding a zombie duplicate.
+     */
+    private Optional<DataSourceResponseDto> reuseExistingGitHubRepo(Long userId, CreateDataSourceRequest req) {
+        if (req.getType() != DataSourceType.GITHUB
+                || req.getRepoFullName() == null || req.getRepoFullName().isBlank()) {
+            return Optional.empty();
+        }
+
+        var existingRepo = gitRepoRepository.findByRepoFullName(req.getRepoFullName());
+        if (existingRepo.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Long existingDsId = existingRepo.get().getDataSourceConfig().getId();
+        gitHubRepositoryService.registerGitHubRepo(userId, existingDsId, req.getRepoFullName());
+        // Convert inside the transaction so lazy proxies are accessible.
+        return Optional.of(toDto(existingRepo.get().getDataSourceConfig(), false));
+    }
+
+    private DataSourceConfig buildAndSaveDataSource(Long userId, User user, CreateDataSourceRequest req) {
         DataSourceConfig cfg = new DataSourceConfig();
         cfg.setUser(user);
         cfg.setType(req.getType());
@@ -136,12 +171,20 @@ public class DataSourceService {
             cfg.setTeam(team);
         }
 
-        DataSourceConfig saved = repository.save(cfg);
+        return repository.save(cfg);
+    }
 
-        // Auto-register a GitRepositoryEntity immediately so the user doesn't need
-        // a separate step to link the data source to a repository.
+    /**
+     * Auto-registers a GitRepositoryEntity or Jira project for a freshly created datasource, based
+     * on its type, so the user doesn't need a separate step to link it to a repository/project.
+     * For JIRA, if {@code addProject} resolves to a canonical project under a different datasource
+     * (the caller omitted projectKey, or a URL normalization edge case slipped through the
+     * pre-check), deletes the empty DS just created and returns the canonical one instead.
+     */
+    private Optional<DataSourceResponseDto> autoRegisterAttachedResource(
+            Long userId, DataSourceConfig saved, CreateDataSourceRequest req) {
         if (saved.getType() == DataSourceType.GIT_LOCAL) {
-            var localReq = new com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest();
+            var localReq = new RegisterLocalRepoRequest();
             localReq.setDataSourceId(saved.getId());
             localReq.setName(saved.getName());
             localReq.setLocalPath(saved.getPath());
@@ -162,21 +205,15 @@ public class DataSourceService {
             try {
                 var project = jiraProjectService.addProject(saved, req.getProjectKey(), null);
                 if (!project.getDataSource().getId().equals(saved.getId())) {
-                    // addProject found a canonical row under a different datasource — the pre-check
-                    // above was bypassed (e.g. the caller omitted projectKey, or a URL normalization
-                    // edge case slipped through). Delete the empty DS we just created, subscribe the
-                    // user to the canonical project, and return the canonical DS so the caller sees
-                    // the existing sync state instead of an empty new record.
                     jiraProjectService.subscribeUser(project.getId(), userId);
                     repository.delete(saved);
-                    return toDto(project.getDataSource(), false);
+                    return Optional.of(toDto(project.getDataSource(), false));
                 }
             } catch (Exception e) {
                 log.warn("Auto-creation of initial Jira project failed: {}", e.getMessage());
             }
         }
-
-        return toDto(saved, true);
+        return Optional.empty();
     }
 
     @Transactional(readOnly = true)
@@ -299,7 +336,7 @@ public class DataSourceService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Repo attach / detach / list  (T2.2)
+    // Repo attach / detach / list
     // ─────────────────────────────────────────────────────────────────────────
 
     /**

@@ -34,9 +34,7 @@ class TeamMembershipsControllerTest {
     @Test
     @WithMockUser(roles = "DEVELOPER")
     void getMyMemberships_asDeveloper_returns200() throws Exception {
-        TeamMembershipDto dto = new TeamMembershipDto();
-        dto.setId(5L);
-        dto.setName("Backend Squad");
+        TeamMembershipDto dto = new TeamMembershipDto(5L, "Backend Squad", 0);
         when(teamService.getMyMemberships()).thenReturn(List.of(dto));
 
         mvc.perform(get("/api/teams/me/memberships"))

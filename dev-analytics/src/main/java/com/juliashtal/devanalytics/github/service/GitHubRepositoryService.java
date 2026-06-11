@@ -48,24 +48,34 @@ public class GitHubRepositoryService {
     public GitRepositoryEntity registerGitHubRepo(Long userId, Long dataSourceId, String fullName) {
         User user = userRepository.getReferenceById(userId);
 
-        // Fast path: if the repo already exists in the system (e.g. a manager registered it
-        // for a team), any authenticated user can subscribe to it without owning a data source.
-        // No collection credentials are needed — commits are already being collected.
         Optional<GitRepositoryEntity> existing = repoRepository.findByRepoFullName(fullName);
-        if (existing.isPresent()) {
-            GitRepositoryEntity repo = existing.get();
-            if (userRepoRegRepository.findByUserIdAndRepositoryId(userId, repo.getId()).isEmpty()) {
-                UserRepoRegistration reg = new UserRepoRegistration();
-                reg.setUser(user);
-                reg.setRepository(repo);
-                userRepoRegRepository.save(reg);
-                log.info("User {} subscribed to existing repo: {}", userId, fullName);
-            }
-            return repo;
-        }
+        return existing.map(gitRepositoryEntity ->
+                        subscribeToExistingRepo(user, userId, gitRepositoryEntity, fullName))
+                .orElseGet(() -> registerNewGitHubRepo(user, userId, dataSourceId, fullName));
 
-        // Repo doesn't exist yet — the caller must supply their own GITHUB data source
-        // so the system knows which credentials to use for collection.
+    }
+
+    /**
+     * Fast path: the repo already exists in the system (e.g. a manager registered it for a
+     * team). Any authenticated user can subscribe to it without owning a data source — no
+     * collection credentials are needed since commits are already being collected.
+     */
+    private GitRepositoryEntity subscribeToExistingRepo(User user, Long userId, GitRepositoryEntity repo, String fullName) {
+        if (userRepoRegRepository.findByUserIdAndRepositoryId(userId, repo.getId()).isEmpty()) {
+            UserRepoRegistration reg = new UserRepoRegistration();
+            reg.setUser(user);
+            reg.setRepository(repo);
+            userRepoRegRepository.save(reg);
+            log.info("User {} subscribed to existing repo: {}", userId, fullName);
+        }
+        return repo;
+    }
+
+    /**
+     * Slow path: the repo doesn't exist yet, so the caller must supply their own GITHUB
+     * data source so the system knows which credentials to use for collection.
+     */
+    private GitRepositoryEntity registerNewGitHubRepo(User user, Long userId, Long dataSourceId, String fullName) {
         if (dataSourceId == null) {
             throw new IllegalArgumentException(
                     "dataSourceId is required when registering a new GitHub repo");

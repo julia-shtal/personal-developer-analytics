@@ -86,6 +86,11 @@ public class SyncJobTracker {
         return Optional.ofNullable(jobs.get(dataSourceId));
     }
 
+    /** Most recent persisted sync job for a data source — fallback when no in-memory state exists (e.g. after a restart). */
+    public Optional<SyncJobEntity> findLatestPersisted(Long dataSourceId) {
+        return syncJobRepository.findTopByDataSourceIdOrderByStartedAtDesc(dataSourceId);
+    }
+
     /**
      * Advance to a new named phase. The previous phase (if any) is archived
      * in {@code completedPhases} so the UI can show a history.

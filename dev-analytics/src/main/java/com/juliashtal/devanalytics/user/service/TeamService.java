@@ -193,7 +193,7 @@ public class TeamService {
         copy.setMembers(new HashSet<>(original.getMembers()));
 
         TeamDto result = TeamDto.from(teamRepository.save(copy));
-        log.info("Team duplicated: originalId={}, newId={}, duplicatedBy={}", teamId, result.getId(), currentUserId);
+        log.info("Team duplicated: originalId={}, newId={}, duplicatedBy={}", teamId, result.id(), currentUserId);
         return result;
     }
 }

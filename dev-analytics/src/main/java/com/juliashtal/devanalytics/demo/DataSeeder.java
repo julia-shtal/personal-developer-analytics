@@ -122,51 +122,77 @@ public class DataSeeder implements ApplicationRunner {
             LocalDate weekEnd   = yesterday.minusWeeks(WEEKS - 1 - w);
             LocalDate weekStart = weekEnd.minusDays(6);
 
-            // Daily personal metrics for demo user
-            for (int d = 0; d < 7; d++) {
-                LocalDate day = weekStart.plusDays(d);
-                Random r = rng(w * 7 + d);
-                snap(user, null, repo, day, MetricType.DAILY_COMMITS_COUNT,    r.nextInt(9),                null, null);
-                snap(user, null, repo, day, MetricType.DAILY_COMMITS_AVG_SIZE, 10 + r.nextInt(391),         null, null);
-                snap(user, null, repo, day, MetricType.DAILY_PR_CREATED,       r.nextInt(4),                null, null);
-                snap(user, null, repo, day, MetricType.DAILY_PR_MERGED,        r.nextInt(4),                null, null);
-                snap(user, null, repo, day, MetricType.DAILY_ISSUES_CREATED,   r.nextInt(5),                null, null);
-                snap(user, null, repo, day, MetricType.DAILY_ISSUES_CLOSED,    r.nextInt(5),                null, null);
-                snap(user, null, repo, day, MetricType.DAILY_CHURN_RATIO,      r.nextDouble() * 0.5,        null, null);
-                snap(user, null, repo, day, MetricType.FOCUS_RATIO_DAYS_TASKS, 0.3 + r.nextDouble() * 0.65, null, null);
-            }
+            seedUserDailyMetrics(user, repo, weekStart, w);
+            seedTeammateDailyMetrics(teammate, repo, weekStart, w);
+            seedUserAggregateMetrics(user, repo, weekStart, weekEnd, w);
+            seedTeamMetrics(user, team, repo, weekStart, weekEnd, w);
+        }
+    }
 
-            // Daily personal metrics for teammate -- populates the team member view
-            for (int d = 0; d < 7; d++) {
-                LocalDate day = weekStart.plusDays(d);
-                Random rm = rng(30_000 + w * 7 + d);
-                snap(teammate, null, repo, day, MetricType.DAILY_COMMITS_COUNT,    rm.nextInt(7),                null, null);
-                snap(teammate, null, repo, day, MetricType.DAILY_COMMITS_AVG_SIZE, 10 + rm.nextInt(300),         null, null);
-                snap(teammate, null, repo, day, MetricType.DAILY_PR_CREATED,       rm.nextInt(3),                null, null);
-                snap(teammate, null, repo, day, MetricType.DAILY_PR_MERGED,        rm.nextInt(3),                null, null);
-                snap(teammate, null, repo, day, MetricType.FOCUS_RATIO_DAYS_TASKS, 0.3 + rm.nextDouble() * 0.65, null, null);
-            }
+    /**
+     * Seeds 7 days of personal daily metrics for the demo user. Each day gets its own
+     * {@link Random} seeded as {@code w * 7 + d} so re-running the seeder is deterministic.
+     */
+    private void seedUserDailyMetrics(User user, GitRepositoryEntity repo, LocalDate weekStart, int w) {
+        for (int d = 0; d < 7; d++) {
+            LocalDate day = weekStart.plusDays(d);
+            Random r = rng(w * 7 + d);
+            snap(user, null, repo, day, MetricType.DAILY_COMMITS_COUNT,    r.nextInt(9),                null, null);
+            snap(user, null, repo, day, MetricType.DAILY_COMMITS_AVG_SIZE, 10 + r.nextInt(391),         null, null);
+            snap(user, null, repo, day, MetricType.DAILY_PR_CREATED,       r.nextInt(4),                null, null);
+            snap(user, null, repo, day, MetricType.DAILY_PR_MERGED,        r.nextInt(4),                null, null);
+            snap(user, null, repo, day, MetricType.DAILY_ISSUES_CREATED,   r.nextInt(5),                null, null);
+            snap(user, null, repo, day, MetricType.DAILY_ISSUES_CLOSED,    r.nextInt(5),                null, null);
+            snap(user, null, repo, day, MetricType.DAILY_CHURN_RATIO,      r.nextDouble() * 0.5,        null, null);
+            snap(user, null, repo, day, MetricType.FOCUS_RATIO_DAYS_TASKS, 0.3 + r.nextDouble() * 0.65, null, null);
+        }
+    }
 
-            // Aggregate personal metrics for demo user -- one snapshot per weekly window
-            Random ra = rng(10_000 + w);
-            snap(user, null, repo, weekStart, MetricType.PR_LEAD_TIME_HOURS_MEDIAN,                       1 + ra.nextInt(72),           weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.ISSUE_LEAD_TIME_HOURS_MEDIAN,                    1 + ra.nextInt(168),          weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN, 2 + ra.nextInt(95),           weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.REVIEW_RESPONSE_TIME_HOURS_MEDIAN,               0.5 + ra.nextDouble() * 23.5, weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.AFTER_HOURS_COMMIT_RATIO,                        ra.nextDouble() * 0.4,        weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.DEEP_WORK_STREAK_DAYS,                           ra.nextInt(8),                weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.KNOWLEDGE_SILO_SCORE,                            ra.nextDouble(),              weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.REFACTOR_RATIO,                                  ra.nextDouble() * 0.4,        weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.PR_SIZE_COMPLEXITY_SCORE,                        1 + ra.nextInt(500),          weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.MERGE_WITHOUT_REVIEW_RATIO,                      ra.nextDouble() * 0.3,        weekStart, weekEnd);
-            snap(user, null, repo, weekStart, MetricType.MERGE_TO_MAIN_FREQUENCY_PER_WEEK,                ra.nextInt(6),                weekStart, weekEnd);
+    /**
+     * Seeds 7 days of personal daily metrics for the teammate, populating the team member view.
+     * The {@code 30_000} seed offset keeps its {@link Random} sequence independent of the demo user's.
+     */
+    private void seedTeammateDailyMetrics(User teammate, GitRepositoryEntity repo, LocalDate weekStart, int w) {
+        for (int d = 0; d < 7; d++) {
+            LocalDate day = weekStart.plusDays(d);
+            Random rm = rng(30_000 + w * 7 + d);
+            snap(teammate, null, repo, day, MetricType.DAILY_COMMITS_COUNT,    rm.nextInt(7),                null, null);
+            snap(teammate, null, repo, day, MetricType.DAILY_COMMITS_AVG_SIZE, 10 + rm.nextInt(300),         null, null);
+            snap(teammate, null, repo, day, MetricType.DAILY_PR_CREATED,       rm.nextInt(3),                null, null);
+            snap(teammate, null, repo, day, MetricType.DAILY_PR_MERGED,        rm.nextInt(3),                null, null);
+            snap(teammate, null, repo, day, MetricType.FOCUS_RATIO_DAYS_TASKS, 0.3 + rm.nextDouble() * 0.65, null, null);
+        }
+    }
 
-            // Team-scoped metrics
-            Random rt = rng(20_000 + w);
-            snap(user, team, null, weekStart, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, 1 + rt.nextInt(72), weekStart, weekEnd);
-            for (int d = 0; d < 7; d++) {
-                snap(user, team, repo, weekStart.plusDays(d), MetricType.DAILY_COMMITS_COUNT, rt.nextInt(20), null, null);
-            }
+    /**
+     * Seeds one weekly-window snapshot per aggregate metric type for the demo user.
+     * The {@code 10_000} seed offset keeps its {@link Random} sequence independent of the daily seeders.
+     */
+    private void seedUserAggregateMetrics(User user, GitRepositoryEntity repo, LocalDate weekStart, LocalDate weekEnd, int w) {
+        Random ra = rng(10_000 + w);
+        snap(user, null, repo, weekStart, MetricType.PR_LEAD_TIME_HOURS_MEDIAN,                       1 + ra.nextInt(72),           weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.ISSUE_LEAD_TIME_HOURS_MEDIAN,                    1 + ra.nextInt(168),          weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN, 2 + ra.nextInt(95),           weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.REVIEW_RESPONSE_TIME_HOURS_MEDIAN,               0.5 + ra.nextDouble() * 23.5, weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.AFTER_HOURS_COMMIT_RATIO,                        ra.nextDouble() * 0.4,        weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.DEEP_WORK_STREAK_DAYS,                           ra.nextInt(8),                weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.KNOWLEDGE_SILO_SCORE,                            ra.nextDouble(),              weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.REFACTOR_RATIO,                                  ra.nextDouble() * 0.4,        weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.PR_SIZE_COMPLEXITY_SCORE,                        1 + ra.nextInt(500),          weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.MERGE_WITHOUT_REVIEW_RATIO,                      ra.nextDouble() * 0.3,        weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.MERGE_TO_MAIN_FREQUENCY_PER_WEEK,                ra.nextInt(6),                weekStart, weekEnd);
+    }
+
+    /**
+     * Seeds team-scoped metrics: one weekly PR lead-time aggregate plus 7 days of team commit
+     * counts. The {@code 20_000} seed offset keeps its {@link Random} sequence independent of
+     * the other seeders.
+     */
+    private void seedTeamMetrics(User user, Team team, GitRepositoryEntity repo, LocalDate weekStart, LocalDate weekEnd, int w) {
+        Random rt = rng(20_000 + w);
+        snap(user, team, null, weekStart, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, 1 + rt.nextInt(72), weekStart, weekEnd);
+        for (int d = 0; d < 7; d++) {
+            snap(user, team, repo, weekStart.plusDays(d), MetricType.DAILY_COMMITS_COUNT, rt.nextInt(20), null, null);
         }
     }
 

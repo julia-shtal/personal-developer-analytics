@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.datasource;
+package com.juliashtal.devanalytics.datasource.controller;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.SyncJobEntity;
@@ -6,11 +6,11 @@ import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
 import com.juliashtal.devanalytics.datasource.model.dto.DataSourceResponseDto;
 import com.juliashtal.devanalytics.datasource.model.dto.SyncStatusResponse;
 import com.juliashtal.devanalytics.datasource.model.dto.UpdateDataSourceRequest;
-import com.juliashtal.devanalytics.datasource.repository.SyncJobRepository;
 import com.juliashtal.devanalytics.datasource.service.AsyncDataSourceCollectService;
 import com.juliashtal.devanalytics.datasource.service.DataSourceService;
 import com.juliashtal.devanalytics.datasource.service.SyncJobTracker;
 import com.juliashtal.devanalytics.security.SecurityUtils;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -33,8 +33,8 @@ public class DataSourceController {
     private final DataSourceService dataSourceService;
     private final AsyncDataSourceCollectService asyncCollectService;
     private final SyncJobTracker syncJobTracker;
-    private final SyncJobRepository syncJobRepository;
 
+    @Operation(summary = "Create a new data source, reusing an existing canonical one if it already exists")
     @PostMapping
     public ResponseEntity<DataSourceResponseDto> create(@RequestBody @Valid CreateDataSourceRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -44,18 +44,21 @@ public class DataSourceController {
                 .body(created);
     }
 
+    @Operation(summary = "List the current user's data sources")
     @GetMapping
     public List<DataSourceResponseDto> list() {
         Long userId = SecurityUtils.getCurrentUserId();
         return dataSourceService.listForUser(userId);
     }
 
+    @Operation(summary = "Get a single data source by ID")
     @GetMapping("/{id}")
     public DataSourceConfig get(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();
         return dataSourceService.getForUser(userId, id);
     }
 
+    @Operation(summary = "Update a data source's configuration")
     @PutMapping("/{id}")
     public DataSourceConfig update(@PathVariable Long id,
                                    @RequestBody UpdateDataSourceRequest request) {
@@ -63,6 +66,7 @@ public class DataSourceController {
         return dataSourceService.update(userId, id, request);
     }
 
+    @Operation(summary = "Delete a data source")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -74,6 +78,7 @@ public class DataSourceController {
      * Triggers background collection. Authorization is checked synchronously
      * before returning 202 so the client gets an immediate error on bad access.
      */
+    @Operation(summary = "Trigger background collection for a data source (returns 202 Accepted)")
     @PostMapping("/{id}/collect")
     public ResponseEntity<Void> collect(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -87,13 +92,14 @@ public class DataSourceController {
      * Falls back to the persisted DB record when the in-memory entry is gone
      * (e.g. after a restart, or once the 1-hour in-memory cleanup ran).
      */
+    @Operation(summary = "Get the live status of the most recent collection job for a data source")
     @GetMapping("/{id}/collect/status")
     public ResponseEntity<SyncStatusResponse> collectStatus(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();
         dataSourceService.getForUser(userId, id);
         return syncJobTracker.getState(id)
                 .map(state -> ResponseEntity.ok(buildResponse(state)))
-                .or(() -> syncJobRepository.findTopByDataSourceIdOrderByStartedAtDesc(id)
+                .or(() -> syncJobTracker.findLatestPersisted(id)
                         .map(entity -> ResponseEntity.ok(buildResponseFromEntity(entity))))
                 .orElse(ResponseEntity.notFound().<SyncStatusResponse>build());
     }
@@ -105,6 +111,7 @@ public class DataSourceController {
      *
      * Response: {@code { "datasourceId": SyncStatusResponse, … }}
      */
+    @Operation(summary = "Get all active or recently completed collection jobs for the current user's data sources")
     @GetMapping("/collect/status/active")
     public Map<Long, SyncStatusResponse> activeCollectStatuses() {
         Long userId = SecurityUtils.getCurrentUserId();

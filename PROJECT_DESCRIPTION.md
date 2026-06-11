@@ -344,7 +344,7 @@ Created lazily on first read (`UserNotificationPrefsService.getOrCreate`). Row i
 
 #### Services
 
-**`UserService`** — `getById(Long)`, `updateProfile(Long, UpdateProfileRequest)`, `updateRole(Long, Role)`, `findAll()`, `search(String q)` (LIKE filter on email/username when q non-blank, falls back to `findAll()` otherwise), `delete(Long)`, `touchLastActive(Long userId)` (native UPDATE sets `last_active_at = NOW()`, called by `ActivityInterceptor` at most once per 5 minutes per user via in-memory debounce).
+**`UserService`** — `getById(Long)`, `updateProfile(Long, UpdateProfileRequest)`, `updateRole(Long, Role)`, `findAll()`, `search(String q)` (LIKE filter on email/username when q non-blank, falls back to `findAll()` otherwise), `delete(Long)`, `touchLastActive(Long userId)` (native UPDATE sets `last_active_at = NOW()`, called by `ActivityInterceptor` at most once per 5 minutes per user via in-memory debounce), `getReferenceById(Long)` (lazy JPA proxy for FK-only reads, e.g. `RepoService.subscribe`).
 
 **`AdminService`** — `activeUsersLast24h()` (counts users with `last_active_at > NOW() - INTERVAL '24 hours'`), `databaseSizeBytes()` (calls `pg_database_size(current_database())`), `aiCallsToday()` (counts `metric_summaries` rows where `DATE(generated_at) = CURRENT_DATE`).
 
@@ -437,6 +437,7 @@ CHECK constraints (added V35):
 **`SyncJobTracker`** (`@Component`) — In-memory job state map keyed by datasource ID.
 - **`JobState`** fields: `running`, `startedAt`, `phaseNumber`, `totalPhases`, `phase` (name), `phaseStartedAt`, `phaseProcessed` (`AtomicInteger`), `phaseTotal` (estimate), `totalProcessed` (`AtomicInteger`), `completedPhases` (thread-safe list of `PhaseSummary{name, itemsSaved, durationSeconds}`), `completedAt`, `result`, `error`.
 - `start(Long)`, `setPhase(JobState, String, int)` (archives previous phase), `addProgress(JobState, int)`, `phaseEtaSeconds(JobState)`, `overallEtaSeconds(JobState)`, `complete(Long, String)`, `fail(Long, String)`.
+- `findLatestPersisted(Long dataSourceId)` → `Optional<SyncJobEntity>` — most recent persisted sync job, fallback when no in-memory state exists (e.g. after a restart).
 - `@Scheduled(fixedRate=3_600_000)` `cleanup()` — removes completed jobs older than 1 hour.
 
 #### DTOs (Records)
@@ -733,6 +734,7 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 **`RepoService`** — Unified subscription layer.
 - `getById(Long repoId)` → `GitRepositoryEntity`.
+- `getAccessibleRepo(Long userId, Long repoId)` → `GitRepositoryEntity` — returns the repo if owned or subscribed, else throws `ForbiddenException`; used by `IssuesController`.
 - `listAccessible(Long dataSourceId?, Long teamId?)` → `List<RepoDto>` — merges repos from user's own data sources + team data sources + subscriptions; deduplicates; sets `subscribed` flag; generates `repoUrl` from API base URL. When `teamId` is provided, filters to repos belonging to that team's data sources only (used by `TeamDashboardPage` repo filter).
 - `subscribe(Long repoId)` / `unsubscribe(Long repoId)` — creates/removes `UserRepoRegistration`.
 
@@ -1006,6 +1008,7 @@ Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date
 - `getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(user, type, repo, from, to)`
 - `getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(user, team, type, from, to)`
 - `getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(userIds, teamId, type, from, to)`
+- `findMaxPersonalDate(Long userId)` → `Optional<LocalDate>` — latest personal (`team_id IS NULL`) snapshot date, used by the dashboard freshness indicator.
 
 **`MetricsScheduler`** — `@Scheduled(cron = "0 0 1 * * ?")` (daily 01:00 UTC). Iterates all users, calls `calculateDailyMetrics(userId, yesterday, yesterday)`. Per-user exceptions caught and logged as warnings.
 

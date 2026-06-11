@@ -70,12 +70,26 @@ public class JiraCollector {
 
         String jql = buildJql(project.getProjectKey(), accountId);
 
+        log.info("Starting Jira issue collection from: {}, project: {}, jql: {}",
+                baseUrl, project.getProjectKey(), jql);
+
+        int saved = fetchAndUpsertIssues(searchUrl, jql, headers, project);
+
+        project.setLastScanAt(Instant.now());
+        log.info("Jira collection complete: {} issues collected from {}, project: {}",
+                saved, baseUrl, project.getProjectKey());
+        return saved;
+    }
+
+    /**
+     * Pages through the Jira search endpoint and upserts each returned issue against
+     * {@code project}, advancing {@code startAt} until all results have been fetched.
+     */
+    private int fetchAndUpsertIssues(String searchUrl, String jql, HttpHeaders headers, JiraProjectEntity project) {
         int saved = 0;
         int startAt = 0;
         int total = Integer.MAX_VALUE;
 
-        log.info("Starting Jira issue collection from: {}, project: {}, jql: {}",
-                baseUrl, project.getProjectKey(), jql);
         while (startAt < total) {
             URI uri = UriComponentsBuilder.fromUriString(searchUrl)
                     .queryParam("jql", jql)
@@ -106,9 +120,6 @@ public class JiraCollector {
             log.debug("Jira page fetched: saved={}, startAt={}, total={}", saved, startAt, total);
         }
 
-        project.setLastScanAt(Instant.now());
-        log.info("Jira collection complete: {} issues collected from {}, project: {}",
-                saved, baseUrl, project.getProjectKey());
         return saved;
     }
 

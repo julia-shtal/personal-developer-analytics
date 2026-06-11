@@ -22,18 +22,21 @@ public class UserProfileController {
     private final UserService userService;
     private final UserNotificationPrefsService notificationPrefsService;
 
+    @Operation(summary = "Get the current user's profile")
     @GetMapping
     public ResponseEntity<UserSummary> getProfile() {
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(UserSummary.from(userService.getById(userId)));
     }
 
+    @Operation(summary = "Update the current user's profile")
     @PutMapping
     public ResponseEntity<UserSummary> updateProfile(@RequestBody UpdateProfileRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(UserSummary.from(userService.updateProfile(userId, request)));
     }
 
+    @Operation(summary = "Change the current user's password")
     @PutMapping("/password")
     public ResponseEntity<Void> changePassword(@RequestBody ChangePasswordRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();

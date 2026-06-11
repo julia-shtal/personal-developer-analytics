@@ -78,33 +78,8 @@ public class GitLocalCollector {
             Set<String> existingHashes = new HashSet<>(
                     commitRepository.findHashesByRepositoryId(dbRepo.getId()));
 
-            // -----------------------------------------------------------------
-            // Phase 1: fast single-threaded pass — collect metadata only.
-            // No diff computation here; that is the expensive part.
-            // -----------------------------------------------------------------
-            List<CommitMeta> pending = new ArrayList<>();
-            String newestHash = dbRepo.getLastFetchedCommitHash();
-
-            for (RevCommit commit : git.log().call()) {
-                String hash = commit.getName();
-
-                // Stop at the last commit we already fetched.
-                if (hash.equals(dbRepo.getLastFetchedCommitHash())) break;
-                if (existingHashes.contains(hash)) continue;
-
-                // First commit in log order is the newest.
-                if (newestHash == null) newestHash = hash;
-
-                pending.add(new CommitMeta(
-                        commit.getId(),
-                        hash,
-                        commit.getAuthorIdent().getName(),
-                        commit.getAuthorIdent().getEmailAddress(),
-                        commit.getAuthorIdent().getWhenAsInstant(),
-                        commit.getFullMessage(),
-                        commit.getParentCount() > 0 ? commit.getParent(0).getName() : null
-                ));
-            }
+            PendingCommits pendingCommits = collectPendingMetadata(git, dbRepo, existingHashes);
+            List<CommitMeta> pending = pendingCommits.metas();
 
             if (pending.isEmpty()) {
                 log.debug("No new commits for local repo id={}", repoId);
@@ -119,54 +94,9 @@ public class GitLocalCollector {
                 jobState.phaseTotal = pending.size();
             }
 
-            // -----------------------------------------------------------------
-            // Phase 2: parallel diff computation.
-            // Each thread owns its ObjectReader / RevWalk / DiffFormatter —
-            // those JGit objects are not thread-safe and must not be shared.
-            // -----------------------------------------------------------------
-            ExecutorService diffPool = Executors.newFixedThreadPool(
-                    DIFF_THREADS,
-                    r -> {
-                        Thread t = new Thread(r, "git-diff");
-                        t.setDaemon(true);
-                        return t;
-                    });
+            computeDiffsAndSave(repository, pending, dbRepo, jobState);
 
-            try {
-                List<Future<GitCommitEntity>> futures = pending.stream()
-                        .map(meta -> diffPool.submit(() -> buildEntity(repository, meta, dbRepo)))
-                        .collect(Collectors.toList());
-
-                List<GitCommitEntity> batch = new ArrayList<>(BATCH_SIZE);
-                for (Future<GitCommitEntity> future : futures) {
-                    batch.add(future.get());
-                    // Increment per-commit so the ETA calculation has a smooth rate signal.
-                    if (jobState != null) {
-                        jobState.phaseProcessed.incrementAndGet();
-                        jobState.totalProcessed.incrementAndGet();
-                    }
-                    if (batch.size() >= BATCH_SIZE) {
-                        // Each saveAll runs in its own short transaction (SimpleJpaRepository is @Transactional).
-                        commitRepository.saveAll(batch);
-                        batch.clear();
-                    }
-                }
-                if (!batch.isEmpty()) {
-                    commitRepository.saveAll(batch);
-                }
-            } finally {
-                diffPool.shutdown();
-            }
-
-            if (newestHash != null && !newestHash.equals(dbRepo.getLastFetchedCommitHash())) {
-                dbRepo.setLastFetchedCommitHash(newestHash);
-            }
-            dbRepo.setLastScanAt(LocalDateTime.now());
-
-            DataSourceConfig cfg = dbRepo.getDataSourceConfig();
-            cfg.setLastSuccessSync(LocalDateTime.now());
-
-            repoRepository.save(dbRepo);
+            updateRepoAfterCollection(dbRepo, pendingCommits.newestHash());
             log.info("Collected {} new commits from local repo id={}", pending.size(), repoId);
             return pending.size();
 
@@ -182,6 +112,99 @@ public class GitLocalCollector {
             }
             throw new GitException("Diff computation failed: " + cause.getMessage(), cause);
         }
+    }
+
+    /**
+     * Phase 1: fast single-threaded pass over the commit log — collects metadata only.
+     * No diff computation here; that is the expensive part, done in {@link #computeDiffsAndSave}.
+     * Stops at the last fetched commit and skips hashes already present in the database.
+     */
+    private PendingCommits collectPendingMetadata(Git git, GitRepositoryEntity dbRepo, Set<String> existingHashes)
+            throws IOException, GitAPIException {
+        List<CommitMeta> pending = new ArrayList<>();
+        String newestHash = dbRepo.getLastFetchedCommitHash();
+
+        for (RevCommit commit : git.log().call()) {
+            String hash = commit.getName();
+
+            // Stop at the last commit we already fetched.
+            if (hash.equals(dbRepo.getLastFetchedCommitHash())) break;
+            if (existingHashes.contains(hash)) continue;
+
+            // First commit in log order is the newest.
+            if (newestHash == null) newestHash = hash;
+
+            pending.add(new CommitMeta(
+                    commit.getId(),
+                    hash,
+                    commit.getAuthorIdent().getName(),
+                    commit.getAuthorIdent().getEmailAddress(),
+                    commit.getAuthorIdent().getWhenAsInstant(),
+                    commit.getFullMessage(),
+                    commit.getParentCount() > 0 ? commit.getParent(0).getName() : null
+            ));
+        }
+
+        return new PendingCommits(pending, newestHash);
+    }
+
+    /**
+     * Phase 2: parallel diff computation and batched save.
+     * Each thread owns its ObjectReader / RevWalk / DiffFormatter —
+     * those JGit objects are not thread-safe and must not be shared.
+     */
+    private void computeDiffsAndSave(Repository repository, List<CommitMeta> pending,
+                                      GitRepositoryEntity dbRepo, SyncJobTracker.JobState jobState)
+            throws InterruptedException, ExecutionException {
+        ExecutorService diffPool = Executors.newFixedThreadPool(
+                DIFF_THREADS,
+                r -> {
+                    Thread t = new Thread(r, "git-diff");
+                    t.setDaemon(true);
+                    return t;
+                });
+
+        try {
+            List<Future<GitCommitEntity>> futures = pending.stream()
+                    .map(meta -> diffPool.submit(() -> buildEntity(repository, meta, dbRepo)))
+                    .toList();
+
+            List<GitCommitEntity> batch = new ArrayList<>(BATCH_SIZE);
+            for (Future<GitCommitEntity> future : futures) {
+                batch.add(future.get());
+                // Increment per-commit so the ETA calculation has a smooth rate signal.
+                if (jobState != null) {
+                    jobState.phaseProcessed.incrementAndGet();
+                    jobState.totalProcessed.incrementAndGet();
+                }
+                if (batch.size() >= BATCH_SIZE) {
+                    // Each saveAll runs in its own short transaction (SimpleJpaRepository is @Transactional).
+                    commitRepository.saveAll(batch);
+                    batch.clear();
+                }
+            }
+            if (!batch.isEmpty()) {
+                commitRepository.saveAll(batch);
+            }
+        } finally {
+            diffPool.shutdown();
+        }
+    }
+
+    /**
+     * Updates the repo's sync bookkeeping (last fetched hash, scan time, data source sync time)
+     * after a successful collection run.
+     */
+    private void updateRepoAfterCollection(GitRepositoryEntity dbRepo, String newestHash) {
+        if (newestHash != null && !newestHash.equals(dbRepo.getLastFetchedCommitHash())) {
+            dbRepo.setLastFetchedCommitHash(newestHash);
+        }
+        dbRepo.setLastScanAt(LocalDateTime.now());
+
+        DataSourceConfig cfg = dbRepo.getDataSourceConfig();
+        cfg.setLastSuccessSync(LocalDateTime.now());
+
+        repoRepository.save(dbRepo);
     }
 
     /**
@@ -258,6 +281,8 @@ public class GitLocalCollector {
 
     private record CommitMeta(ObjectId commitId, String hash, String authorName, String authorEmail,
                                Instant authorDate, String message, String parentHash) {}
+
+    private record PendingCommits(List<CommitMeta> metas, String newestHash) {}
 
     private record DiffStats(int additions, int deletions, int filesChanged) {}
 }

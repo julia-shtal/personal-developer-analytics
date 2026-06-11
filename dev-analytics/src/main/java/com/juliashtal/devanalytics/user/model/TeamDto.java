@@ -1,34 +1,29 @@
 package com.juliashtal.devanalytics.user.model;
 
-import lombok.Data;
-
 import java.time.Instant;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@Data
-public class TeamDto {
-    private Long id;
-    private String name;
-    private UserSummary manager;
-    private Set<UserSummary> members;
-    private Instant createdAt;
-    private Instant archivedAt;
-    private String visibility;
-    private String aiBriefSchedule;
-
+public record TeamDto(
+        Long id,
+        String name,
+        UserSummary manager,
+        Set<UserSummary> members,
+        Instant createdAt,
+        Instant archivedAt,
+        String visibility,
+        String aiBriefSchedule
+) {
     public static TeamDto from(Team team) {
-        TeamDto dto = new TeamDto();
-        dto.id = team.getId();
-        dto.name = team.getName();
-        dto.manager = UserSummary.from(team.getManager());
-        dto.members = team.getMembers().stream()
-                .map(UserSummary::from)
-                .collect(Collectors.toSet());
-        dto.createdAt = team.getCreatedAt();
-        dto.archivedAt = team.getArchivedAt();
-        dto.visibility = team.getVisibility();
-        dto.aiBriefSchedule = team.getAiBriefSchedule();
-        return dto;
+        return new TeamDto(
+                team.getId(),
+                team.getName(),
+                UserSummary.from(team.getManager()),
+                team.getMembers().stream().map(UserSummary::from).collect(Collectors.toSet()),
+                team.getCreatedAt(),
+                team.getArchivedAt(),
+                team.getVisibility(),
+                team.getAiBriefSchedule()
+        );
     }
 }

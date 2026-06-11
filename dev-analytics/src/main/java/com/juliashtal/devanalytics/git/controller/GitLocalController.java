@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest;
 import com.juliashtal.devanalytics.git.service.GitLocalCollector;
 import com.juliashtal.devanalytics.git.service.GitRepositoryService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -25,6 +26,7 @@ public class GitLocalController {
     private final GitRepositoryService gitRepositoryService;
     private final GitLocalCollector gitLocalCollector;
 
+    @Operation(summary = "Register a local Git repository by filesystem path")
     @PostMapping("/repos")
     public ResponseEntity<GitRepositoryDto> registerLocalRepo(
             @RequestBody @Valid RegisterLocalRepoRequest request) {
@@ -33,6 +35,7 @@ public class GitLocalController {
         return ResponseEntity.ok(GitRepositoryDto.fromEntity(repo));
     }
 
+    @Operation(summary = "List local Git repositories registered to the current user")
     @GetMapping("/repos")
     public List<GitRepositoryDto> listRepos() {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -41,6 +44,7 @@ public class GitLocalController {
                 .toList();
     }
 
+    @Operation(summary = "Get a local Git repository by ID")
     @GetMapping("/repos/{repoId}")
     public GitRepositoryDto getRepo(@PathVariable Long repoId) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -48,6 +52,7 @@ public class GitLocalController {
         return GitRepositoryDto.fromEntity(repo);
     }
 
+    @Operation(summary = "List commits for a local Git repository, paginated")
     @GetMapping("/repos/{repoId}/commits")
     public Page<GitCommitDto> listCommits(
             @PathVariable Long repoId,
@@ -59,6 +64,7 @@ public class GitLocalController {
         return commitsPage.map(GitCommitDto::fromEntity);
     }
 
+    @Operation(summary = "Synchronously collect new commits for a local Git repository")
     @PostMapping("/repos/{repoId}/collect")
     public ResponseEntity<String> collect(@PathVariable Long repoId) {
         long saved = gitLocalCollector.collectForRepository(repoId, null);

@@ -36,6 +36,7 @@ public class AiSummaryController {
      * Personal summary across all repositories, or filtered to one repo via repoId.
      */
     @GetMapping
+    @Operation(summary = "Generate or retrieve a cached personal AI summary across all repositories")
     public MetricsSummaryDto getPersonalSummary(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -48,6 +49,7 @@ public class AiSummaryController {
      * Summary scoped to a specific repository.
      */
     @GetMapping("/repos/{repoId}")
+    @Operation(summary = "Generate or retrieve a cached personal AI summary scoped to one repository")
     public MetricsSummaryDto getRepoSummary(
             @PathVariable Long repoId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -61,6 +63,7 @@ public class AiSummaryController {
      */
     @GetMapping("/teams/{teamId}")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "Generate or retrieve a cached team-level AI summary (manager/admin only)")
     public MetricsSummaryDto getTeamSummary(
             @PathVariable Long teamId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -74,6 +77,7 @@ public class AiSummaryController {
      */
     @GetMapping("/teams/{teamId}/member/{memberId}")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "Generate or retrieve a cached AI summary for one team member (manager/admin only)")
     public MetricsSummaryDto getMemberSummary(
             @PathVariable Long teamId,
             @PathVariable Long memberId,
@@ -88,6 +92,7 @@ public class AiSummaryController {
      * Used to restore the last summary across server restarts without triggering a new LLM call.
      */
     @GetMapping("/latest")
+    @Operation(summary = "Get the most recently persisted personal AI summary, or 204 if none exists")
     public ResponseEntity<MetricsSummaryDto> getLatestPersonalSummary() {
         User user = checkHelper.currentUser();
         return persistenceService.findLatestPersonal(user)
@@ -101,6 +106,7 @@ public class AiSummaryController {
      */
     @GetMapping("/teams/{teamId}/latest")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "Get the most recently persisted team AI summary, or 204 if none exists (manager/admin only)")
     public ResponseEntity<MetricsSummaryDto> getLatestTeamSummary(@PathVariable Long teamId) {
         Team team = teamService.getById(teamId);
         return persistenceService.findLatestTeam(team)
