@@ -4,8 +4,8 @@ spring:
       max-file-size: 2MB
       max-request-size: 2MB
   datasource:
-    url: ${SPRING_DATASOURCE_URL:}
-    username: ${SPRING_DATASOURCE_USERNAME:}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dev_analytics}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:}
   flyway:
     repair-on-migrate: true  # Spring Boot 3.x property
@@ -22,16 +22,16 @@ spring:
         order_inserts: true
         order_updates: true
   mail:
-    host: ${SMTP_HOST:smtp.gmail.com}
-    port: ${SMTP_PORT:587}
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
     username: ${SMTP_USERNAME:}
     password: ${SMTP_PASSWORD:}
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${SMTP_AUTH:false}
           starttls:
-            enable: true
+            enable: ${SMTP_STARTTLS:false}
 
 app:
   jwt:
@@ -41,6 +41,7 @@ app:
   password-reset:
     expiration: 3600000            # 1 hour
   base-url: ${APP_BASE_URL:http://localhost:8080}
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:5173}
   encryption:
     # 32-byte AES-256 key, base64-encoded. Generate: openssl rand -base64 32
     key: ${ENCRYPTION_KEY:}
@@ -51,6 +52,9 @@ app:
     ai-rpm: ${RATE_LIMIT_AI_RPM:10}
   cookie:
     secure: ${COOKIE_SECURE:false}
+  mail:
+    from-address: ${MAIL_FROM:noreply@dev-analytics.local}
+    from-name: ${MAIL_FROM_NAME:Dev Analytics}
 
 ai:
   ollama:

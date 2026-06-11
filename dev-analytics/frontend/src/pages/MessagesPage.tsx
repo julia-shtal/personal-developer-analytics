@@ -6,7 +6,7 @@ import { messagingApi } from '@/api/messaging';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Spinner } from '@/components/ui/Spinner';
-import type { InboxEntryDto } from '@/types/messaging';
+import type { DirectMessageDto, InboxEntryDto } from '@/types/messaging';
 
 export function MessagesPage() {
   const { user: me } = useAuth();
@@ -37,8 +37,29 @@ export function MessagesPage() {
 
   const sendMutation = useMutation({
     mutationFn: (body: string) => messagingApi.send(selectedUserId!, body),
-    onSuccess: () => {
+    onMutate: async (body: string) => {
+      await qc.cancelQueries({ queryKey: ['messages-conversation', selectedUserId] });
+      const previous = qc.getQueryData<DirectMessageDto[]>(['messages-conversation', selectedUserId]);
+      const optimistic: DirectMessageDto = {
+        id: -Date.now(),
+        senderId: me!.id,
+        recipientId: selectedUserId!,
+        body,
+        createdAt: new Date().toISOString(),
+        readAt: null,
+      };
+      qc.setQueryData<DirectMessageDto[]>(['messages-conversation', selectedUserId], (old = []) => [
+        optimistic, ...old,
+      ]);
       setDraft('');
+      return { previous };
+    },
+    onError: (_err, _body, context) => {
+      if (context?.previous !== undefined) {
+        qc.setQueryData(['messages-conversation', selectedUserId], context.previous);
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['messages-conversation', selectedUserId] });
       qc.invalidateQueries({ queryKey: ['messages-inbox'] });
       qc.invalidateQueries({ queryKey: ['messages-unread-count'] });
@@ -191,21 +212,6 @@ export function MessagesPage() {
                   </div>
                 );
               })}
-
-              {sendMutation.isPending && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <div style={{
-                    padding: '9px 14px',
-                    borderRadius: '14px 14px 4px 14px',
-                    background: 'var(--accent)',
-                    opacity: 0.5,
-                    fontSize: 13,
-                    color: '#fff',
-                  }}>
-                    {draft}
-                  </div>
-                </div>
-              )}
 
               {sendMutation.isError && (
                 <div style={{

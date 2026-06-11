@@ -34,7 +34,7 @@ class InviteServiceTest {
     @BeforeEach
     void setUp() {
         service = new InviteService(inviteTokenRepository, teamRepository);
-        ReflectionTestUtils.setField(service, "baseUrl", "http://localhost:8080");
+        ReflectionTestUtils.setField(service, "frontendUrl", "http://localhost:5173");
     }
 
     @Test

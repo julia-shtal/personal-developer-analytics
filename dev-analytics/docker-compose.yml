@@ -36,6 +36,13 @@ services:
       retries: 30
       start_period: 120s
 
+  mailhog:
+    image: mailhog/mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   app:
     build: .
     restart: unless-stopped
@@ -46,6 +53,8 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+      mailhog:
+        condition: service_started
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dev_analytics
       SPRING_DATASOURCE_USERNAME: postgres
@@ -54,8 +63,9 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       OLLAMA_BASE_URL: http://ollama:11434
       COOKIE_SECURE: "true"
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
+      APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:8080}
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
 

@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import type { ComponentType, CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Users, ChevronDown, MessageSquare, Sparkles, AlertCircle, Shield } from 'lucide-react';
+import { Users, ChevronDown, MessageSquare, Mail, Sparkles, AlertCircle, Shield } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
+import { usersApi } from '@/api/users';
 import { teamMetricsApi } from '@/api/metrics';
 import { reposApi } from '@/api/repos';
 import { aiApi } from '@/api/ai';
@@ -119,10 +120,17 @@ interface MemberDetailModalProps {
   onClose: () => void;
 }
 
-function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalProps) {
+export function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalProps) {
   const navigate = useNavigate();
   const { range } = useDateRange();
   const { from, to } = range;
+
+  const { data: contactPrefs } = useQuery({
+    queryKey: ['notification-prefs'],
+    queryFn: () => usersApi.notifications.get().then((r) => r.data),
+    staleTime: 60_000,
+  });
+  const preferredMethod = contactPrefs?.defaultContactMethod ?? 'IN_APP';
 
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -182,13 +190,43 @@ function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalP
           <span className="t-label">click any row to drill into other members</span>
           <div className="col gap-2" style={{ alignItems: 'flex-end' }}>
             <div className="row gap-2">
-              <button
-                className="btn btn-sm"
-                onClick={() => navigate(`/messages?to=${member.userId}`)}
-                aria-label={`Message ${member.username}`}
-              >
-                <MessageSquare width={12} height={12} />message
-              </button>
+              {preferredMethod === 'EMAIL' && member.email ? (
+                <>
+                  <a
+                    className="btn btn-sm btn-accent"
+                    href={`mailto:${member.email}?subject=Dev+Analytics+%7C+Quick+note`}
+                    aria-label={`Email ${member.username}`}
+                  >
+                    <Mail width={12} height={12} />email
+                  </a>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => navigate(`/messages?to=${member.userId}`)}
+                    aria-label={`Message ${member.username}`}
+                  >
+                    <MessageSquare width={12} height={12} />message
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="btn btn-sm btn-accent"
+                    onClick={() => navigate(`/messages?to=${member.userId}`)}
+                    aria-label={`Message ${member.username}`}
+                  >
+                    <MessageSquare width={12} height={12} />message
+                  </button>
+                  {member.email && (
+                    <a
+                      className="btn btn-sm"
+                      href={`mailto:${member.email}?subject=Dev+Analytics+%7C+Quick+note`}
+                      aria-label={`Email ${member.username}`}
+                    >
+                      <Mail width={12} height={12} />email
+                    </a>
+                  )}
+                </>
+              )}
               <button
                 className="btn btn-sm btn-accent"
                 onClick={fetchMemberAi}

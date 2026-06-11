@@ -5,6 +5,7 @@ export interface NotificationPrefsDto {
   syncFailures: boolean;
   afterHours: boolean;
   newTeamMember: boolean;
+  defaultContactMethod: 'IN_APP' | 'EMAIL';
 }
 
 export const usersApi = {

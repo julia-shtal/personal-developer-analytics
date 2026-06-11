@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.user;
 
+import com.juliashtal.devanalytics.user.model.ContactMethod;
 import com.juliashtal.devanalytics.user.model.NotificationPrefsDto;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.model.UserNotificationPrefsEntity;
@@ -76,12 +77,13 @@ class UserNotificationPrefsServiceTest {
         when(prefsRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(prefsRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        NotificationPrefsDto dto = new NotificationPrefsDto(false, false, true, true);
+        NotificationPrefsDto dto = new NotificationPrefsDto(false, false, true, true, ContactMethod.EMAIL);
         NotificationPrefsDto result = service.update(1L, dto);
 
         assertThat(result.aiBrief()).isFalse();
         assertThat(result.syncFailures()).isFalse();
         assertThat(result.afterHours()).isTrue();
         assertThat(result.newTeamMember()).isTrue();
+        assertThat(result.defaultContactMethod()).isEqualTo(ContactMethod.EMAIL);
     }
 }
