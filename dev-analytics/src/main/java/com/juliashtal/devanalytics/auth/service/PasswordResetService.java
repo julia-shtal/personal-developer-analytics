@@ -28,8 +28,8 @@ public class PasswordResetService {
     @Value("${app.password-reset.expiration}")
     private long tokenExpirationMs;
 
-    @Value("${app.base-url}")
-    private String baseUrl;
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     @Transactional
     public void initiatePasswordReset(String email) {
@@ -46,9 +46,13 @@ public class PasswordResetService {
         resetToken.setExpiresAt(Instant.now().plusMillis(tokenExpirationMs));
         tokenRepository.save(resetToken);
 
-        String resetLink = baseUrl + "/reset-password.html?token=" + resetToken.getToken();
-        emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
-        log.info("Password reset email sent for userId={}", user.getId());
+        String resetLink = frontendUrl + "/reset-password?token=" + resetToken.getToken();
+        try {
+            emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+            log.info("Password reset email sent for userId={}", user.getId());
+        } catch (Exception e) {
+            log.error("Password reset email failed for userId={}: {}", user.getId(), e.getMessage());
+        }
     }
 
     @Transactional

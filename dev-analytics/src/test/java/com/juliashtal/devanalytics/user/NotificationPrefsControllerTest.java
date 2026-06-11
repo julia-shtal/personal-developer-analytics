@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.service.JwtService;
 import com.juliashtal.devanalytics.user.controller.UserProfileController;
+import com.juliashtal.devanalytics.user.model.ContactMethod;
 import com.juliashtal.devanalytics.user.model.NotificationPrefsDto;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.model.UserNotificationPrefsEntity;
@@ -57,7 +58,8 @@ class NotificationPrefsControllerTest {
                     .andExpect(jsonPath("$.aiBrief").value(false))
                     .andExpect(jsonPath("$.syncFailures").value(false))
                     .andExpect(jsonPath("$.afterHours").value(false))
-                    .andExpect(jsonPath("$.newTeamMember").value(false));
+                    .andExpect(jsonPath("$.newTeamMember").value(false))
+                    .andExpect(jsonPath("$.defaultContactMethod").value("IN_APP"));
         }
     }
 
@@ -66,7 +68,7 @@ class NotificationPrefsControllerTest {
     void putNotifications_roundTrips() throws Exception {
         try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
             su.when(SecurityUtils::getCurrentUserId).thenReturn(1L);
-            NotificationPrefsDto dto = new NotificationPrefsDto(false, false, true, true);
+            NotificationPrefsDto dto = new NotificationPrefsDto(false, false, true, true, ContactMethod.EMAIL);
             when(notificationPrefsService.update(eq(1L), eq(dto))).thenReturn(dto);
 
             mvc.perform(put("/api/users/me/notifications")
@@ -76,7 +78,8 @@ class NotificationPrefsControllerTest {
                     .andExpect(jsonPath("$.aiBrief").value(false))
                     .andExpect(jsonPath("$.syncFailures").value(false))
                     .andExpect(jsonPath("$.afterHours").value(true))
-                    .andExpect(jsonPath("$.newTeamMember").value(true));
+                    .andExpect(jsonPath("$.newTeamMember").value(true))
+                    .andExpect(jsonPath("$.defaultContactMethod").value("EMAIL"));
         }
     }
 }

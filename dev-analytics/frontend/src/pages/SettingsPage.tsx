@@ -13,7 +13,7 @@ import { ACTIVE_LOGO } from '@/config/branding';
 import type { LogoVariant } from '@/lib/theme';
 import api from '@/lib/api';
 import { avatarApi } from '@/api/avatar';
-import { usersApi } from '@/api/users';
+import { usersApi, type NotificationPrefsDto } from '@/api/users';
 import type { UserProfile } from '@/types';
 
 // ─── Timezone helpers ─────────────────────────────────────────────────────────
@@ -244,7 +244,7 @@ export function SettingsPage() {
   }
 
   // ── Notification prefs — use query data directly with optimistic cache update ──
-  const DEFAULT_NOTIFS = { aiBrief: false, syncFailures: false, afterHours: false, newTeamMember: false };
+  const DEFAULT_NOTIFS: NotificationPrefsDto = { aiBrief: false, syncFailures: false, afterHours: false, newTeamMember: false, defaultContactMethod: 'IN_APP' };
 
   const { data: notifData } = useQuery({
     queryKey: ['notification-prefs'],
@@ -255,14 +255,20 @@ export function SettingsPage() {
   const notifs = notifData ?? DEFAULT_NOTIFS;
 
   const notifMutation = useMutation({
-    mutationFn: (dto: typeof DEFAULT_NOTIFS) => usersApi.notifications.update(dto),
+    mutationFn: (dto: NotificationPrefsDto) => usersApi.notifications.update(dto),
     onSuccess: (res) => {
       qc.setQueryData(['notification-prefs'], res.data);
     },
   });
 
-  function toggleNotif(key: keyof typeof DEFAULT_NOTIFS) {
+  function toggleNotif(key: 'aiBrief' | 'syncFailures' | 'afterHours' | 'newTeamMember') {
     const next = { ...notifs, [key]: !notifs[key] };
+    qc.setQueryData(['notification-prefs'], next);
+    notifMutation.mutate(next);
+  }
+
+  function setContactMethod(method: 'IN_APP' | 'EMAIL') {
+    const next = { ...notifs, defaultContactMethod: method };
     qc.setQueryData(['notification-prefs'], next);
     notifMutation.mutate(next);
   }
@@ -638,6 +644,30 @@ export function SettingsPage() {
               </button>
             </div>
           ))}
+          <div className="row" style={{ padding: '12px 0', borderTop: '1px solid var(--line-2)', gap: 14 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--fg)' }}>Default contact method</div>
+              <div className="t-label" style={{ marginTop: 2 }}>Which option appears first when messaging a team member</div>
+            </div>
+            <div className="row gap-1">
+              {(['IN_APP', 'EMAIL'] as const).map((method) => (
+                <button
+                  key={method}
+                  className="btn btn-sm"
+                  onClick={() => setContactMethod(method)}
+                  disabled={notifMutation.isPending}
+                  aria-pressed={notifs.defaultContactMethod === method}
+                  style={{
+                    background: notifs.defaultContactMethod === method ? 'var(--accent)' : 'var(--bg-inset)',
+                    borderColor: notifs.defaultContactMethod === method ? 'var(--accent)' : 'var(--line)',
+                    color: notifs.defaultContactMethod === method ? 'var(--accent-fg, #fff)' : 'var(--fg)',
+                  }}
+                >
+                  {method === 'IN_APP' ? 'In-app message' : 'Email'}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* ── Danger zone ──────────────────────────────────────────────────── */}

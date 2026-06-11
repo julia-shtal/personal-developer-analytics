@@ -30,6 +30,10 @@ public class UserNotificationPrefsEntity {
     @Column(nullable = false)
     private boolean newTeamMember = false;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "default_contact_method", nullable = false, length = 16)
+    private ContactMethod defaultContactMethod = ContactMethod.IN_APP;
+
     public UserNotificationPrefsEntity(User user) {
         this.user = user;
     }

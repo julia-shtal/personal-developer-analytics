@@ -33,6 +33,7 @@ public class UserNotificationPrefsService {
         prefs.setSyncFailures(dto.syncFailures());
         prefs.setAfterHours(dto.afterHours());
         prefs.setNewTeamMember(dto.newTeamMember());
+        prefs.setDefaultContactMethod(dto.defaultContactMethod());
         return NotificationPrefsDto.from(prefsRepository.save(prefs));
     }
 }

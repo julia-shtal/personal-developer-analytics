@@ -1,9 +1,10 @@
 package com.juliashtal.devanalytics.email;
 
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -15,8 +16,11 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username}")
-    private String fromEmail;
+    @Value("${app.mail.from-address}")
+    private String fromAddress;
+
+    @Value("${app.mail.from-name}")
+    private String fromName;
 
     public void sendPasswordResetEmail(String toEmail, String resetLink) {
         send(toEmail, "Password Reset Request - Dev Analytics", buildResetEmailBody(resetLink));
@@ -36,7 +40,7 @@ public class EmailService {
                 Best regards,
                 Dev Analytics
                 """.formatted(from, to, headline.isBlank() ? "See your dashboard" : headline);
-        send(toEmail, subject, body);
+        send(toEmail, subject, asHtml(body));
     }
 
     public void sendSyncFailureEmail(String toEmail, String dataSourceLabel) {
@@ -51,7 +55,7 @@ public class EmailService {
                 Best regards,
                 Dev Analytics
                 """.formatted(dataSourceLabel);
-        send(toEmail, subject, body);
+        send(toEmail, subject, asHtml(body));
     }
 
     public void sendNewTeamMemberEmail(String toEmail, String teamName) {
@@ -66,7 +70,7 @@ public class EmailService {
                 Best regards,
                 Dev Analytics
                 """.formatted(teamName);
-        send(toEmail, subject, body);
+        send(toEmail, subject, asHtml(body));
     }
 
     public void sendAnomalyAlertEmail(String toEmail, List<String> anomalousMetrics, LocalDate from, LocalDate to) {
@@ -84,31 +88,41 @@ public class EmailService {
                 Best regards,
                 Dev Analytics
                 """.formatted(from, to, String.join("\n", anomalousMetrics));
-        send(toEmail, subject, body);
+        send(toEmail, subject, asHtml(body));
     }
 
-    private void send(String toEmail, String subject, String body) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(fromEmail);
-        message.setTo(toEmail);
-        message.setSubject(subject);
-        message.setText(body);
-        mailSender.send(message);
+    private void send(String toEmail, String subject, String htmlBody) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+            helper.setFrom(fromAddress, fromName);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true);
+            mailSender.send(message);
+        } catch (jakarta.mail.MessagingException | java.io.UnsupportedEncodingException e) {
+            throw new IllegalStateException("Failed to build email message", e);
+        }
     }
 
     private String buildResetEmailBody(String resetLink) {
         return """
-                Hello,
-
-                You have requested to reset your password for Dev Analytics.
-
-                Click the link below to reset your password (valid for 1 hour):
-                %s
-
-                If you did not request this, please ignore this email.
-
-                Best regards,
-                Dev Analytics Team
+                <html>
+                <body style="font-family: sans-serif; color: #1a1a1a; line-height: 1.5;">
+                  <p>Hello,</p>
+                  <p>You have requested to reset your password for Dev Analytics.</p>
+                  <p>
+                    <a href="%s" style="color: #6d28d9;">Click here to reset your password</a>
+                    (valid for 1 hour).
+                  </p>
+                  <p>If you did not request this, please ignore this email.</p>
+                  <p>Best regards,<br>Dev Analytics Team</p>
+                </body>
+                </html>
                 """.formatted(resetLink);
+    }
+
+    private String asHtml(String plainTextBody) {
+        return "<html><body style=\"font-family: sans-serif; white-space: pre-wrap;\">" + plainTextBody + "</body></html>";
     }
 }

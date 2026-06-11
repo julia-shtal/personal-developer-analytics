@@ -25,8 +25,8 @@ public class InviteService {
     private final InviteTokenRepository inviteTokenRepository;
     private final TeamRepository teamRepository;
 
-    @Value("${app.base-url}")
-    private String baseUrl;
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     @Transactional
     public InviteTokenDto createInvite(User admin, String email, Role role, Long teamId) {
@@ -46,7 +46,7 @@ public class InviteService {
         log.info("Invite created: email={}, role={}, teamId={}", email, role, teamId);
 
         // TODO(invite-email-delivery): send the invite URL via Spring Mail — next sprint
-        String inviteUrl = baseUrl + "/register?invite=" + saved.getToken();
+        String inviteUrl = frontendUrl + "/register?invite=" + saved.getToken();
         return new InviteTokenDto(saved.getToken(), saved.getEmail(), saved.getRole().name(),
                 saved.getExpiresAt(), inviteUrl);
     }
