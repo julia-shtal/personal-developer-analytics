@@ -28,6 +28,44 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    /**
+     * Endpoints reachable without a JWT: auth flows, invite acceptance, unauthenticated
+     * avatar assets, the health check, and SPA entry routes (the SPA's own pages enforce
+     * auth via their API calls — these paths only need the static shell to be servable).
+     */
+    private static final String[] PUBLIC_ENDPOINTS = {
+            "/api/auth/register",
+            "/api/auth/login",
+            "/api/auth/refresh",
+            "/api/auth/logout",
+            "/api/auth/forgot-password",
+            "/api/auth/reset-password",
+            "/api/auth/invite/**",
+            "/api/users/*/avatar",   // avatar images served unauthenticated
+            "/api/users/avatar/presets",
+            "/actuator/health",
+            // SPA static assets and entry points
+            "/",
+            "/index.html",
+            "/login",
+            "/register",
+            "/forgot-password",
+            "/reset-password",
+            "/welcome",
+            "/dashboard",
+            "/team",
+            "/team-manage",
+            "/datasources",
+            "/settings",
+            "/messages",
+            "/admin",
+            "/assets/**",
+            "/avatars/**",
+            "/*.svg",
+            "/*.ico",
+            "/*.png"
+    };
+
     private final JwtAuthFilter jwtAuthFilter;
     private final CustomUserDetailsService userDetailsService;
 
@@ -48,38 +86,7 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/api/auth/register",
-                                "/api/auth/login",
-                                "/api/auth/refresh",
-                                "/api/auth/logout",
-                                "/api/auth/forgot-password",
-                                "/api/auth/reset-password",
-                                "/api/auth/invite/**",
-                                "/api/users/*/avatar",   // avatar images served unauthenticated
-                                "/api/users/avatar/presets",
-                                "/actuator/health",
-                                // SPA static assets and entry points
-                                "/",
-                                "/index.html",
-                                "/login",
-                                "/register",
-                                "/forgot-password",
-                                "/reset-password",
-                                "/welcome",
-                                "/dashboard",
-                                "/team",
-                                "/team-manage",
-                                "/datasources",
-                                "/settings",
-                                "/messages",
-                                "/admin",
-                                "/assets/**",
-                                "/avatars/**",
-                                "/*.svg",
-                                "/*.ico",
-                                "/*.png"
-                        ).permitAll()
+                        .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/teams/**").hasAnyRole("MANAGER", "ADMIN")
                         .anyRequest().authenticated()

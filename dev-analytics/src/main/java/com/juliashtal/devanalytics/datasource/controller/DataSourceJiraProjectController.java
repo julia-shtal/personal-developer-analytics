@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.datasource;
+package com.juliashtal.devanalytics.datasource.controller;
 
 import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.jira.model.dto.AttachProjectRequest;

@@ -41,12 +41,14 @@ public class AuthController {
     @Value("${app.jwt.refresh-expiration:604800000}")
     private long refreshExpirationMs;
 
+    @Operation(summary = "Register a new user account")
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         authService.register(request);
         return ResponseEntity.ok().build();
     }
 
+    @Operation(summary = "Authenticate and issue an access token; refresh token is set as an HttpOnly cookie")
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request,
                                               HttpServletResponse response) {
@@ -56,6 +58,7 @@ public class AuthController {
         return ResponseEntity.ok(auth);
     }
 
+    @Operation(summary = "Rotate the refresh token cookie and issue a new access token")
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(HttpServletRequest request,
                                                 HttpServletResponse response) {
@@ -69,6 +72,7 @@ public class AuthController {
         return ResponseEntity.ok(auth);
     }
 
+    @Operation(summary = "Log out: increment the user's token version to invalidate all outstanding access tokens")
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletResponse response) {
         // Cookie path = /api/auth/refresh, so browser doesn't send it here.
@@ -81,12 +85,14 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
+    @Operation(summary = "Request a password reset email")
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody PasswordResetRequest request) {
         passwordResetService.initiatePasswordReset(request.getEmail());
         return ResponseEntity.ok().build();
     }
 
+    @Operation(summary = "Reset the password using a valid reset token")
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@RequestBody PasswordResetConfirmRequest request) {
         passwordResetService.resetPassword(request.getToken(), request.getNewPassword());

@@ -27,6 +27,11 @@ public class UserService {
                 .orElseThrow(() -> new NoSuchElementException("User not found"));
     }
 
+    /** Lazy reference, sufficient for FK comparisons/inserts without loading the row. */
+    public User getReferenceById(Long userId) {
+        return repository.getReferenceById(userId);
+    }
+
     @Transactional
     public User updateProfile(Long userId, UpdateProfileRequest req) {
         User user = repository.findById(userId)

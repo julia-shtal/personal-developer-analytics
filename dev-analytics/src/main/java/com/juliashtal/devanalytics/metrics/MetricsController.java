@@ -14,6 +14,7 @@ import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.service.TeamService;
 import com.juliashtal.devanalytics.user.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -40,12 +41,12 @@ public class MetricsController {
     private final TeamService teamService;
     private final UserService userService;
     private final CheckHelper checkHelper;
-    private final MetricSnapshotRepository metricSnapshotRepository;
 
     // =========================================================================
     // Personal endpoints — team IS NULL snapshots only
     // =========================================================================
 
+    @Operation(summary = "Calculate and persist all personal daily metrics for a date range")
     @PostMapping("/calculate")
     public void calculate(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -55,6 +56,7 @@ public class MetricsController {
         metricsService.calculateDailyMetrics(user.getId(), from, to);
     }
 
+    @Operation(summary = "Daily Commits Count series for the current user")
     @GetMapping("/daily-commits")
     public List<MetricPointDto> getDailyCommits(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -64,6 +66,7 @@ public class MetricsController {
         return getPersonalDailySeries(DAILY_COMMITS_COUNT, from, to, repoId);
     }
 
+    @Operation(summary = "Daily PRs Created series for the current user")
     @GetMapping("/daily-pr-created")
     public List<MetricPointDto> getDailyPrCreated(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -73,6 +76,7 @@ public class MetricsController {
         return getPersonalDailySeries(DAILY_PR_CREATED, from, to, repoId);
     }
 
+    @Operation(summary = "Daily PRs Merged series for the current user")
     @GetMapping("/daily-pr-merged")
     public List<MetricPointDto> getDailyPrMerged(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -82,6 +86,7 @@ public class MetricsController {
         return getPersonalDailySeries(DAILY_PR_MERGED, from, to, repoId);
     }
 
+    @Operation(summary = "Daily Issues Closed series for the current user")
     @GetMapping("/daily-issues-closed")
     public List<MetricPointDto> getDailyIssuesClosed(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -91,6 +96,7 @@ public class MetricsController {
         return getPersonalDailySeries(DAILY_ISSUES_CLOSED, from, to, repoId);
     }
 
+    @Operation(summary = "Daily Issues Created series for the current user")
     @GetMapping("/daily-issues-created")
     public List<MetricPointDto> getDailyIssuesCreated(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -100,6 +106,7 @@ public class MetricsController {
         return getPersonalDailySeries(DAILY_ISSUES_CREATED, from, to, repoId);
     }
 
+    @Operation(summary = "Daily Churn Ratio series for the current user")
     @GetMapping("/daily-churn")
     public List<MetricPointDto> getDailyChurn(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -109,6 +116,7 @@ public class MetricsController {
         return getPersonalDailySeries(DAILY_CHURN_RATIO, from, to, repoId);
     }
 
+    @Operation(summary = "PR Lead Time (median hours) for the current user")
     @GetMapping("/pr-lead-time")
     public MetricAggregateDto getPrLeadTimeMedian(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -118,6 +126,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(PR_LEAD_TIME_HOURS_MEDIAN, from, to, repoId);
     }
 
+    @Operation(summary = "PR First-Commit-to-Merge Lead Time (median hours) for the current user")
     @GetMapping("/pr-first-commit-lead-time")
     public MetricAggregateDto getPrFirstCommitLeadTimeMedian(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -127,6 +136,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN, from, to, repoId);
     }
 
+    @Operation(summary = "Review Response Time (median hours) for the current user")
     @GetMapping("/review-response-time")
     public MetricAggregateDto getReviewResponseTimeMedian(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -136,6 +146,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(REVIEW_RESPONSE_TIME_HOURS_MEDIAN, from, to, repoId);
     }
 
+    @Operation(summary = "Issue Lead Time (median hours) for the current user")
     @GetMapping("/issue-lead-time")
     public MetricAggregateDto getIssueLeadTimeMedian(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -145,6 +156,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(ISSUE_LEAD_TIME_HOURS_MEDIAN, from, to, repoId);
     }
 
+    @Operation(summary = "Daily Focus Ratio (days with tasks) series for the current user")
     @GetMapping("/focus-ratio/series")
     public List<MetricPointDto> getFocusRatioSeries(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -159,6 +171,7 @@ public class MetricsController {
                 .toList();
     }
 
+    @Operation(summary = "Focus Ratio (days with tasks) aggregated over weekdays in the date range")
     @GetMapping("/focus-ratio")
     public MetricAggregateDto getFocusRatioAggregate(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -183,6 +196,7 @@ public class MetricsController {
     // Wellness + Quality metric endpoints (personal, aggregate)
     // =========================================================================
 
+    @Operation(summary = "After-Hours Commit Ratio for the current user")
     @GetMapping("/after-hours-ratio")
     public MetricAggregateDto getAfterHoursRatio(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -191,6 +205,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(AFTER_HOURS_COMMIT_RATIO, from, to, null);
     }
 
+    @Operation(summary = "Refactor Ratio for the current user")
     @GetMapping("/refactor-ratio")
     public MetricAggregateDto getRefactorRatio(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -199,6 +214,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(REFACTOR_RATIO, from, to, null);
     }
 
+    @Operation(summary = "Deep Work Streak (longest consecutive run of days) for the current user")
     @GetMapping("/deep-work-streak")
     public MetricAggregateDto getDeepWorkStreak(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -207,6 +223,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(DEEP_WORK_STREAK_DAYS, from, to, null);
     }
 
+    @Operation(summary = "Merge Frequency (merges to main per ISO week, average) for the current user")
     @GetMapping("/merge-to-main-frequency")
     public MetricAggregateDto getMergeFrequency(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -215,6 +232,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(MERGE_TO_MAIN_FREQUENCY_PER_WEEK, from, to, null);
     }
 
+    @Operation(summary = "Knowledge Silo Score for the current user")
     @GetMapping("/knowledge-silo")
     public MetricAggregateDto getKnowledgeSilo(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -224,6 +242,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(KNOWLEDGE_SILO_SCORE, from, to, repoId);
     }
 
+    @Operation(summary = "PR Size Complexity Score (median changed lines per commit across merged PRs) for the current user")
     @GetMapping("/pr-size-complexity")
     public MetricAggregateDto getPrSizeComplexity(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -233,6 +252,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(PR_SIZE_COMPLEXITY_SCORE, from, to, repoId);
     }
 
+    @Operation(summary = "Merge Without Review Ratio for the current user")
     @GetMapping("/merge-without-review")
     public MetricAggregateDto getMergeWithoutReview(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -246,6 +266,7 @@ public class MetricsController {
     // Team endpoints (MANAGER / ADMIN only)
     // =========================================================================
 
+    @Operation(summary = "Calculate and persist team-scoped daily metrics for a date range (manager/admin only)")
     @PostMapping("/teams/{teamId}/calculate")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
     public void calculateForTeam(
@@ -263,6 +284,7 @@ public class MetricsController {
      * receive only the aggregate row (userId=null) — per-member rows are never sent to DEVELOPER role.
      * Optional repoId scopes results to snapshots for that specific repository.
      */
+    @Operation(summary = "Per-member + aggregate Daily Commits Count series for a team")
     @GetMapping("/teams/{teamId}/daily-commits")
     @PreAuthorize("@teamAccessGuard.canRead(#teamId, authentication)")
     public List<TeamMetricPointDto> getTeamDailyCommits(
@@ -283,6 +305,7 @@ public class MetricsController {
      * Developers receive only the aggregate row; managers/admins receive per-member breakdown.
      * Optional repoId scopes results to snapshots for that specific repository.
      */
+    @Operation(summary = "Per-member + aggregate Daily PRs Merged series for a team")
     @GetMapping("/teams/{teamId}/daily-pr-merged")
     @PreAuthorize("@teamAccessGuard.canRead(#teamId, authentication)")
     public List<TeamMetricPointDto> getTeamDailyPrMerged(
@@ -303,6 +326,7 @@ public class MetricsController {
      * Developers receive only the aggregate row; managers/admins receive per-member breakdown.
      * Optional repoId scopes results to snapshots for that specific repository.
      */
+    @Operation(summary = "Per-member + aggregate Daily Issues Closed series for a team")
     @GetMapping("/teams/{teamId}/daily-issues-closed")
     @PreAuthorize("@teamAccessGuard.canRead(#teamId, authentication)")
     public List<TeamMetricPointDto> getTeamDailyIssuesClosed(
@@ -319,6 +343,7 @@ public class MetricsController {
     }
 
     /** One MemberSummaryDto per member — all metric types summed over the window. */
+    @Operation(summary = "Per-member metric totals for a team over a date range (manager/admin only)")
     @GetMapping("/teams/{teamId}/summary")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
     public List<MemberSummaryDto> getTeamSummary(
@@ -355,6 +380,7 @@ public class MetricsController {
      * Manager view of a specific team member's metrics within this team's scope.
      * Uses team-scoped snapshots so attribution is filtered by author identity.
      */
+    @Operation(summary = "Metric totals for one team member within the team's scope (manager/admin only)")
     @GetMapping("/teams/{teamId}/members/{memberId}/summary")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
     public MemberSummaryDto getMemberSummary(
@@ -379,6 +405,7 @@ public class MetricsController {
                 member.getLastActiveAt(), member.getEmail());
     }
 
+    @Operation(summary = "Daily Commits Count series for one team member (manager/admin only)")
     @GetMapping("/teams/{teamId}/members/{memberId}/daily-commits")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
     public List<MetricPointDto> getMemberDailyCommits(
@@ -390,6 +417,7 @@ public class MetricsController {
         return getMemberDailySeries(teamId, memberId, DAILY_COMMITS_COUNT, from, to);
     }
 
+    @Operation(summary = "Daily PRs Created series for one team member (manager/admin only)")
     @GetMapping("/teams/{teamId}/members/{memberId}/daily-pr-created")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
     public List<MetricPointDto> getMemberDailyPrCreated(
@@ -401,6 +429,7 @@ public class MetricsController {
         return getMemberDailySeries(teamId, memberId, DAILY_PR_CREATED, from, to);
     }
 
+    @Operation(summary = "Daily Churn Ratio series for one team member (manager/admin only)")
     @GetMapping("/teams/{teamId}/members/{memberId}/daily-churn")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
     public List<MetricPointDto> getMemberDailyChurn(
@@ -421,6 +450,7 @@ public class MetricsController {
      * Self-scoped: always computes for the authenticated user only.
      * Useful after connecting a new data source and wanting historical metrics.
      */
+    @Operation(summary = "Manually backfill personal metrics for a past date range")
     @PostMapping("/backfill")
     public ResponseEntity<Void> backfill(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -438,6 +468,7 @@ public class MetricsController {
      * A metric is anomalous when any daily observation deviates more than 2σ from the window mean.
      * Only the 11 AI context metrics are evaluated; metrics with fewer than 3 data points return false.
      */
+    @Operation(summary = "Per-metric anomaly flags (>2 sigma deviation from window mean) for the current user")
     @GetMapping("/anomalies")
     public Map<String, Boolean> getAnomalies(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -453,10 +484,11 @@ public class MetricsController {
      * Returns the latest date for which personal metrics have been computed.
      * Used by the dashboard to show a "metrics current through {date}" freshness indicator.
      */
+    @Operation(summary = "Latest date through which the current user's personal metrics have been computed")
     @GetMapping("/freshness")
     public ResponseEntity<Map<String, String>> getFreshness() {
         User user = checkHelper.currentUser();
-        return metricSnapshotRepository.findMaxPersonalDate(user.getId())
+        return metricSnapshotService.findMaxPersonalDate(user.getId())
                 .map(date -> ResponseEntity.ok(Map.of("metricsComputedThrough", date.toString())))
                 .orElse(ResponseEntity.ok(Map.of()));
     }

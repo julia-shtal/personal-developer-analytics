@@ -11,7 +11,7 @@ import com.juliashtal.devanalytics.jira.service.JiraProjectMappingService;
 import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.user.model.User;
-import com.juliashtal.devanalytics.user.repository.UserRepository;
+import com.juliashtal.devanalytics.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,7 +33,7 @@ public class JiraProjectController {
     private final JiraProjectService jiraProjectService;
     private final JiraProjectMappingService jiraProjectMappingService;
     private final DataSourceService dataSourceService;
-    private final UserRepository userRepository;
+    private final UserService userService;
 
     @GetMapping
     @Operation(summary = "List locally tracked Jira projects for a datasource")
@@ -41,7 +41,7 @@ public class JiraProjectController {
         Long userId = SecurityUtils.getCurrentUserId();
         DataSourceConfig ds = getJiraDataSource(userId, dataSourceId);
 
-        User user = userRepository.getReferenceById(userId);
+        User user = userService.getReferenceById(userId);
         return jiraProjectService.listTrackedProjects(ds).stream()
                 .map(p -> {
                     boolean subscribed = jiraProjectService.isSubscribed(user, p);

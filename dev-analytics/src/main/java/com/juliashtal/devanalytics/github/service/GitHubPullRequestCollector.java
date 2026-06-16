@@ -82,67 +82,7 @@ public class GitHubPullRequestCollector {
                 .collect(Collectors.toMap(GitHubPullRequestEntity::getNumber, e -> e));
 
         try {
-            List<GitHubPullRequestEntity> allSaved = new ArrayList<>();
-            List<GitHubPullRequestEntity> batch = new ArrayList<>(BATCH_SIZE);
-            int page = 1;
-            boolean done = false;
-
-            while (!done) {
-                String url = apiBase + "/repos/" + repo.getName()
-                        + "/pulls?state=all&per_page=100&page=" + page;
-
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header("Authorization", "Bearer " + token)
-                        .header("Accept", "application/vnd.github+json")
-                        .GET()
-                        .build();
-
-                HttpResponse<String> response = HTTP_CLIENT.send(
-                        request, HttpResponse.BodyHandlers.ofString());
-
-                if (response.statusCode() != 200) {
-                    throw new GitHubException("GitHub API returned " + response.statusCode()
-                            + " fetching PRs for " + repo.getName());
-                }
-
-                JsonNode prs = objectMapper.readTree(response.body());
-                if (!prs.isArray() || prs.isEmpty()) break;
-
-                for (JsonNode node : prs) {
-                    if (jobState != null) {
-                        jobState.phaseProcessed.incrementAndGet();
-                        jobState.totalProcessed.incrementAndGet();
-                    }
-
-                    int number = node.path("number").asInt();
-                    Instant updatedAt = parseInstant(node.path("updated_at"));
-                    GitHubPullRequestEntity existing = existingPrs.get(number);
-
-                    // Skip PRs that haven't changed since the last sync.
-                    if (existing != null
-                            && existing.getUpdatedAt() != null
-                            && existing.getUpdatedAt().equals(updatedAt)) {
-                        continue;
-                    }
-
-                    batch.add(mapPr(existing != null ? existing : new GitHubPullRequestEntity(),
-                            node, repo));
-
-                    if (batch.size() >= BATCH_SIZE) {
-                        allSaved.addAll(prRepository.saveAll(batch));
-                        batch.clear();
-                    }
-                }
-
-                String linkHeader = response.headers().firstValue("Link").orElse("");
-                if (!linkHeader.contains("rel=\"next\"")) done = true;
-                page++;
-            }
-
-            if (!batch.isEmpty()) {
-                allSaved.addAll(prRepository.saveAll(batch));
-            }
+            List<GitHubPullRequestEntity> allSaved = fetchAndSavePullRequests(repo, apiBase, token, existingPrs, jobState);
 
             cfg.setLastSuccessSync(LocalDateTime.now());
             repoRepository.save(repo);
@@ -157,6 +97,80 @@ public class GitHubPullRequestCollector {
             Thread.currentThread().interrupt();
             throw new GitHubException("Interrupted while collecting GitHub PRs for " + repo.getName(), e);
         }
+    }
+
+    /**
+     * Pages through the GitHub pull-requests list endpoint, mapping and batch-saving entries
+     * that are new or whose {@code updated_at} changed since the last sync. Unchanged PRs are
+     * skipped entirely.
+     */
+    private List<GitHubPullRequestEntity> fetchAndSavePullRequests(
+            GitRepositoryEntity repo, String apiBase, String token,
+            Map<Integer, GitHubPullRequestEntity> existingPrs, SyncJobTracker.JobState jobState)
+            throws IOException, InterruptedException {
+        List<GitHubPullRequestEntity> allSaved = new ArrayList<>();
+        List<GitHubPullRequestEntity> batch = new ArrayList<>(BATCH_SIZE);
+        int page = 1;
+        boolean done = false;
+
+        while (!done) {
+            String url = apiBase + "/repos/" + repo.getName()
+                    + "/pulls?state=all&per_page=100&page=" + page;
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github+json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = HTTP_CLIENT.send(
+                    request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                throw new GitHubException("GitHub API returned " + response.statusCode()
+                        + " fetching PRs for " + repo.getName());
+            }
+
+            JsonNode prs = objectMapper.readTree(response.body());
+            if (!prs.isArray() || prs.isEmpty()) break;
+
+            for (JsonNode node : prs) {
+                if (jobState != null) {
+                    jobState.phaseProcessed.incrementAndGet();
+                    jobState.totalProcessed.incrementAndGet();
+                }
+
+                int number = node.path("number").asInt();
+                Instant updatedAt = parseInstant(node.path("updated_at"));
+                GitHubPullRequestEntity existing = existingPrs.get(number);
+
+                // Skip PRs that haven't changed since the last sync.
+                if (existing != null
+                        && existing.getUpdatedAt() != null
+                        && existing.getUpdatedAt().equals(updatedAt)) {
+                    continue;
+                }
+
+                batch.add(mapPr(existing != null ? existing : new GitHubPullRequestEntity(),
+                        node, repo));
+
+                if (batch.size() >= BATCH_SIZE) {
+                    allSaved.addAll(prRepository.saveAll(batch));
+                    batch.clear();
+                }
+            }
+
+            String linkHeader = response.headers().firstValue("Link").orElse("");
+            if (!linkHeader.contains("rel=\"next\"")) done = true;
+            page++;
+        }
+
+        if (!batch.isEmpty()) {
+            allSaved.addAll(prRepository.saveAll(batch));
+        }
+
+        return allSaved;
     }
 
     /**

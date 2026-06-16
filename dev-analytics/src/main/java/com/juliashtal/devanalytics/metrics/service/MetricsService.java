@@ -52,6 +52,11 @@ public class MetricsService {
     private final GitRepositoryEntityRepository gitRepoRepository;
     private final UserRepoRegistrationRepository userRepoRegRepository;
 
+    /** Start of the working day (inclusive) used by {@link #calcAfterHoursRatioAndRefactorRatio}. */
+    private static final int WORK_HOURS_START_HOUR = 9;
+    /** End of the working day (exclusive) used by {@link #calcAfterHoursRatioAndRefactorRatio}. */
+    private static final int WORK_HOURS_END_HOUR = 18;
+
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
@@ -418,7 +423,7 @@ public class MetricsService {
             DayOfWeek dow = zdt.getDayOfWeek();
             int hour = zdt.getHour();
             boolean isWeekend = dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY;
-            boolean isWorkHours = hour >= 9 && hour < 18;
+            boolean isWorkHours = hour >= WORK_HOURS_START_HOUR && hour < WORK_HOURS_END_HOUR;
             if (isWeekend || !isWorkHours) outOfHours++;
 
             // REFACTOR_RATIO only counts commits where diff stats have been enriched.

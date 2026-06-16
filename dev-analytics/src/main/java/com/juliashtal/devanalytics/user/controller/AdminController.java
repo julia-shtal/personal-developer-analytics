@@ -49,6 +49,7 @@ public class AdminController {
         return ResponseEntity.ok(users);
     }
 
+    @Operation(summary = "Change a user's role")
     @PutMapping("/users/{userId}/role")
     public ResponseEntity<UserSummary> updateUserRole(
             @PathVariable Long userId,
@@ -56,6 +57,7 @@ public class AdminController {
         return ResponseEntity.ok(UserSummary.from(userService.updateRole(userId, request.getRole())));
     }
 
+    @Operation(summary = "Delete a user account")
     @DeleteMapping("/users/{userId}")
     public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
         userService.delete(userId);

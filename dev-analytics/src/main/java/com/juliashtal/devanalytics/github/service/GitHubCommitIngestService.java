@@ -94,55 +94,11 @@ public class GitHubCommitIngestService {
         }
 
         try {
-            List<JsonNode> newNodes = new ArrayList<>();
-            String newestHash = null;
-            boolean done = false;
-            int page = 1;
+            NewCommitNodes newCommits = fetchNewCommitNodes(apiBase, token, repo, lastFetched, existingHashes, jobState);
+            List<GitCommitEntity> saved = saveAsPending(newCommits.nodes(), repo);
 
-            while (!done) {
-                String url = apiBase + "/repos/" + repo.getName()
-                        + "/commits?per_page=" + PAGE_SIZE + "&page=" + page;
-
-                HttpResponse<String> response = sendWithRateLimitRetry(buildRequest(url, token), repo.getName());
-
-                if (response.statusCode() != 200) {
-                    throw new GitHubException("GitHub API returned " + response.statusCode()
-                            + " fetching commits for " + repo.getName());
-                }
-
-                JsonNode commits = objectMapper.readTree(response.body());
-                if (!commits.isArray() || commits.isEmpty()) break;
-
-                for (JsonNode node : commits) {
-                    String hash = node.path("sha").asText();
-
-                    if (lastFetched != null && lastFetched.equals(hash)) {
-                        done = true;
-                        break;
-                    }
-
-                    if (jobState != null) {
-                        jobState.phaseProcessed.incrementAndGet();
-                        jobState.totalProcessed.incrementAndGet();
-                    }
-
-                    if (existingHashes.contains(hash)) continue;
-
-                    if (newestHash == null) newestHash = hash;
-                    newNodes.add(node);
-                }
-
-                String linkHeader = response.headers().firstValue("Link").orElse("");
-                if (!linkHeader.contains("rel=\"next\"")) done = true;
-                page++;
-
-                if (!done) Thread.sleep(PAGE_PAUSE_MS);
-            }
-
-            List<GitCommitEntity> saved = saveAsPending(newNodes, repo);
-
-            if (newestHash != null && !newestHash.equals(lastFetched)) {
-                repo.setLastFetchedCommitHash(newestHash);
+            if (newCommits.newestHash() != null && !newCommits.newestHash().equals(lastFetched)) {
+                repo.setLastFetchedCommitHash(newCommits.newestHash());
             }
             repo.setLastScanAt(LocalDateTime.now());
             cfg.setLastSuccessSync(LocalDateTime.now());
@@ -159,6 +115,69 @@ public class GitHubCommitIngestService {
             throw new GitHubException("Interrupted while ingesting GitHub commits for " + repo.getName(), e);
         }
     }
+
+    /**
+     * Pages through the GitHub commits list endpoint, collecting nodes for commits not yet in
+     * {@code existingHashes}, until {@code lastFetched} is encountered or pages run out.
+     * Pauses {@link #PAGE_PAUSE_MS} between page requests to avoid secondary rate limits.
+     */
+    private NewCommitNodes fetchNewCommitNodes(String apiBase, String token, GitRepositoryEntity repo,
+                                                String lastFetched, Set<String> existingHashes,
+                                                SyncJobTracker.JobState jobState)
+            throws IOException, InterruptedException {
+        List<JsonNode> newNodes = new ArrayList<>();
+        String newestHash = null;
+        boolean done = false;
+        int page = 1;
+
+        while (!done) {
+            String url = apiBase + "/repos/" + repo.getName()
+                    + "/commits?per_page=" + PAGE_SIZE + "&page=" + page;
+
+            HttpResponse<String> response = sendWithRateLimitRetry(buildRequest(url, token), repo.getName());
+
+            if (response.statusCode() != 200) {
+                throw new GitHubException("GitHub API returned " + response.statusCode()
+                        + " fetching commits for " + repo.getName());
+            }
+
+            JsonNode commits = objectMapper.readTree(response.body());
+            if (!commits.isArray() || commits.isEmpty()) break;
+
+            for (JsonNode node : commits) {
+                String hash = node.path("sha").asText();
+
+                if (lastFetched != null && lastFetched.equals(hash)) {
+                    done = true;
+                    break;
+                }
+
+                if (jobState != null) {
+                    jobState.phaseProcessed.incrementAndGet();
+                    jobState.totalProcessed.incrementAndGet();
+                }
+
+                if (existingHashes.contains(hash)) continue;
+
+                if (newestHash == null) newestHash = hash;
+                newNodes.add(node);
+            }
+
+            String linkHeader = response.headers().firstValue("Link").orElse("");
+            if (!linkHeader.contains("rel=\"next\"")) done = true;
+            page++;
+
+            if (!done) Thread.sleep(PAGE_PAUSE_MS);
+        }
+
+        return new NewCommitNodes(newNodes, newestHash);
+    }
+
+    /**
+     * Carries the new commit JSON nodes found by {@link #fetchNewCommitNodes} plus the
+     * newest commit hash among them (or {@code null} if none were new).
+     */
+    private record NewCommitNodes(List<JsonNode> nodes, String newestHash) {}
 
     /**
      * Builds and saves commit entities with {@code statsStatus=PENDING}.

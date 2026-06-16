@@ -36,6 +36,11 @@ public class MetricsAnomalyService {
             ISSUE_LEAD_TIME_HOURS_MEDIAN, REVIEW_RESPONSE_TIME_HOURS_MEDIAN
     );
 
+    /** Minimum number of observations required before an anomaly check is meaningful. */
+    private static final int ANOMALY_MIN_SAMPLE_SIZE = 3;
+    /** A value more than this many standard deviations from the mean is flagged as anomalous. */
+    private static final double ANOMALY_STD_DEV_THRESHOLD = 2.0;
+
     private final MetricSnapshotService metricSnapshotService;
 
     public Map<MetricType, Boolean> computeAnomalies(User user, LocalDate from, LocalDate to) {
@@ -56,10 +61,10 @@ public class MetricsAnomalyService {
 
     private boolean hasAnomaly(List<Double> values) {
         int n = values.size();
-        if (n < 3) return false;
+        if (n < ANOMALY_MIN_SAMPLE_SIZE) return false;
         double mean = values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
         double variance = values.stream().mapToDouble(v -> (v - mean) * (v - mean)).average().orElse(0);
         double stdDev = Math.sqrt(variance);
-        return values.stream().anyMatch(v -> Math.abs(v - mean) > 2 * stdDev);
+        return values.stream().anyMatch(v -> Math.abs(v - mean) > ANOMALY_STD_DEV_THRESHOLD * stdDev);
     }
 }

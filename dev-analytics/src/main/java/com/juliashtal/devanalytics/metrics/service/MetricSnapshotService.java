@@ -73,6 +73,11 @@ public class MetricSnapshotService {
                 userIds, teamId, metricType, repo, from, to);
     }
 
+    /** Latest personal (team IS NULL) snapshot date for a user — used for the dashboard freshness indicator. */
+    public Optional<LocalDate> findMaxPersonalDate(Long userId) {
+        return repository.findMaxPersonalDate(userId);
+    }
+
     public MetricSnapshot getExisting(
             Long userId,
             Long teamId,

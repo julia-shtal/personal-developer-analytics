@@ -1,7 +1,9 @@
 package com.juliashtal.devanalytics.datasource.service;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
+import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.service.GitLocalCollector;
 import com.juliashtal.devanalytics.github.service.GitHubCollector;
@@ -14,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -42,87 +45,107 @@ public class DataSourceCollectService {
         DataSourceConfig cfg = dataSourceService.getForUser(userId, dataSourceId);
         log.info("Collection started: dataSourceId={}, type={}, userId={}", dataSourceId, cfg.getType(), userId);
 
-        int total = 0;
-        StringBuilder summary = new StringBuilder();
-
         // Inform the tracker how many phases this job has so the UI can show "phase N of M".
         if (jobState != null) {
-            jobState.totalPhases = switch (cfg.getType()) {
-                case GITHUB -> {
-                    var repos = gitRepoRepository.findAllByDataSourceConfig(cfg);
-                    // phase 3 (issues) is added only if at least one repo has the flag on
-                    boolean anyIssues = repos.stream().anyMatch(r -> r.isCollectIssues());
-                    yield anyIssues ? 3 : 2;
-                }
-                default -> 1;
-            };
+            jobState.totalPhases = countPhases(cfg);
         }
 
-        switch (cfg.getType()) {
-            case GIT_LOCAL -> {
-                for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
-                    try {
-                        if (jobState != null) tracker.setPhase(jobState, "commits", -1);
-                        int n = gitLocalCollector.collectForRepository(repo.getId(), jobState);
-                        total += n;
-                        summary.append("Local ").append(repo.getName()).append(": ").append(n).append(" commits. ");
-                    } catch (Exception e) {
-                        log.warn("Collection failed for repo {}: {}", repo.getId(), e.getMessage());
-                    }
-                }
-            }
-            case GITHUB -> {
-                for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
-                    try {
-                        if (jobState != null) tracker.setPhase(jobState, "commits", -1);
-                        int commits = gitHubCollector.collectForRepository(repo.getId(), jobState);
-
-                        if (jobState != null) tracker.setPhase(jobState, "pull requests", -1);
-                        int prs = prCollector.collectForRepository(repo.getId(), jobState);
-
-                        int issues = 0;
-                        if (repo.isCollectIssues()) {
-                            if (jobState != null) tracker.setPhase(jobState, "issues", -1);
-                            issues = issuesCollector.collectIssuesForRepo(cfg, repo);
-                        }
-
-                        total += commits + prs + issues;
-                        summary.append(repo.getName()).append(": ").append(commits)
-                               .append(" commits, ").append(prs).append(" PRs");
-                        if (repo.isCollectIssues()) summary.append(", ").append(issues).append(" issues");
-                        summary.append(". ");
-                    } catch (Exception e) {
-                        log.warn("Collection failed for repo {}: {}", repo.getId(), e.getMessage());
-                    }
-                }
-            }
-            case JIRA -> {
-                var jiraProjects = jiraProjectService.listTrackedProjects(cfg);
-                if (jiraProjects.isEmpty()) {
-                    log.warn("JIRA datasource {} has no tracked projects — nothing to collect", dataSourceId);
-                } else {
-                    for (var project : jiraProjects) {
-                        try {
-                            if (jobState != null) tracker.setPhase(jobState, "jira issues", -1);
-                            int n = jiraCollector.collectIssues(project);
-                            total += n;
-                            summary.append("Jira[").append(project.getProjectKey()).append("]: ")
-                                   .append(n).append(" issues. ");
-                        } catch (Exception e) {
-                            log.warn("Jira collection failed for project {}: {}", project.getProjectKey(), e.getMessage());
-                            summary.append("Jira[").append(project.getProjectKey())
-                                   .append("] failed: ").append(e.getMessage()).append(" ");
-                        }
-                    }
-                }
-            }
-        }
+        CollectionResult result = switch (cfg.getType()) {
+            case GIT_LOCAL -> collectGitLocalRepos(cfg, jobState);
+            case GITHUB -> collectGitHubRepos(cfg, jobState);
+            case JIRA -> collectJiraProjects(cfg, dataSourceId, jobState);
+        };
 
         cfg.setLastSuccessSync(LocalDateTime.now());
         configRepository.save(cfg);
 
-        String result = summary.isEmpty() ? "Nothing to collect (no repos registered)" : summary.toString().trim();
-        log.info("Collection finished: dataSourceId={}, total={}, summary={}", dataSourceId, total, result);
-        return result;
+        String summary = result.summary().isEmpty()
+                ? "Nothing to collect (no repos registered)" : result.summary().trim();
+        log.info("Collection finished: dataSourceId={}, total={}, summary={}", dataSourceId, result.total(), summary);
+        return summary;
     }
+
+    /**
+     * Counts the phases for the job tracker's "phase N of M" display. GitHub jobs always run
+     * commits + PRs, plus an issues phase if at least one repo has issue collection enabled.
+     */
+    private int countPhases(DataSourceConfig cfg) {
+        if (Objects.requireNonNull(cfg.getType()) == DataSourceType.GITHUB) {
+            var repos = gitRepoRepository.findAllByDataSourceConfig(cfg);
+            boolean anyIssues = repos.stream().anyMatch(GitRepositoryEntity::isCollectIssues);
+            return anyIssues ? 3 : 2;
+        }
+        return 1;
+    }
+
+    private CollectionResult collectGitLocalRepos(DataSourceConfig cfg, SyncJobTracker.JobState jobState) {
+        int total = 0;
+        StringBuilder summary = new StringBuilder();
+        for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
+            try {
+                if (jobState != null) tracker.setPhase(jobState, "commits", -1);
+                int n = gitLocalCollector.collectForRepository(repo.getId(), jobState);
+                total += n;
+                summary.append("Local ").append(repo.getName()).append(": ").append(n).append(" commits. ");
+            } catch (Exception e) {
+                log.warn("Collection failed for repo {}: {}", repo.getId(), e.getMessage());
+            }
+        }
+        return new CollectionResult(total, summary.toString());
+    }
+
+    private CollectionResult collectGitHubRepos(DataSourceConfig cfg, SyncJobTracker.JobState jobState) {
+        int total = 0;
+        StringBuilder summary = new StringBuilder();
+        for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
+            try {
+                if (jobState != null) tracker.setPhase(jobState, "commits", -1);
+                int commits = gitHubCollector.collectForRepository(repo.getId(), jobState);
+
+                if (jobState != null) tracker.setPhase(jobState, "pull requests", -1);
+                int prs = prCollector.collectForRepository(repo.getId(), jobState);
+
+                int issues = 0;
+                if (repo.isCollectIssues()) {
+                    if (jobState != null) tracker.setPhase(jobState, "issues", -1);
+                    issues = issuesCollector.collectIssuesForRepo(cfg, repo);
+                }
+
+                total += commits + prs + issues;
+                summary.append(repo.getName()).append(": ").append(commits)
+                       .append(" commits, ").append(prs).append(" PRs");
+                if (repo.isCollectIssues()) summary.append(", ").append(issues).append(" issues");
+                summary.append(". ");
+            } catch (Exception e) {
+                log.warn("Collection failed for repo {}: {}", repo.getId(), e.getMessage());
+            }
+        }
+        return new CollectionResult(total, summary.toString());
+    }
+
+    private CollectionResult collectJiraProjects(DataSourceConfig cfg, Long dataSourceId, SyncJobTracker.JobState jobState) {
+        int total = 0;
+        StringBuilder summary = new StringBuilder();
+        var jiraProjects = jiraProjectService.listTrackedProjects(cfg);
+        if (jiraProjects.isEmpty()) {
+            log.warn("JIRA datasource {} has no tracked projects — nothing to collect", dataSourceId);
+        } else {
+            for (var project : jiraProjects) {
+                try {
+                    if (jobState != null) tracker.setPhase(jobState, "jira issues", -1);
+                    int n = jiraCollector.collectIssues(project);
+                    total += n;
+                    summary.append("Jira[").append(project.getProjectKey()).append("]: ")
+                           .append(n).append(" issues. ");
+                } catch (Exception e) {
+                    log.warn("Jira collection failed for project {}: {}", project.getProjectKey(), e.getMessage());
+                    summary.append("Jira[").append(project.getProjectKey())
+                           .append("] failed: ").append(e.getMessage()).append(" ");
+                }
+            }
+        }
+        return new CollectionResult(total, summary.toString());
+    }
+
+    private record CollectionResult(int total, String summary) {}
 }

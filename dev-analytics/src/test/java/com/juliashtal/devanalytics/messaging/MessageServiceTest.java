@@ -18,6 +18,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 
 import java.time.Instant;
+import java.sql.Timestamp;
+import com.juliashtal.devanalytics.messaging.dto.InboxEntryDto;
 import java.util.List;
 import java.util.Optional;
 
@@ -146,5 +148,44 @@ class MessageServiceTest {
         when(messageRepository.countUnread(1L)).thenReturn(0L);
 
         assertThat(service.unreadCount(sender).count()).isZero();
+    }
+
+    // ── inbox ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void inbox_mapsRawRowsToInboxEntries() {
+        Object[] row = new Object[] {
+                2L,                                                      // partnerId
+                "bob",                                                   // partnerUsername
+                "preset-02",                                             // partnerAvatarPreset
+                true,                                                    // partnerHasCustomAvatar
+                "see you tomorrow",                                      // lastBody
+                Timestamp.from(Instant.parse("2024-01-15T10:00:00Z")),   // lastMessageAt
+                2L,                                                      // lastSenderId
+                3L                                                       // unreadCount
+        };
+        List<Object[]> rows = new java.util.ArrayList<>();
+        rows.add(row);
+        when(messageRepository.findInboxRaw(1L)).thenReturn(rows);
+
+        List<InboxEntryDto> result = service.inbox(sender);
+
+        assertThat(result).hasSize(1);
+        InboxEntryDto entry = result.get(0);
+        assertThat(entry.partnerId()).isEqualTo(2L);
+        assertThat(entry.partnerUsername()).isEqualTo("bob");
+        assertThat(entry.partnerAvatarPreset()).isEqualTo("preset-02");
+        assertThat(entry.partnerHasCustomAvatar()).isTrue();
+        assertThat(entry.lastBody()).isEqualTo("see you tomorrow");
+        assertThat(entry.lastMessageAt()).isEqualTo(Instant.parse("2024-01-15T10:00:00Z"));
+        assertThat(entry.lastSenderId()).isEqualTo(2L);
+        assertThat(entry.unreadCount()).isEqualTo(3L);
+    }
+
+    @Test
+    void inbox_noConversations_returnsEmptyList() {
+        when(messageRepository.findInboxRaw(1L)).thenReturn(List.of());
+
+        assertThat(service.inbox(sender)).isEmpty();
     }
 }

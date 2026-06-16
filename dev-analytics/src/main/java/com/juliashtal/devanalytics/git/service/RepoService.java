@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.git.service;
 
+import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
@@ -25,6 +26,16 @@ public class RepoService {
     public GitRepositoryEntity getById(Long repoId) {
         return gitRepoRepository.findById(repoId)
                 .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
+    }
+
+    /** Returns the repo if the user owns it or is subscribed to it; otherwise denies access. */
+    public GitRepositoryEntity getAccessibleRepo(Long userId, Long repoId) {
+        GitRepositoryEntity repo = getById(repoId);
+        boolean owned = repo.getDataSourceConfig().getUser().getId().equals(userId);
+        if (!owned && !userRepoRegRepository.existsByUserIdAndRepositoryId(userId, repoId)) {
+            throw new ForbiddenException("Access denied to repository: " + repoId);
+        }
+        return repo;
     }
 
     public List<RepoDto> listAccessible(Long dataSourceId) {

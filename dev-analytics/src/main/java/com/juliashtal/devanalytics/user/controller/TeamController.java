@@ -24,23 +24,27 @@ public class TeamController {
 
     private final TeamService teamService;
 
+    @Operation(summary = "Create a new team with the current user as manager")
     @PostMapping
     public ResponseEntity<TeamDto> createTeam(@RequestBody CreateTeamRequest request) {
         return ResponseEntity.ok(teamService.createTeam(request.getName()));
     }
 
+    @Operation(summary = "List teams managed by the current user")
     @GetMapping
     public ResponseEntity<List<TeamDto>> getMyTeams() {
         return ResponseEntity.ok(teamService.getMyTeams());
     }
 
     /** Teams the current user is a member of (not manager). Accessible to any authenticated role. */
+    @Operation(summary = "List teams the current user belongs to as a member")
     @GetMapping("/me/memberships")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<TeamMembershipDto>> getMyMemberships() {
         return ResponseEntity.ok(teamService.getMyMemberships());
     }
 
+    @Operation(summary = "Add a member to a team")
     @PostMapping("/{teamId}/members")
     public ResponseEntity<TeamDto> addMember(
             @PathVariable Long teamId,
@@ -48,6 +52,7 @@ public class TeamController {
         return ResponseEntity.ok(teamService.addMember(teamId, request.getUserId()));
     }
 
+    @Operation(summary = "Remove a member from a team")
     @DeleteMapping("/{teamId}/members/{userId}")
     public ResponseEntity<TeamDto> removeMember(
             @PathVariable Long teamId,
@@ -55,6 +60,7 @@ public class TeamController {
         return ResponseEntity.ok(teamService.removeMember(teamId, userId));
     }
 
+    @Operation(summary = "Rename a team")
     @PutMapping("/{teamId}")
     public ResponseEntity<TeamDto> renameTeam(
             @PathVariable Long teamId,
