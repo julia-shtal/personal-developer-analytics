@@ -20,6 +20,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -87,5 +88,67 @@ class PasswordResetServiceTest {
         verify(emailService).sendPasswordResetEmail(
                 eq("alice@example.com"),
                 contains("/reset-password?token=" + savedToken.getToken()));
+    }
+
+    @Test
+    void resetPassword_unknownToken_throwsIllegalArgument() {
+        when(tokenRepository.findByToken("bad-token")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.resetPassword("bad-token", "newPassword123"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid reset token");
+    }
+
+    @Test
+    void resetPassword_usedToken_throwsIllegalArgument() {
+        User user = new User();
+        user.setId(1L);
+        PasswordResetToken resetToken = new PasswordResetToken();
+        resetToken.setUser(user);
+        resetToken.setToken("used-token");
+        resetToken.setUsed(true);
+        resetToken.setExpiresAt(Instant.now().plusSeconds(60));
+        when(tokenRepository.findByToken("used-token")).thenReturn(Optional.of(resetToken));
+
+        assertThatThrownBy(() -> service.resetPassword("used-token", "newPassword123"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("already been used");
+    }
+
+    @Test
+    void resetPassword_expiredToken_throwsIllegalArgument() {
+        User user = new User();
+        user.setId(1L);
+        PasswordResetToken resetToken = new PasswordResetToken();
+        resetToken.setUser(user);
+        resetToken.setToken("expired-token");
+        resetToken.setUsed(false);
+        resetToken.setExpiresAt(Instant.now().minusSeconds(60));
+        when(tokenRepository.findByToken("expired-token")).thenReturn(Optional.of(resetToken));
+
+        assertThatThrownBy(() -> service.resetPassword("expired-token", "newPassword123"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("expired");
+    }
+
+    @Test
+    void resetPassword_validToken_updatesPasswordAndMarksTokenUsed() {
+        User user = new User();
+        user.setId(1L);
+        user.setPasswordHash("oldHash");
+        PasswordResetToken resetToken = new PasswordResetToken();
+        resetToken.setUser(user);
+        resetToken.setToken("valid-token");
+        resetToken.setUsed(false);
+        resetToken.setExpiresAt(Instant.now().plusSeconds(60));
+        when(tokenRepository.findByToken("valid-token")).thenReturn(Optional.of(resetToken));
+        when(passwordEncoder.encode("newPassword123")).thenReturn("newHash");
+
+        service.resetPassword("valid-token", "newPassword123");
+
+        assertThat(user.getPasswordHash()).isEqualTo("newHash");
+        assertThat(resetToken.isUsed()).isTrue();
+        verify(userRepository).save(user);
+        verify(tokenRepository).save(resetToken);
     }
 }
