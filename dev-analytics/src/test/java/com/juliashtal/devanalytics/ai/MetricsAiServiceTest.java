@@ -245,7 +245,7 @@ class MetricsAiServiceTest {
 
         assertThatThrownBy(() -> service.generateTeamSummary(developer, 10L, from, to))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessage("Only the team manager or an admin can generate team AI summaries");
+                .hasMessage("Only the team manager or an admin can generate AI summaries for this team");
 
         verify(llmClient, never()).complete(any(), any(), any(), anyBoolean());
         verify(persistenceService, never()).saveTeam(any(), any());
@@ -278,7 +278,7 @@ class MetricsAiServiceTest {
 
         assertThatThrownBy(() -> service.generateMemberSummary(developer, 10L, 3L, from, to))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessage("Only the team manager or an admin can generate member AI summaries");
+                .hasMessage("Only the team manager or an admin can generate AI summaries for this team");
 
         verify(llmClient, never()).complete(any(), any(), any(), anyBoolean());
         verify(persistenceService, never()).savePersonal(any(), any());

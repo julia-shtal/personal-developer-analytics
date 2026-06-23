@@ -4,12 +4,12 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.metrics.model.*;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
+import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
@@ -47,7 +47,7 @@ class MetricsProjectionTest {
     @Mock UserRepository userRepository;
     @Mock TeamRepository teamRepository;
     @Mock GitRepositoryEntityRepository gitRepoRepository;
-    @Mock UserRepoRegistrationRepository userRepoRegRepository;
+    @Mock RepoScopeResolver repoScopeResolver;
 
     MetricsService service;
 
@@ -63,7 +63,7 @@ class MetricsProjectionTest {
         service = new MetricsService(
                 snapshotRepository, commitRepository, pullRequestRepository,
                 prReviewRepository, issueRepository, userRepository,
-                teamRepository, gitRepoRepository, userRepoRegRepository);
+                teamRepository, gitRepoRepository, repoScopeResolver);
 
         user = new User();
         user.setId(USER_ID);
@@ -75,8 +75,7 @@ class MetricsProjectionTest {
         repo.setId(REPO_ID);
 
         lenient().when(userRepository.getReferenceById(USER_ID)).thenReturn(user);
-        lenient().when(userRepoRegRepository.findRepoIdsByUserId(USER_ID)).thenReturn(List.of(REPO_ID));
-        lenient().when(teamRepository.findByMembersId(USER_ID)).thenReturn(List.of());
+        lenient().when(repoScopeResolver.resolve(user, null)).thenReturn(List.of(REPO_ID));
         lenient().when(gitRepoRepository.getReferenceById(REPO_ID)).thenReturn(repo);
         lenient().when(snapshotRepository.findExisting(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(Optional.empty());

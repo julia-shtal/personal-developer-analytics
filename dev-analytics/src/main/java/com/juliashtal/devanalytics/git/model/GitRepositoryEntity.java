@@ -5,7 +5,6 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 
 
 /**
@@ -68,7 +67,7 @@ public class GitRepositoryEntity {
     // for incremental collecting
     private String lastFetchedCommitHash;
 
-    private LocalDateTime lastScanAt;
+    private Instant lastScanAt;
 
     private Instant createdAt;
     private Instant updatedAt;

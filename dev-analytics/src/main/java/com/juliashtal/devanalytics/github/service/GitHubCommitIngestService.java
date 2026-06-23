@@ -21,7 +21,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -100,8 +99,8 @@ public class GitHubCommitIngestService {
             if (newCommits.newestHash() != null && !newCommits.newestHash().equals(lastFetched)) {
                 repo.setLastFetchedCommitHash(newCommits.newestHash());
             }
-            repo.setLastScanAt(LocalDateTime.now());
-            cfg.setLastSuccessSync(LocalDateTime.now());
+            repo.setLastScanAt(Instant.now());
+            cfg.setLastSuccessSync(Instant.now());
             repoRepository.save(repo);
 
             log.info("Ingested {} new commits for {} (all PENDING, stats to be enriched)",

@@ -94,7 +94,7 @@ class MetricsAggregationTest {
                         snapshot(MetricType.DAILY_COMMITS_COUNT, DAY, 7)
                 ));
 
-        mvc.perform(get("/api/metrics/daily-commits")
+        mvc.perform(get("/api/metrics/daily-commits-count")
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())
@@ -112,7 +112,7 @@ class MetricsAggregationTest {
                         snapshot(MetricType.DAILY_CHURN_RATIO, DAY, 0.5)
                 ));
 
-        mvc.perform(get("/api/metrics/daily-churn")
+        mvc.perform(get("/api/metrics/daily-churn-ratio")
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())

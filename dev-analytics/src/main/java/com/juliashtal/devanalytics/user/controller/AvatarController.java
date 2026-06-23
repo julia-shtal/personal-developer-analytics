@@ -36,6 +36,7 @@ public class AvatarController {
      */
     @Operation(summary = "Serve a user's avatar image (unauthenticated; 404 if no custom upload)")
     @GetMapping("/{id}/avatar")
+    @PreAuthorize("permitAll()")
     public ResponseEntity<byte[]> getAvatar(@PathVariable Long id, WebRequest request) {
         return avatarService.getAvatarResponse(id, request);
     }
@@ -61,6 +62,7 @@ public class AvatarController {
     /** List available preset IDs. */
     @Operation(summary = "List available preset avatar IDs")
     @GetMapping("/avatar/presets")
+    @PreAuthorize("permitAll()")
     public List<String> getPresets() {
         return AvatarService.PRESET_IDS;
     }

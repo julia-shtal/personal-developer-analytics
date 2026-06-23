@@ -57,7 +57,7 @@ public class MetricsController {
     }
 
     @Operation(summary = "Daily Commits Count series for the current user")
-    @GetMapping("/daily-commits")
+    @GetMapping("/daily-commits-count")
     public List<MetricPointDto> getDailyCommits(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -107,7 +107,7 @@ public class MetricsController {
     }
 
     @Operation(summary = "Daily Churn Ratio series for the current user")
-    @GetMapping("/daily-churn")
+    @GetMapping("/daily-churn-ratio")
     public List<MetricPointDto> getDailyChurn(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -197,7 +197,7 @@ public class MetricsController {
     // =========================================================================
 
     @Operation(summary = "After-Hours Commit Ratio for the current user")
-    @GetMapping("/after-hours-ratio")
+    @GetMapping("/after-hours-commit-ratio")
     public MetricAggregateDto getAfterHoursRatio(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
@@ -224,7 +224,7 @@ public class MetricsController {
     }
 
     @Operation(summary = "Merge Frequency (merges to main per ISO week, average) for the current user")
-    @GetMapping("/merge-to-main-frequency")
+    @GetMapping("/merge-to-main-frequency-per-week")
     public MetricAggregateDto getMergeFrequency(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
@@ -233,7 +233,7 @@ public class MetricsController {
     }
 
     @Operation(summary = "Knowledge Silo Score for the current user")
-    @GetMapping("/knowledge-silo")
+    @GetMapping("/knowledge-silo-score")
     public MetricAggregateDto getKnowledgeSilo(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -285,7 +285,7 @@ public class MetricsController {
      * Optional repoId scopes results to snapshots for that specific repository.
      */
     @Operation(summary = "Per-member + aggregate Daily Commits Count series for a team")
-    @GetMapping("/teams/{teamId}/daily-commits")
+    @GetMapping("/teams/{teamId}/daily-commits-count")
     @PreAuthorize("@teamAccessGuard.canRead(#teamId, authentication)")
     public List<TeamMetricPointDto> getTeamDailyCommits(
             @PathVariable Long teamId,
@@ -406,7 +406,7 @@ public class MetricsController {
     }
 
     @Operation(summary = "Daily Commits Count series for one team member (manager/admin only)")
-    @GetMapping("/teams/{teamId}/members/{memberId}/daily-commits")
+    @GetMapping("/teams/{teamId}/members/{memberId}/daily-commits-count")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
     public List<MetricPointDto> getMemberDailyCommits(
             @PathVariable Long teamId,
@@ -430,7 +430,7 @@ public class MetricsController {
     }
 
     @Operation(summary = "Daily Churn Ratio series for one team member (manager/admin only)")
-    @GetMapping("/teams/{teamId}/members/{memberId}/daily-churn")
+    @GetMapping("/teams/{teamId}/members/{memberId}/daily-churn-ratio")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
     public List<MetricPointDto> getMemberDailyChurn(
             @PathVariable Long teamId,

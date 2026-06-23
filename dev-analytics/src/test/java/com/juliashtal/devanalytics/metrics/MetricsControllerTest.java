@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Slice tests for the remaining {@link MetricsController} endpoints not already covered by
  * {@link MetricsAggregationTest} (which exercises the cross-repo aggregation formulas for
- * /daily-commits, /daily-churn and /pr-lead-time).
+ * /daily-commits-count, /daily-churn-ratio and /pr-lead-time).
  */
 @WebMvcTest(MetricsController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -250,7 +250,7 @@ class MetricsControllerTest {
                 any(), eq(MetricType.AFTER_HOURS_COMMIT_RATIO), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.AFTER_HOURS_COMMIT_RATIO, 0.2, FROM, TO)));
 
-        mvc.perform(get("/api/metrics/after-hours-ratio")
+        mvc.perform(get("/api/metrics/after-hours-commit-ratio")
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())
@@ -292,7 +292,7 @@ class MetricsControllerTest {
                 any(), eq(MetricType.MERGE_TO_MAIN_FREQUENCY_PER_WEEK), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.MERGE_TO_MAIN_FREQUENCY_PER_WEEK, 3.0, FROM, TO)));
 
-        mvc.perform(get("/api/metrics/merge-to-main-frequency")
+        mvc.perform(get("/api/metrics/merge-to-main-frequency-per-week")
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())
@@ -306,7 +306,7 @@ class MetricsControllerTest {
                 any(), eq(MetricType.KNOWLEDGE_SILO_SCORE), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.KNOWLEDGE_SILO_SCORE, 0.6, FROM, TO)));
 
-        mvc.perform(get("/api/metrics/knowledge-silo")
+        mvc.perform(get("/api/metrics/knowledge-silo-score")
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())
@@ -412,7 +412,7 @@ class MetricsControllerTest {
         try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
             su.when(SecurityUtils::getCurrentUserRole).thenReturn(Role.MANAGER);
 
-            mvc.perform(get("/api/metrics/teams/{teamId}/daily-commits", TEAM_ID)
+            mvc.perform(get("/api/metrics/teams/{teamId}/daily-commits-count", TEAM_ID)
                             .param("from", FROM.toString())
                             .param("to", TO.toString()))
                     .andExpect(status().isOk())
@@ -439,7 +439,7 @@ class MetricsControllerTest {
         try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
             su.when(SecurityUtils::getCurrentUserRole).thenReturn(Role.DEVELOPER);
 
-            mvc.perform(get("/api/metrics/teams/{teamId}/daily-commits", TEAM_ID)
+            mvc.perform(get("/api/metrics/teams/{teamId}/daily-commits-count", TEAM_ID)
                             .param("from", FROM.toString())
                             .param("to", TO.toString()))
                     .andExpect(status().isOk())
@@ -577,7 +577,7 @@ class MetricsControllerTest {
                 eq(member), eq(team), eq(MetricType.DAILY_COMMITS_COUNT), eq(FROM), eq(TO)))
                 .thenReturn(List.of(teamSnapshot(member, MetricType.DAILY_COMMITS_COUNT, DAY, 4)));
 
-        mvc.perform(get("/api/metrics/teams/{teamId}/members/{memberId}/daily-commits", TEAM_ID, MEMBER_ID)
+        mvc.perform(get("/api/metrics/teams/{teamId}/members/{memberId}/daily-commits-count", TEAM_ID, MEMBER_ID)
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())
@@ -619,7 +619,7 @@ class MetricsControllerTest {
                 eq(member), eq(team), eq(MetricType.DAILY_CHURN_RATIO), eq(FROM), eq(TO)))
                 .thenReturn(List.of(teamSnapshot(member, MetricType.DAILY_CHURN_RATIO, DAY, 0.25)));
 
-        mvc.perform(get("/api/metrics/teams/{teamId}/members/{memberId}/daily-churn", TEAM_ID, MEMBER_ID)
+        mvc.perform(get("/api/metrics/teams/{teamId}/members/{memberId}/daily-churn-ratio", TEAM_ID, MEMBER_ID)
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())

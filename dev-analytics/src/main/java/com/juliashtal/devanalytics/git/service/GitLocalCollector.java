@@ -28,7 +28,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -83,7 +82,7 @@ public class GitLocalCollector {
 
             if (pending.isEmpty()) {
                 log.debug("No new commits for local repo id={}", repoId);
-                dbRepo.setLastScanAt(LocalDateTime.now());
+                dbRepo.setLastScanAt(Instant.now());
                 repoRepository.save(dbRepo);
                 return 0;
             }
@@ -199,10 +198,10 @@ public class GitLocalCollector {
         if (newestHash != null && !newestHash.equals(dbRepo.getLastFetchedCommitHash())) {
             dbRepo.setLastFetchedCommitHash(newestHash);
         }
-        dbRepo.setLastScanAt(LocalDateTime.now());
+        dbRepo.setLastScanAt(Instant.now());
 
         DataSourceConfig cfg = dbRepo.getDataSourceConfig();
-        cfg.setLastSuccessSync(LocalDateTime.now());
+        cfg.setLastSuccessSync(Instant.now());
 
         repoRepository.save(dbRepo);
     }

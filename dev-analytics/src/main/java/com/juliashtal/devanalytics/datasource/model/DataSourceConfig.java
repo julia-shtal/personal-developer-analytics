@@ -6,7 +6,7 @@ import com.juliashtal.devanalytics.user.model.User;
 import jakarta.persistence.*;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Data
 @Entity
@@ -45,18 +45,18 @@ public class DataSourceConfig {
     private String apiTokenEncrypted;
 
     private boolean enabled = true;
-    private LocalDateTime lastSuccessSync;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private Instant lastSuccessSync;
+    private Instant createdAt;
+    private Instant updatedAt;
 
     @PrePersist
     public void prePersist() {
-        createdAt = LocalDateTime.now();
+        createdAt = Instant.now();
         updatedAt = createdAt;
     }
 
     @PreUpdate
     public void preUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = Instant.now();
     }
 }
