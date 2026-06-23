@@ -2,7 +2,7 @@ package com.juliashtal.devanalytics.git.model.dto;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record GitRepositoryDto(
         Long id,
@@ -10,7 +10,7 @@ public record GitRepositoryDto(
         String name,
         String localPath,
         String lastFetchedCommitHash,
-        LocalDateTime lastScanAt
+        Instant lastScanAt
 ) {
     public static GitRepositoryDto fromEntity(GitRepositoryEntity e) {
         return new GitRepositoryDto(

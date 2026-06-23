@@ -21,7 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -56,7 +56,7 @@ public class GitRepositoryService {
         repo.setName(req.getName());
         repo.setLocalPath(normalizedPath);
         repo.setLastFetchedCommitHash(null);
-        repo.setLastScanAt(LocalDateTime.now());
+        repo.setLastScanAt(Instant.now());
 
         GitRepositoryEntity saved = repoRepository.save(repo);
 

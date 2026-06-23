@@ -9,7 +9,7 @@ export const metricsApi = {
 
   // ── Core activity ──────────────────────────────────────────────────────────
   dailyCommits: (from: string, to: string, repoId?: number) =>
-    api.get<MetricPointDto[]>('/metrics/daily-commits', { params: { from, to, repoId } }),
+    api.get<MetricPointDto[]>('/metrics/daily-commits-count', { params: { from, to, repoId } }),
 
   dailyPrCreated: (from: string, to: string, repoId?: number) =>
     api.get<MetricPointDto[]>('/metrics/daily-pr-created', { params: { from, to, repoId } }),
@@ -18,7 +18,7 @@ export const metricsApi = {
     api.get<MetricPointDto[]>('/metrics/daily-pr-merged', { params: { from, to, repoId } }),
 
   dailyChurn: (from: string, to: string, repoId?: number) =>
-    api.get<MetricPointDto[]>('/metrics/daily-churn', { params: { from, to, repoId } }),
+    api.get<MetricPointDto[]>('/metrics/daily-churn-ratio', { params: { from, to, repoId } }),
 
   dailyIssuesClosed: (from: string, to: string, repoId?: number) =>
     api.get<MetricPointDto[]>('/metrics/daily-issues-closed', { params: { from, to, repoId } }),
@@ -48,13 +48,13 @@ export const metricsApi = {
 
   // ── Wellness & quality (Ticket 5 metrics) ─────────────────────────────────
   dailyAfterHours: (from: string, to: string) =>
-    api.get<MetricAggregateDto>('/metrics/after-hours-ratio', { params: { from, to } }),
+    api.get<MetricAggregateDto>('/metrics/after-hours-commit-ratio', { params: { from, to } }),
 
   dailyRefactorRatio: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/refactor-ratio', { params: { from, to } }),
 
   mergeToMain: (from: string, to: string) =>
-    api.get<MetricAggregateDto>('/metrics/merge-to-main-frequency', { params: { from, to } }),
+    api.get<MetricAggregateDto>('/metrics/merge-to-main-frequency-per-week', { params: { from, to } }),
 
   deepWorkStreak: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/deep-work-streak', { params: { from, to } }),
@@ -66,7 +66,7 @@ export const metricsApi = {
     api.get<MetricAggregateDto>('/metrics/pr-size-complexity', { params: { from, to, repoId } }),
 
   knowledgeSilo: (from: string, to: string, repoId?: number) =>
-    api.get<MetricAggregateDto>('/metrics/knowledge-silo', { params: { from, to, repoId } }),
+    api.get<MetricAggregateDto>('/metrics/knowledge-silo-score', { params: { from, to, repoId } }),
 
   freshness: () =>
     api.get<{ metricsComputedThrough?: string }>('/metrics/freshness'),
@@ -85,7 +85,7 @@ export const teamMetricsApi = {
     api.post(`/metrics/teams/${teamId}/calculate`, null, { params: { from, to } }),
 
   dailyCommits: (teamId: number, from: string, to: string, repoId?: number | null) =>
-    api.get<TeamMetricPointDto[]>(`/metrics/teams/${teamId}/daily-commits`, {
+    api.get<TeamMetricPointDto[]>(`/metrics/teams/${teamId}/daily-commits-count`, {
       params: { from, to, ...(repoId != null && { repoId }) },
     }),
 
@@ -106,5 +106,5 @@ export const teamMetricsApi = {
     api.get<MemberSummaryDto>(`/metrics/teams/${teamId}/members/${memberId}/summary`, { params: { from, to } }),
 
   memberDailyCommits: (teamId: number, memberId: number, from: string, to: string) =>
-    api.get<MetricPointDto[]>(`/metrics/teams/${teamId}/members/${memberId}/daily-commits`, { params: { from, to } }),
+    api.get<MetricPointDto[]>(`/metrics/teams/${teamId}/members/${memberId}/daily-commits-count`, { params: { from, to } }),
 };

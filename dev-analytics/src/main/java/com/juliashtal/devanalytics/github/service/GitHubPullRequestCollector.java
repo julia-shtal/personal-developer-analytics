@@ -23,7 +23,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +83,7 @@ public class GitHubPullRequestCollector {
         try {
             List<GitHubPullRequestEntity> allSaved = fetchAndSavePullRequests(repo, apiBase, token, existingPrs, jobState);
 
-            cfg.setLastSuccessSync(LocalDateTime.now());
+            cfg.setLastSuccessSync(Instant.now());
             repoRepository.save(repo);
 
             log.info("Ingested {} new/updated PRs for {} (all PENDING, to be enriched)",

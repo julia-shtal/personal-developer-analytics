@@ -8,9 +8,8 @@ import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
-import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
-import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
@@ -44,7 +43,7 @@ public class DataSeeder implements ApplicationRunner {
     private final DataSourceConfigRepository     dsRepo;
     private final GitRepositoryEntityRepository  gitRepoRepo;
     private final UserRepoRegistrationRepository registrationRepo;
-    private final MetricSnapshotRepository       snapshotRepo;
+    private final MetricsService                 metricsService;
     private final PasswordEncoder                encoder;
 
     @Override
@@ -199,20 +198,7 @@ public class DataSeeder implements ApplicationRunner {
     private void snap(User user, Team team, GitRepositoryEntity repo,
                       LocalDate date, MetricType type, double value,
                       LocalDate periodFrom, LocalDate periodTo) {
-        Long teamId = team != null ? team.getId() : null;
-        Long repoId = repo  != null ? repo.getId()  : null;
-        MetricSnapshot s = snapshotRepo
-                .findExisting(user.getId(), teamId, repoId, date, type.name(), periodFrom, periodTo)
-                .orElseGet(MetricSnapshot::new);
-        s.setUser(user);
-        s.setTeam(team);
-        s.setRepository(repo);
-        s.setDate(date);
-        s.setMetricType(type);
-        s.setValue(value);
-        s.setPeriodFrom(periodFrom);
-        s.setPeriodTo(periodTo);
-        snapshotRepo.save(s);
+        metricsService.saveMetricSnapshot(user, team, date, type, value, repo, periodFrom, periodTo);
     }
 
     private static Random rng(int seed) {

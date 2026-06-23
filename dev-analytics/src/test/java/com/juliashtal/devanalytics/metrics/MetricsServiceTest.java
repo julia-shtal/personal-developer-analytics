@@ -5,13 +5,13 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.metrics.model.*;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
+import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
@@ -48,7 +48,7 @@ class MetricsServiceTest {
     @Mock UserRepository userRepository;
     @Mock TeamRepository teamRepository;
     @Mock GitRepositoryEntityRepository gitRepoRepository;
-    @Mock UserRepoRegistrationRepository userRepoRegRepository;
+    @Mock RepoScopeResolver repoScopeResolver;
 
     @InjectMocks MetricsService service;
 
@@ -72,7 +72,7 @@ class MetricsServiceTest {
         repo.setId(REPO_ID);
 
         when(userRepository.getReferenceById(USER_ID)).thenReturn(user);
-        when(userRepoRegRepository.findRepoIdsByUserId(USER_ID)).thenReturn(List.of(REPO_ID));
+        when(repoScopeResolver.resolve(user, null)).thenReturn(List.of(REPO_ID));
         when(gitRepoRepository.getReferenceById(REPO_ID)).thenReturn(repo);
         when(snapshotRepository.findExisting(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(Optional.empty());
@@ -670,5 +670,34 @@ class MetricsServiceTest {
         service.calculateDailyMetrics(USER_ID, FROM, TO);
 
         assertThat(allSaves()).noneMatch(s -> s.getMetricType() == MERGE_WITHOUT_REVIEW_RATIO);
+    }
+
+    // ─── saveMetricSnapshot (QF-6) ────────────────────────────────────────────
+
+    @Test
+    void saveMetricSnapshot_newSnapshot_savesNewRow() {
+        when(snapshotRepository.findExisting(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.saveMetricSnapshot(user, null, FROM, DAILY_COMMITS_COUNT, 7.0, null, null, null);
+
+        verify(snapshotRepository).save(argThat(s ->
+                s.getValue() == 7.0 && s.getMetricType() == DAILY_COMMITS_COUNT && s.getUser() == user
+        ));
+    }
+
+    @Test
+    void saveMetricSnapshot_existingSnapshot_updatesValueWithoutDuplicate() {
+        MetricSnapshot existing = new MetricSnapshot();
+        existing.setId(99L);
+        existing.setValue(3.0);
+        when(snapshotRepository.findExisting(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Optional.of(existing));
+
+        service.saveMetricSnapshot(user, null, FROM, DAILY_COMMITS_COUNT, 7.0, null, null, null);
+
+        verify(snapshotRepository, times(1)).save(argThat(s ->
+                s.getId() == 99L && s.getValue() == 7.0
+        ));
     }
 }

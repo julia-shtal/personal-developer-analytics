@@ -15,7 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Objects;
 
 @Service
@@ -56,7 +56,7 @@ public class DataSourceCollectService {
             case JIRA -> collectJiraProjects(cfg, dataSourceId, jobState);
         };
 
-        cfg.setLastSuccessSync(LocalDateTime.now());
+        cfg.setLastSuccessSync(Instant.now());
         configRepository.save(cfg);
 
         String summary = result.summary().isEmpty()

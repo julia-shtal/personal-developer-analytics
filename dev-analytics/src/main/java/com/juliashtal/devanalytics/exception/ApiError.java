@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Data
 @Builder
@@ -15,8 +15,8 @@ import java.time.LocalDateTime;
 public class ApiError {
 
     @Schema(description = "Date and time when the error occurred", example = "25-05-2025 14:12:34")
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd-MM-yyyy' 'HH:mm:ss")
-    private LocalDateTime timestamp;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd-MM-yyyy HH:mm:ss", timezone = "UTC")
+    private Instant timestamp;
 
     @Schema(description = "HTTP status code", example = "500")
     private int status;

@@ -119,10 +119,7 @@ public class MetricsAiService {
     public MetricsSummaryDto generateTeamSummary(User requestingUser, Long teamId, LocalDate from, LocalDate to) {
         Team team = teamService.getById(teamId);
 
-        if (requestingUser.getRole() != Role.ADMIN
-                && !team.getManager().getId().equals(requestingUser.getId())) {
-            throw new ForbiddenException("Only the team manager or an admin can generate team AI summaries");
-        }
+        assertManagerOrAdmin(requestingUser, team);
 
         TeamMetricsContext ctx = buildTeamMetricsContext(team, from, to);
         String ctxJson = toJson(ctx);
@@ -153,10 +150,7 @@ public class MetricsAiService {
                                                     LocalDate from, LocalDate to) {
         Team team = teamService.getById(teamId);
 
-        if (requestingUser.getRole() != Role.ADMIN
-                && !team.getManager().getId().equals(requestingUser.getId())) {
-            throw new ForbiddenException("Only the team manager or an admin can generate member AI summaries");
-        }
+        assertManagerOrAdmin(requestingUser, team);
 
         User member = userService.getById(memberId);
 
@@ -535,6 +529,13 @@ public class MetricsAiService {
     // -------------------------------------------------------------------------
     // Utilities
     // -------------------------------------------------------------------------
+
+    private void assertManagerOrAdmin(User requestingUser, Team team) {
+        if (requestingUser.getRole() != Role.ADMIN
+                && !team.getManager().getId().equals(requestingUser.getId())) {
+            throw new ForbiddenException("Only the team manager or an admin can generate AI summaries for this team");
+        }
+    }
 
     private boolean isDailySumMetric(MetricType type) {
         return DAILY_SUM_METRICS.contains(type);

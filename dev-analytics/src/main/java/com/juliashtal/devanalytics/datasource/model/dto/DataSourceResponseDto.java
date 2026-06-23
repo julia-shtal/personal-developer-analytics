@@ -2,7 +2,7 @@ package com.juliashtal.devanalytics.datasource.model.dto;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record DataSourceResponseDto(
         Long id,
@@ -11,8 +11,8 @@ public record DataSourceResponseDto(
         String baseUrl,
         String path,
         boolean enabled,
-        LocalDateTime lastSuccessSync,
-        LocalDateTime createdAt,
+        Instant lastSuccessSync,
+        Instant createdAt,
         Long teamId,
         boolean canDelete,
         long repoCount

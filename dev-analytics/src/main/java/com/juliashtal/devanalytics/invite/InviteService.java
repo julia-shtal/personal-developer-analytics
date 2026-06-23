@@ -45,7 +45,6 @@ public class InviteService {
         InviteTokenEntity saved = inviteTokenRepository.save(invite);
         log.info("Invite created: email={}, role={}, teamId={}", email, role, teamId);
 
-        // TODO(invite-email-delivery): send the invite URL via Spring Mail — next sprint
         String inviteUrl = frontendUrl + "/register?invite=" + saved.getToken();
         return new InviteTokenDto(saved.getToken(), saved.getEmail(), saved.getRole().name(),
                 saved.getExpiresAt(), inviteUrl);

@@ -71,7 +71,7 @@ export function DashboardPage() {
   const rId = repoId ?? undefined;
 
   const commits = useQuery({
-    queryKey: ['daily-commits', from, to, repoId],
+    queryKey: ['daily-commits-count', from, to, repoId],
     queryFn: () => metricsApi.dailyCommits(from, to, rId).then((r) => r.data),
   });
 
@@ -86,7 +86,7 @@ export function DashboardPage() {
   });
 
   const churn = useQuery({
-    queryKey: ['daily-churn', from, to, repoId],
+    queryKey: ['daily-churn-ratio', from, to, repoId],
     queryFn: () => metricsApi.dailyChurn(from, to, rId).then((r) => r.data),
   });
 
@@ -156,7 +156,7 @@ export function DashboardPage() {
   });
 
   const knowledgeSilo = useQuery({
-    queryKey: ['knowledge-silo', from, to, repoId],
+    queryKey: ['knowledge-silo-score', from, to, repoId],
     queryFn: () => metricsApi.knowledgeSilo(from, to, rId).then((r) => r.data),
   });
 

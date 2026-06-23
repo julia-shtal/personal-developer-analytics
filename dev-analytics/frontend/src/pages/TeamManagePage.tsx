@@ -270,7 +270,6 @@ export function TeamManagePage() {
         width={580}
         footer={
           <div className="row gap-2" style={{ justifyContent: 'space-between' }}>
-            {/* TODO(admin-invites-backend): invite by email needs substantial subsystem */}
             <button className="btn btn-sm" title="Coming soon" aria-label="Invite by email (coming soon)">
               <Mail width={12} height={12} />invite by email
             </button>

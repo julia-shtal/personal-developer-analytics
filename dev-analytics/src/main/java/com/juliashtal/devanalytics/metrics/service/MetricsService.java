@@ -6,7 +6,6 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
@@ -50,7 +49,7 @@ public class MetricsService {
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
     private final GitRepositoryEntityRepository gitRepoRepository;
-    private final UserRepoRegistrationRepository userRepoRegRepository;
+    private final RepoScopeResolver repoScopeResolver;
 
     /** Start of the working day (inclusive) used by {@link #calcAfterHoursRatioAndRefactorRatio}. */
     private static final int WORK_HOURS_START_HOUR = 9;
@@ -96,29 +95,7 @@ public class MetricsService {
         Instant from = fromDate.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant to = toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
 
-        // For personal metrics: repos the user explicitly registered.
-        // For team metrics: repos registered under the team's data sources.
-        // Fall back to the user's own repos when the team has no team-scoped data
-        // sources yet — this is the common case when repos are user-scoped.
-        List<Long> repoIds;
-        if (team != null) {
-            repoIds = gitRepoRepository.findIdsByTeamIds(List.of(team.getId()));
-            if (repoIds.isEmpty()) {
-                repoIds = userRepoRegRepository.findRepoIdsByUserId(user.getId());
-            }
-        } else {
-            // Personal: use explicitly registered repos.
-            // Fall back to repos from the user's team memberships so that a developer
-            // who has never manually registered repos still sees their own commits.
-            repoIds = userRepoRegRepository.findRepoIdsByUserId(user.getId());
-            if (repoIds.isEmpty()) {
-                List<Long> memberTeamIds = teamRepository.findByMembersId(user.getId())
-                        .stream().map(Team::getId).toList();
-                if (!memberTeamIds.isEmpty()) {
-                    repoIds = gitRepoRepository.findIdsByTeamIds(memberTeamIds);
-                }
-            }
-        }
+        List<Long> repoIds = repoScopeResolver.resolve(user, team);
 
         calcDailyCommits(user, team, repoIds, from, to);
         calcDailyPrs(user, team, repoIds, from, to);
@@ -622,6 +599,19 @@ public class MetricsService {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    // Public entry point for external callers (e.g. DataSeeder) that must go through
+    // the upsert guard rather than calling MetricSnapshotRepository.save() directly.
+    public void saveMetricSnapshot(User user,
+                                   Team team,
+                                   LocalDate date,
+                                   MetricType metricType,
+                                   double value,
+                                   GitRepositoryEntity repo,
+                                   LocalDate periodFrom,
+                                   LocalDate periodTo) {
+        saveMetric(user, team, date, metricType, value, repo, periodFrom, periodTo);
+    }
 
     private void saveMetric(User user,
                             Team team,

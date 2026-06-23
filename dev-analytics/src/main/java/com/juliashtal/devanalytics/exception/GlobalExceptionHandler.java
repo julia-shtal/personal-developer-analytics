@@ -15,7 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
@@ -147,7 +147,7 @@ public class GlobalExceptionHandler {
             RateLimitExceededException ex, HttpServletRequest request) {
         log.warn("Rate limit exceeded on {}", request.getRequestURI());
         ApiError apiError = ApiError.builder()
-                .timestamp(LocalDateTime.now())
+                .timestamp(Instant.now())
                 .status(HttpStatus.TOO_MANY_REQUESTS.value())
                 .error("Too Many Requests")
                 .message(ex.getMessage())
@@ -218,7 +218,7 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ApiError> build(
             HttpStatus status, String error, String message, HttpServletRequest request) {
         ApiError apiError = ApiError.builder()
-                .timestamp(LocalDateTime.now())
+                .timestamp(Instant.now())
                 .status(status.value())
                 .error(error)
                 .message(message)
