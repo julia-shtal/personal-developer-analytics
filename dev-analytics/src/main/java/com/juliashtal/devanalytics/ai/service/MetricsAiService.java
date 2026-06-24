@@ -30,41 +30,22 @@ import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class MetricsAiService {
 
-    private static final List<MetricType> CONTEXT_METRIC_TYPES = List.of(
-            DAILY_COMMITS_COUNT,
-            DAILY_PR_CREATED,
-            DAILY_PR_MERGED,
-            DAILY_ISSUES_CREATED,
-            DAILY_ISSUES_CLOSED,
-            DAILY_CHURN_RATIO,
-            PR_LEAD_TIME_HOURS_MEDIAN,
-            PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
-            ISSUE_LEAD_TIME_HOURS_MEDIAN,
-            REVIEW_RESPONSE_TIME_HOURS_MEDIAN,
-            FOCUS_RATIO_DAYS_TASKS
-    );
+    private static final List<MetricType> CONTEXT_METRIC_TYPES = Arrays.stream(MetricType.values())
+            .filter(t -> t.inAiContext).toList();
 
-    private static final Set<MetricType> DAILY_SUM_METRICS = Set.of(
-            DAILY_COMMITS_COUNT, DAILY_PR_CREATED, DAILY_PR_MERGED,
-            DAILY_ISSUES_CREATED, DAILY_ISSUES_CLOSED
-    );
+    private static final Set<MetricType> DAILY_SUM_METRICS = Arrays.stream(MetricType.values())
+            .filter(t -> t.dailySum).collect(Collectors.toUnmodifiableSet());
 
     // Metrics stored with periodFrom/periodTo (not date-series) — must use exact-period query.
-    // FOCUS_RATIO_DAYS_TASKS is excluded: it is stored as per-day markers (periodFrom/To = null)
-    // and its aggregate is computed on the read side by counting markers in the date range.
-    private static final Set<MetricType> AGGREGATE_METRICS = Set.of(
-            PR_LEAD_TIME_HOURS_MEDIAN,
-            PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
-            ISSUE_LEAD_TIME_HOURS_MEDIAN,
-            REVIEW_RESPONSE_TIME_HOURS_MEDIAN
-    );
+    // FOCUS_RATIO_DAYS_TASKS is excluded: stored as per-day markers (periodFrom/To = null);
+    // its aggregate is computed on the read side by counting markers in the date range.
+    private static final Set<MetricType> AGGREGATE_METRICS = Arrays.stream(MetricType.values())
+            .filter(t -> t.aggregatePeriod).collect(Collectors.toUnmodifiableSet());
 
     /** Minimum number of observations required before an anomaly check is meaningful. */
     private static final int ANOMALY_MIN_SAMPLE_SIZE = 3;
@@ -200,7 +181,7 @@ public class MetricsAiService {
                         .sorted(Comparator.comparing(MetricSnapshot::getDate))
                         .map(MetricSnapshot::getValue)
                         .collect(Collectors.toList());
-                aggregates.put(type.name(), computeAggregate(values, isDailySumMetric(type)));
+                aggregates.put(type.name(), computeAggregate(values, DAILY_SUM_METRICS.contains(type)));
             }
         }
 
@@ -274,7 +255,7 @@ public class MetricsAiService {
                 List<MetricSnapshot> snapshots = metricSnapshotService
                         .getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(member, team, type, from, to);
                 if (!snapshots.isEmpty()) {
-                    double value = isDailySumMetric(type)
+                    double value = DAILY_SUM_METRICS.contains(type)
                             ? snapshots.stream().mapToDouble(MetricSnapshot::getValue).sum()
                             : snapshots.stream().mapToDouble(MetricSnapshot::getValue).average().orElse(0.0);
                     aggregated.put(type.name(), value);
@@ -535,10 +516,6 @@ public class MetricsAiService {
                 && !team.getManager().getId().equals(requestingUser.getId())) {
             throw new ForbiddenException("Only the team manager or an admin can generate AI summaries for this team");
         }
-    }
-
-    private boolean isDailySumMetric(MetricType type) {
-        return DAILY_SUM_METRICS.contains(type);
     }
 
     private String toJson(Object o) {
