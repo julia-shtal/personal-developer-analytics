@@ -39,5 +39,10 @@ public class MetricsSummaryDto {
         private String text;
         /** Human-readable metric name from the mapping in the system prompt. */
         private String metric;
+        /**
+         * One-sentence AI hypothesis for the likely cause of this anomaly.
+         * Null for non-anomalous insights (model omits or returns null for the field).
+         */
+        private String explanation;
     }
 }

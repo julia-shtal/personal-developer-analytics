@@ -18,7 +18,15 @@ export function summaryToText(s: MetricsSummaryDto): string {
   if (s.headline) lines.push(s.headline);
   if (s.overview) lines.push('\nOverview\n' + s.overview);
   if (s.insights.length) {
-    lines.push('\nKey Insights\n' + s.insights.map((i) => `• ${i.text}`).join('\n'));
+    lines.push(
+      '\nKey Insights\n' +
+        s.insights
+          .map((i) => {
+            const line = `• ${i.text}`;
+            return i.explanation ? `${line}\n  ${i.explanation}` : line;
+          })
+          .join('\n'),
+    );
   }
   if (s.recommendations.length) {
     lines.push('\nRecommendations\n' + s.recommendations.map((r) => `• ${r}`).join('\n'));
@@ -35,7 +43,8 @@ export function summaryToMarkdown(s: MetricsSummaryDto): string {
   if (s.insights.length) {
     const items = s.insights.map((i) => {
       const tag = i.metric ? ` \`${i.metric}\`` : '';
-      return `- ${KIND_SYM[i.kind]} ${i.text}${tag}`;
+      const line = `- ${KIND_SYM[i.kind]} ${i.text}${tag}`;
+      return i.explanation ? `${line}\n  > ${i.explanation}` : line;
     });
     parts.push(`## Key Insights\n\n${items.join('\n')}`);
   }
@@ -60,7 +69,7 @@ export function summaryToHtml(s: MetricsSummaryDto): string {
       (i) =>
         `<li><span class="sym" style="color:${KIND_HTML_COLOR[i.kind]}">${KIND_SYM[i.kind]}</span> ${escapeHtml(
           i.text,
-        )}${i.metric ? ` <code>${escapeHtml(i.metric)}</code>` : ''}</li>`,
+        )}${i.metric ? ` <code>${escapeHtml(i.metric)}</code>` : ''}${i.explanation ? `<br><small style="color:#666">${escapeHtml(i.explanation)}</small>` : ''}</li>`,
     )
     .join('\n');
   const recs = s.recommendations.map((r) => `<li>${escapeHtml(r)}</li>`).join('\n');
