@@ -322,14 +322,24 @@ export function AiSummaryCard({ range, onSummaryGenerated }: Props) {
                   const chipColor = KIND_CHIP[insight.kind] ?? KIND_CHIP.note;
                   const sym = KIND_SYM[insight.kind] ?? KIND_SYM.note;
                   return (
-                    <div key={i} className="row gap-3" style={{ alignItems: 'flex-start', padding: '6px 0' }}>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600,
-                        color,
-                        width: 18, lineHeight: 1.45, flexShrink: 0,
-                      }}>{sym}</span>
-                      <ProseWithNumbers text={insight.text} className="t-body" style={{ margin: 0, lineHeight: 1.55, flex: 1 }} />
-                      {insight.metric && <Chip color={chipColor}>{insight.metric}</Chip>}
+                    <div key={i} className="col gap-1" style={{ padding: '6px 0' }}>
+                      <div className="row gap-3" style={{ alignItems: 'flex-start' }}>
+                        <span style={{
+                          fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600,
+                          color,
+                          width: 18, lineHeight: 1.45, flexShrink: 0,
+                        }}>{sym}</span>
+                        <ProseWithNumbers text={insight.text} className="t-body" style={{ margin: 0, lineHeight: 1.55, flex: 1 }} />
+                        {insight.metric && <Chip color={chipColor}>{insight.metric}</Chip>}
+                      </div>
+                      {insight.explanation && (
+                        <p
+                          className="t-muted"
+                          style={{ margin: 0, marginLeft: 21, fontSize: 12, lineHeight: 1.5 }}
+                        >
+                          {insight.explanation}
+                        </p>
+                      )}
                     </div>
                   );
                 })}

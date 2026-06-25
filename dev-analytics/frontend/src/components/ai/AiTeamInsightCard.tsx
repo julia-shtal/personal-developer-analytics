@@ -229,9 +229,19 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
         {summary && !isLoading && summary.insights.map((insight, i) => {
           const { symbol, color } = insightSymbol(insight.kind);
           return (
-            <div key={i} className="row gap-3" style={{ alignItems: 'flex-start' }}>
-              <span className="font-mono" style={{ color, width: 18, fontWeight: 600, flexShrink: 0 }}>{symbol}</span>
-              <p className="t-body" style={{ margin: 0 }}>{insight.text}</p>
+            <div key={i} className="col gap-1">
+              <div className="row gap-3" style={{ alignItems: 'flex-start' }}>
+                <span className="font-mono" style={{ color, width: 18, fontWeight: 600, flexShrink: 0 }}>{symbol}</span>
+                <p className="t-body" style={{ margin: 0 }}>{insight.text}</p>
+              </div>
+              {insight.explanation && (
+                <p
+                  className="t-muted"
+                  style={{ margin: 0, marginLeft: 21, fontSize: 12, lineHeight: 1.5 }}
+                >
+                  {insight.explanation}
+                </p>
+              )}
             </div>
           );
         })}

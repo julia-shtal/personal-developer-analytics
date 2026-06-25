@@ -165,8 +165,8 @@ public class MetricsAiService {
                   "overview": "1-2 sentence summary",
                   "insights": [
                     { "kind": "positive", "text": "...", "metric": "PR Lead Time" },
-                    { "kind": "risk",     "text": "...", "metric": "Knowledge Silo" },
-                    { "kind": "note",     "text": "...", "metric": "Churn Ratio" }
+                    { "kind": "risk",     "text": "...", "metric": "Churn Ratio", "explanation": "One sentence stating the most likely cause." },
+                    { "kind": "note",     "text": "...", "metric": "Daily Commits" }
                   ],
                   "recommendations": ["action 1", "action 2", "action 3"]
                 }
@@ -183,6 +183,9 @@ public class MetricsAiService {
                 1. Check Churn Ratio and PR Lead Time first — they are primary quality indicators.
                 2. Check Focus Ratio and Daily Commits second — they are primary throughput indicators.
                 3. Any metric with anomaly: true MUST be included as an insight.
+                3a. For every insight where the source metric had anomaly: true, add an "explanation"
+                    field containing exactly one sentence stating the most likely cause, grounded in the
+                    metric values (median, trendPct) provided. Omit "explanation" for non-anomalous insights.
                 4. Then cover remaining metrics (review response time, issue lead time, PRs created/merged).
                 5. Reference concrete values (median, trendPct, anomaly) in every insight.
 
@@ -245,8 +248,8 @@ public class MetricsAiService {
                   "overview": "1-2 sentence team summary",
                   "insights": [
                     { "kind": "positive", "text": "...", "metric": "PR Lead Time" },
-                    { "kind": "risk",     "text": "...", "metric": "Knowledge Silo" },
-                    { "kind": "note",     "text": "...", "metric": "Churn Ratio" }
+                    { "kind": "risk",     "text": "...", "metric": "Churn Ratio", "explanation": "One sentence stating the most likely cause." },
+                    { "kind": "note",     "text": "...", "metric": "Daily Commits" }
                   ],
                   "recommendations": ["action 1", "action 2", "action 3"]
                 }
@@ -263,6 +266,9 @@ public class MetricsAiService {
                 1. Check Churn Ratio and PR Lead Time first — they are primary quality indicators across members.
                 2. Check Focus Ratio and Daily Commits second — they are primary throughput indicators.
                 3. Identify cross-member outliers (highest/lowest values) for each quality and throughput metric.
+                3a. For every insight where the source metric had anomaly: true, add an "explanation"
+                    field containing exactly one sentence stating the most likely cause, grounded in the
+                    metric values (median, trendPct) provided. Omit "explanation" for non-anomalous insights.
                 4. Then cover remaining metrics (review response time, issue lead time, PRs created/merged).
                 5. Reference member usernames and concrete values in every insight.
 
@@ -319,10 +325,14 @@ public class MetricsAiService {
                         insights.add(MetricsSummaryDto.InsightDto.builder()
                                 .kind("note").text(node.asText()).metric("").build());
                     } else if (node.isObject()) {
+                        String explanation = node.path("explanation").isMissingNode() || node.path("explanation").isNull()
+                                ? null
+                                : node.path("explanation").asText(null);
                         insights.add(MetricsSummaryDto.InsightDto.builder()
                                 .kind(node.path("kind").asText("note"))
                                 .text(node.path("text").asText(""))
                                 .metric(node.path("metric").asText(""))
+                                .explanation(explanation)
                                 .build());
                     }
                 }

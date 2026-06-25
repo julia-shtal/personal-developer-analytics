@@ -153,4 +153,35 @@ describe('AiSummaryCard', () => {
       'text/markdown',
     );
   });
+
+  it('renders the explanation text beneath an anomalous insight when the field is present', async () => {
+    const summaryWithExplanation: MetricsSummaryDto = {
+      ...SUMMARY,
+      insights: [
+        {
+          kind: 'risk',
+          text: 'Churn ratio spiked.',
+          metric: 'Churn Ratio',
+          explanation: 'A large refactoring commit drove the spike.',
+        },
+      ],
+    };
+    mockGenerate.mockResolvedValue(summaryWithExplanation);
+    renderCard();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate AI Summary' }));
+
+    expect(await screen.findByText('Churn ratio spiked.')).toBeInTheDocument();
+    expect(screen.getByText('A large refactoring commit drove the spike.')).toBeInTheDocument();
+  });
+
+  it('does not render an explanation element when the field is absent', async () => {
+    mockGenerate.mockResolvedValue(SUMMARY);
+    renderCard();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate AI Summary' }));
+
+    await screen.findByText('Good momentum.');
+    expect(screen.queryByText(/large refactoring/i)).not.toBeInTheDocument();
+  });
 });

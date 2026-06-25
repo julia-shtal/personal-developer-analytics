@@ -105,6 +105,62 @@ class MetricsAiServiceTest {
     }
 
     @Test
+    void parseSummary_anomalousInsight_populatesExplanation() {
+        String json = """
+                {
+                  "headline": "Anomaly detected",
+                  "overview": "Churn spiked sharply.",
+                  "insights": [
+                    {
+                      "kind": "risk",
+                      "text": "Churn ratio spiked 140% above the period median.",
+                      "metric": "Churn Ratio",
+                      "explanation": "A large refactoring commit on Jan 18 accounts for the churn spike."
+                    },
+                    {
+                      "kind": "positive",
+                      "text": "PR lead time improved.",
+                      "metric": "PR Lead Time"
+                    }
+                  ],
+                  "recommendations": ["Isolate refactors into dedicated commits"]
+                }
+                """;
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getInsights()).hasSize(2);
+        MetricsSummaryDto.InsightDto anomalous = dto.getInsights().get(0);
+        assertThat(anomalous.getExplanation())
+                .isNotNull()
+                .isEqualTo("A large refactoring commit on Jan 18 accounts for the churn spike.");
+
+        MetricsSummaryDto.InsightDto normal = dto.getInsights().get(1);
+        assertThat(normal.getExplanation()).isNull();
+    }
+
+    @Test
+    void parseSummary_missingExplanationField_defaultsToNull() {
+        String json = """
+                {
+                  "headline": "Clean week",
+                  "overview": "All metrics within range.",
+                  "insights": [
+                    { "kind": "note", "text": "Commit count stable.", "metric": "Daily Commits" }
+                  ],
+                  "recommendations": []
+                }
+                """;
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getInsights()).hasSize(1);
+        assertThat(dto.getInsights().get(0).getExplanation()).isNull();
+    }
+
+    @Test
     void wrapsFlatsStringsInInsightsAsFallback() {
         // Model returns flat strings in insights array instead of {kind, text, metric} objects.
         String json = """

@@ -75,14 +75,24 @@ function MemberAiSummaryModal({ member, summary, onClose }: {
           <div className="t-eyebrow" style={{ marginBottom: 8 }}>key insights</div>
           <div className="col gap-2">
             {summary.insights.map((insight, i) => (
-              <div key={i} className="row gap-3" style={{ alignItems: 'flex-start', padding: '4px 0' }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600,
-                  color: KIND_COLOR[insight.kind] ?? KIND_COLOR.note,
-                  width: 18, lineHeight: 1.45, flexShrink: 0,
-                }}>{KIND_SYM[insight.kind] ?? '~'}</span>
-                <ProseWithNumbers text={insight.text} className="t-body" style={{ margin: 0, lineHeight: 1.55, flex: 1 }} />
-                {insight.metric && <Chip color={KIND_CHIP[insight.kind] ?? 'amber'}>{insight.metric}</Chip>}
+              <div key={i} className="col gap-1" style={{ padding: '4px 0' }}>
+                <div className="row gap-3" style={{ alignItems: 'flex-start' }}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600,
+                    color: KIND_COLOR[insight.kind] ?? KIND_COLOR.note,
+                    width: 18, lineHeight: 1.45, flexShrink: 0,
+                  }}>{KIND_SYM[insight.kind] ?? '~'}</span>
+                  <ProseWithNumbers text={insight.text} className="t-body" style={{ margin: 0, lineHeight: 1.55, flex: 1 }} />
+                  {insight.metric && <Chip color={KIND_CHIP[insight.kind] ?? 'amber'}>{insight.metric}</Chip>}
+                </div>
+                {insight.explanation && (
+                  <p
+                    className="t-muted"
+                    style={{ margin: 0, marginLeft: 21, fontSize: 12, lineHeight: 1.5 }}
+                  >
+                    {insight.explanation}
+                  </p>
+                )}
               </div>
             ))}
           </div>

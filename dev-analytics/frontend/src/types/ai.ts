@@ -2,6 +2,7 @@ export interface InsightDto {
   kind: 'positive' | 'risk' | 'note';
   text: string;
   metric: string;
+  explanation?: string;
 }
 
 export interface MetricsSummaryDto {
