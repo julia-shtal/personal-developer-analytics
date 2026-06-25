@@ -120,7 +120,7 @@ public class MetricsController {
     }
 
     @Operation(summary = "PR First-Commit-to-Merge Lead Time (median hours) for the current user")
-    @GetMapping("/pr-first-commit-lead-time")
+    @GetMapping("/pr-first-commit-to-merge-lead-time")
     public MetricAggregateDto getPrFirstCommitLeadTimeMedian(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -246,7 +246,7 @@ public class MetricsController {
     }
 
     @Operation(summary = "Merge Without Review Ratio for the current user")
-    @GetMapping("/merge-without-review")
+    @GetMapping("/merge-without-review-ratio")
     public MetricAggregateDto getMergeWithoutReview(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,

@@ -121,7 +121,7 @@ export function DashboardPage() {
   });
 
   const prFirstCommitLeadTime = useQuery({
-    queryKey: ['pr-first-commit-lead-time', from, to, repoId],
+    queryKey: ['pr-first-commit-to-merge-lead-time', from, to, repoId],
     queryFn: () => metricsApi.prFirstCommitLeadTime(from, to, rId).then((r) => r.data),
   });
 
@@ -146,7 +146,7 @@ export function DashboardPage() {
   });
 
   const mergeWithoutReview = useQuery({
-    queryKey: ['merge-without-review', from, to, repoId],
+    queryKey: ['merge-without-review-ratio', from, to, repoId],
     queryFn: () => metricsApi.mergeWithoutReview(from, to, rId).then((r) => r.data),
   });
 
