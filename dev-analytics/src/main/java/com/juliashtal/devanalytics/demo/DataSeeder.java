@@ -8,8 +8,8 @@ import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
+import com.juliashtal.devanalytics.metrics.calc.MetricSnapshotWriter;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
-import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
@@ -43,7 +43,7 @@ public class DataSeeder implements ApplicationRunner {
     private final DataSourceConfigRepository     dsRepo;
     private final GitRepositoryEntityRepository  gitRepoRepo;
     private final UserRepoRegistrationRepository registrationRepo;
-    private final MetricsService                 metricsService;
+    private final MetricSnapshotWriter           metricSnapshotWriter;
     private final PasswordEncoder                encoder;
 
     @Override
@@ -198,7 +198,7 @@ public class DataSeeder implements ApplicationRunner {
     private void snap(User user, Team team, GitRepositoryEntity repo,
                       LocalDate date, MetricType type, double value,
                       LocalDate periodFrom, LocalDate periodTo) {
-        metricsService.saveMetricSnapshot(user, team, date, type, value, repo, periodFrom, periodTo);
+        metricSnapshotWriter.save(user, team, date, type, value, repo, periodFrom, periodTo);
     }
 
     private static Random rng(int seed) {
