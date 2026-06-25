@@ -174,7 +174,7 @@ class MetricsControllerTest {
                 any(), eq(MetricType.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN, 12.0, FROM, TO)));
 
-        mvc.perform(get("/api/metrics/pr-first-commit-lead-time")
+        mvc.perform(get("/api/metrics/pr-first-commit-to-merge-lead-time")
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())
@@ -303,7 +303,7 @@ class MetricsControllerTest {
                 any(), eq(MetricType.MERGE_WITHOUT_REVIEW_RATIO), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.MERGE_WITHOUT_REVIEW_RATIO, 0.1, FROM, TO)));
 
-        mvc.perform(get("/api/metrics/merge-without-review")
+        mvc.perform(get("/api/metrics/merge-without-review-ratio")
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())

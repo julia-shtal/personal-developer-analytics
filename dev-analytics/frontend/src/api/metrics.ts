@@ -31,7 +31,7 @@ export const metricsApi = {
     api.get<MetricAggregateDto>('/metrics/pr-lead-time', { params: { from, to, repoId } }),
 
   prFirstCommitLeadTime: (from: string, to: string, repoId?: number) =>
-    api.get<MetricAggregateDto>('/metrics/pr-first-commit-lead-time', { params: { from, to, repoId } }),
+    api.get<MetricAggregateDto>('/metrics/pr-first-commit-to-merge-lead-time', { params: { from, to, repoId } }),
 
   reviewResponseTime: (from: string, to: string, repoId?: number) =>
     api.get<MetricAggregateDto>('/metrics/review-response-time', { params: { from, to, repoId } }),
@@ -60,7 +60,7 @@ export const metricsApi = {
     api.get<MetricAggregateDto>('/metrics/deep-work-streak', { params: { from, to } }),
 
   mergeWithoutReview: (from: string, to: string, repoId?: number) =>
-    api.get<MetricAggregateDto>('/metrics/merge-without-review', { params: { from, to, repoId } }),
+    api.get<MetricAggregateDto>('/metrics/merge-without-review-ratio', { params: { from, to, repoId } }),
 
   prSizeComplexity: (from: string, to: string, repoId?: number) =>
     api.get<MetricAggregateDto>('/metrics/pr-size-complexity', { params: { from, to, repoId } }),

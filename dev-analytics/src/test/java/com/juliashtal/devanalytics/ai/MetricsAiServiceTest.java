@@ -3,13 +3,15 @@ package com.juliashtal.devanalytics.ai;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.juliashtal.devanalytics.ai.client.LlmClient;
+import com.juliashtal.devanalytics.ai.model.AggregatedMetricsContext;
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
+import com.juliashtal.devanalytics.ai.model.TeamMetricsContext;
+import com.juliashtal.devanalytics.ai.service.AiContextBuilderService;
 import com.juliashtal.devanalytics.ai.service.MetricSummaryPersistenceService;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
-import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
@@ -41,7 +43,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MetricsAiServiceTest {
 
-    @Mock MetricSnapshotService metricSnapshotService;
+    @Mock AiContextBuilderService contextBuilder;
     @Mock RepoService repoService;
     @Mock TeamService teamService;
     @Mock UserService userService;
@@ -58,16 +60,19 @@ class MetricsAiServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MetricsAiService(metricSnapshotService, repoService, teamService, userService, llmClient,
+        service = new MetricsAiService(contextBuilder, repoService, teamService, userService, llmClient,
                 new ObjectMapper().registerModule(new JavaTimeModule()), persistenceService);
         ReflectionTestUtils.setField(service, "model", MODEL);
 
-        // No metric snapshots — context JSON has an empty metrics map.
-        // lenient: not every test exercises the personal/repo==null context path.
-        lenient().when(metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(any(), any(), any(), any()))
-                .thenReturn(List.of());
-        lenient().when(metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(any(), any(), any(), any()))
-                .thenReturn(List.of());
+        // Return minimal empty contexts so toJson() does not throw.
+        // lenient: not every test exercises every summary path.
+        lenient().when(contextBuilder.buildPersonalContext(any(), any(), any(), any()))
+                .thenReturn(new AggregatedMetricsContext());
+
+        TeamMetricsContext emptyTeam = new TeamMetricsContext();
+        emptyTeam.setMembers(List.of());
+        lenient().when(contextBuilder.buildTeamContext(any(), any(), any()))
+                .thenReturn(emptyTeam);
     }
 
     @Test
@@ -188,10 +193,6 @@ class MetricsAiServiceTest {
         repo.setId(5L);
         repo.setName("dev-analytics");
         when(repoService.getById(5L)).thenReturn(repo);
-        when(metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(any(), any(), any(), any(), any()))
-                .thenReturn(List.of());
-        when(metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(any(), any(), any(), any(), any()))
-                .thenReturn(List.of());
 
         ArgumentCaptor<String> userPromptCaptor = ArgumentCaptor.forClass(String.class);
         when(llmClient.complete(eq(MODEL), any(), userPromptCaptor.capture(), anyBoolean())).thenReturn(VALID_JSON);
@@ -209,8 +210,6 @@ class MetricsAiServiceTest {
         User manager = userWithRole(1L, Role.MANAGER);
         Team team = team(10L, manager, manager);
         when(teamService.getById(10L)).thenReturn(team);
-        when(metricSnapshotService.getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(any(), any(), any(), any(), any()))
-                .thenReturn(List.of());
         when(llmClient.complete(eq(MODEL), any(), any(), anyBoolean())).thenReturn(VALID_JSON);
 
         MetricsSummaryDto dto = service.generateTeamSummary(manager, 10L, from, to);
@@ -226,8 +225,6 @@ class MetricsAiServiceTest {
         User admin = userWithRole(2L, Role.ADMIN);
         Team team = team(10L, manager, manager);
         when(teamService.getById(10L)).thenReturn(team);
-        when(metricSnapshotService.getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(any(), any(), any(), any(), any()))
-                .thenReturn(List.of());
         when(llmClient.complete(eq(MODEL), any(), any(), anyBoolean())).thenReturn(VALID_JSON);
 
         MetricsSummaryDto dto = service.generateTeamSummary(admin, 10L, from, to);
