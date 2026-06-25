@@ -3,101 +3,71 @@ package com.juliashtal.devanalytics.datasource;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
 import com.juliashtal.devanalytics.datasource.service.DataSourceValidator;
+import com.juliashtal.devanalytics.datasource.validation.DataSourceValidationRegistry;
+import com.juliashtal.devanalytics.datasource.validation.DataSourceValidationRule;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import java.io.File;
-import java.nio.file.Path;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class DataSourceValidatorTest {
 
-    private final DataSourceValidator validator = new DataSourceValidator();
+    @Mock DataSourceValidationRegistry registry;
+    @Mock DataSourceValidationRule rule;
 
-    // ── GIT_LOCAL: mirrors chk_gitlocal_path ─────────────────────────────────
+    @InjectMocks DataSourceValidator validator;
 
     @Test
-    void gitLocal_nullPath_throws() {
-        assertThatThrownBy(() -> validator.validateCreate(gitLocalReq(null)))
+    void validateCreate_nullType_throwsWithoutCallingRegistry() {
+        CreateDataSourceRequest req = new CreateDataSourceRequest();
+        req.setType(null);
+
+        assertThatThrownBy(() -> validator.validateCreate(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Path is required");
+                .hasMessageContaining("type is required");
     }
 
     @Test
-    void gitLocal_blankPath_throws() {
-        assertThatThrownBy(() -> validator.validateCreate(gitLocalReq("   ")))
+    void validateCreate_gitLocalWithTeamId_throwsWithoutCallingRegistry() {
+        CreateDataSourceRequest req = new CreateDataSourceRequest();
+        req.setType(DataSourceType.GIT_LOCAL);
+        req.setTeamId(5L);
+
+        assertThatThrownBy(() -> validator.validateCreate(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Path is required");
+                .hasMessageContaining("GIT_LOCAL");
     }
 
     @Test
-    void gitLocal_nonexistentPath_throws() {
-        assertThatThrownBy(() -> validator.validateCreate(gitLocalReq("/no/such/path")))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("does not exist");
+    void validateCreate_delegatesToRegistry_andCallsValidate() {
+        CreateDataSourceRequest req = new CreateDataSourceRequest();
+        req.setType(DataSourceType.GITHUB);
+        when(registry.forType(DataSourceType.GITHUB)).thenReturn(rule);
+        doNothing().when(rule).validate(req);
+
+        validator.validateCreate(req);
+
+        verify(rule).validate(req);
     }
 
     @Test
-    void gitLocal_validPath_passes(@TempDir Path dir) {
-        assertThatCode(() -> validator.validateCreate(gitLocalReq(dir.toString())))
-                .doesNotThrowAnyException();
-    }
+    void validateCreate_ruleThrows_propagatesException() {
+        CreateDataSourceRequest req = new CreateDataSourceRequest();
+        req.setType(DataSourceType.JIRA);
+        when(registry.forType(DataSourceType.JIRA)).thenReturn(rule);
+        doThrow(new IllegalArgumentException("baseUrl is required for HTTP-based data sources"))
+                .when(rule).validate(req);
 
-    // ── GITHUB / JIRA: mirrors chk_remote_baseurl ────────────────────────────
-
-    @Test
-    void github_nullBaseUrl_throws() {
-        assertThatThrownBy(() -> validator.validateCreate(httpReq(DataSourceType.GITHUB, null, "token")))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("baseUrl is required");
-    }
-
-    @Test
-    void github_malformedBaseUrl_throws() {
-        assertThatThrownBy(() -> validator.validateCreate(httpReq(DataSourceType.GITHUB, "not-a-url", "token")))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Invalid baseUrl");
-    }
-
-    @Test
-    void github_nullToken_throws() {
-        assertThatThrownBy(() -> validator.validateCreate(httpReq(DataSourceType.GITHUB, "https://api.github.com", null)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("apiToken is required");
-    }
-
-    @Test
-    void jira_nullBaseUrl_throws() {
-        assertThatThrownBy(() -> validator.validateCreate(httpReq(DataSourceType.JIRA, null, "user:token")))
+        assertThatThrownBy(() -> validator.validateCreate(req))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("baseUrl is required");
-    }
-
-    @Test
-    void github_valid_passes() {
-        assertThatCode(() -> validator.validateCreate(
-                httpReq(DataSourceType.GITHUB, "https://api.github.com", "ghp_token")))
-                .doesNotThrowAnyException();
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static CreateDataSourceRequest gitLocalReq(String path) {
-        CreateDataSourceRequest r = new CreateDataSourceRequest();
-        r.setType(DataSourceType.GIT_LOCAL);
-        r.setName("local");
-        r.setPath(path);
-        return r;
-    }
-
-    private static CreateDataSourceRequest httpReq(DataSourceType type, String baseUrl, String token) {
-        CreateDataSourceRequest r = new CreateDataSourceRequest();
-        r.setType(type);
-        r.setName("remote");
-        r.setBaseUrl(baseUrl);
-        r.setApiToken(token);
-        return r;
     }
 }

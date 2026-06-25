@@ -4,25 +4,27 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
-import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
-import com.juliashtal.devanalytics.issue.IssueRepository;
+import com.juliashtal.devanalytics.metrics.calc.AfterHoursAndRefactorCalculator;
+import com.juliashtal.devanalytics.metrics.calc.DailyChurnCalculator;
+import com.juliashtal.devanalytics.metrics.calc.DailyCommitsCalculator;
+import com.juliashtal.devanalytics.metrics.calc.KnowledgeSiloCalculator;
+import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
+import com.juliashtal.devanalytics.metrics.calc.MetricSnapshotWriter;
 import com.juliashtal.devanalytics.metrics.model.*;
-import com.juliashtal.devanalytics.metrics.service.MetricsService;
-import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
 import com.juliashtal.devanalytics.user.model.User;
-import com.juliashtal.devanalytics.user.repository.TeamRepository;
-import com.juliashtal.devanalytics.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.sql.Date;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,24 +34,16 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 /**
- * Verifies that the T4.4 projection refactoring produces identical numeric values
- * to the previous Object[] implementation. Each test exercises one projection type
- * end-to-end through MetricsService into a captured MetricSnapshot.
+ * Verifies that each metric calculator produces correct numeric values from its projection.
+ * Tests are isolated per calculator — no dependency on MetricsService dispatch.
  */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class MetricsProjectionTest {
 
     @Mock MetricSnapshotRepository snapshotRepository;
     @Mock GitCommitEntityRepository commitRepository;
-    @Mock GitHubPullRequestRepository pullRequestRepository;
-    @Mock GitHubPrReviewRepository prReviewRepository;
-    @Mock IssueRepository issueRepository;
-    @Mock UserRepository userRepository;
-    @Mock TeamRepository teamRepository;
     @Mock GitRepositoryEntityRepository gitRepoRepository;
-    @Mock RepoScopeResolver repoScopeResolver;
-
-    MetricsService service;
 
     static final Long USER_ID = 1L;
     static final Long REPO_ID = 10L;
@@ -57,47 +51,29 @@ class MetricsProjectionTest {
 
     User user;
     GitRepositoryEntity repo;
+    MetricSnapshotWriter writer;
+    MetricCalcContext ctx;
 
     @BeforeEach
     void setUp() {
-        service = new MetricsService(
-                snapshotRepository, commitRepository, pullRequestRepository,
-                prReviewRepository, issueRepository, userRepository,
-                teamRepository, gitRepoRepository, repoScopeResolver);
-
         user = new User();
         user.setId(USER_ID);
         user.setEmail("dev@example.com");
         user.setTimezone("UTC");
-        // githubLogin intentionally null → PR / review metrics skipped
 
         repo = new GitRepositoryEntity();
         repo.setId(REPO_ID);
 
-        lenient().when(userRepository.getReferenceById(USER_ID)).thenReturn(user);
-        lenient().when(repoScopeResolver.resolve(user, null)).thenReturn(List.of(REPO_ID));
-        lenient().when(gitRepoRepository.getReferenceById(REPO_ID)).thenReturn(repo);
-        lenient().when(snapshotRepository.findExisting(any(), any(), any(), any(), any(), any(), any()))
+        when(gitRepoRepository.getReferenceById(REPO_ID)).thenReturn(repo);
+        when(snapshotRepository.findExisting(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(Optional.empty());
-        lenient().when(snapshotRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(snapshotRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // Default empty returns so methods that aren't under test return quickly
-        lenient().when(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
-                .thenReturn(List.of());
-        lenient().when(commitRepository.aggregateChurnDailyByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
-                .thenReturn(List.of());
-        lenient().when(commitRepository.findCommitDetailsByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
-                .thenReturn(List.of());
-        lenient().when(commitRepository.countTotalCommitsByRepoIds(anyList(), any(), any()))
-                .thenReturn(List.of());
-        lenient().when(commitRepository.countCommitsByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
-                .thenReturn(List.of());
-        lenient().when(issueRepository.aggregateIssuesCreatedDailyByRepoIds(anyList(), any(), any()))
-                .thenReturn(List.of());
-        lenient().when(issueRepository.aggregateIssuesClosedDailyByRepoIds(anyList(), any(), any()))
-                .thenReturn(List.of());
-        lenient().when(issueRepository.findIssueLeadTimesByRepoIds(anyList(), any(), any()))
-                .thenReturn(List.of());
+        writer = new MetricSnapshotWriter(snapshotRepository);
+
+        Instant from = DATE.atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant to   = DATE.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        ctx = new MetricCalcContext(user, null, List.of(REPO_ID), from, to, DATE, DATE);
     }
 
     // ── DailyCommitsProjection ────────────────────────────────────────────────
@@ -109,11 +85,10 @@ class MetricsProjectionTest {
         when(row.getRepoId()).thenReturn(REPO_ID);
         when(row.getCommitsCount()).thenReturn(7L);
         when(row.getAvgSize()).thenReturn(42.0);
-
         when(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
-        service.calculateDailyMetrics(USER_ID, DATE, DATE);
+        new DailyCommitsCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
 
         ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
         verify(snapshotRepository, atLeast(2)).save(cap.capture());
@@ -134,11 +109,10 @@ class MetricsProjectionTest {
         when(row.getRepoId()).thenReturn(REPO_ID);
         when(row.getCommitsCount()).thenReturn(3L);
         when(row.getAvgSize()).thenReturn(null);
-
         when(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
-        service.calculateDailyMetrics(USER_ID, DATE, DATE);
+        new DailyCommitsCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
 
         ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
         verify(snapshotRepository, atLeast(2)).save(cap.capture());
@@ -157,11 +131,10 @@ class MetricsProjectionTest {
         when(row.getRepoId()).thenReturn(REPO_ID);
         when(row.getAdditions()).thenReturn(30L);
         when(row.getDeletions()).thenReturn(10L);   // churn = 10 / (30+10) = 0.25
-
         when(commitRepository.aggregateChurnDailyByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
-        service.calculateDailyMetrics(USER_ID, DATE, DATE);
+        new DailyChurnCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
 
         ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
         verify(snapshotRepository, atLeast(1)).save(cap.capture());
@@ -186,7 +159,7 @@ class MetricsProjectionTest {
         when(commitRepository.countTotalCommitsByRepoIds(anyList(), any(), any())).thenReturn(List.of(total));
         when(commitRepository.countCommitsByRepoIdsAndAuthorEmail(anyList(), any(), any(), any())).thenReturn(List.of(mine));
 
-        service.calculateDailyMetrics(USER_ID, DATE, DATE);
+        new KnowledgeSiloCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
 
         ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
         verify(snapshotRepository, atLeast(1)).save(cap.capture());
@@ -208,11 +181,10 @@ class MetricsProjectionTest {
         when(row.getAdditions()).thenReturn(10);
         when(row.getDeletions()).thenReturn(5);
         when(row.getStatsStatus()).thenReturn(StatsStatus.COMPLETE);
-
         when(commitRepository.findCommitDetailsByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
-        service.calculateDailyMetrics(USER_ID, DATE, DATE);
+        new AfterHoursAndRefactorCalculator(commitRepository, writer).calculate(ctx);
 
         ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
         verify(snapshotRepository, atLeast(1)).save(cap.capture());
@@ -232,11 +204,10 @@ class MetricsProjectionTest {
         when(row.getAdditions()).thenReturn(10);
         when(row.getDeletions()).thenReturn(20);
         when(row.getStatsStatus()).thenReturn(StatsStatus.COMPLETE);
-
         when(commitRepository.findCommitDetailsByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
-        service.calculateDailyMetrics(USER_ID, DATE, DATE);
+        new AfterHoursAndRefactorCalculator(commitRepository, writer).calculate(ctx);
 
         ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
         verify(snapshotRepository, atLeast(1)).save(cap.capture());
