@@ -134,6 +134,7 @@ export function MemberDetailModal({ member, teamId, open, onClose }: MemberDetai
   const navigate = useNavigate();
   const { range } = useDateRange();
   const { from, to } = range;
+  const { isManager, isAdmin } = useAuth();
 
   const { data: contactPrefs } = useQuery({
     queryKey: ['notification-prefs'],
@@ -174,6 +175,23 @@ export function MemberDetailModal({ member, teamId, open, onClose }: MemberDetai
       setAiLoading(false);
     }
   }
+
+  const [exportLoading, setExportLoading] = useState(false);
+
+  const handleExport = async () => {
+    setExportLoading(true);
+    try {
+      const res = await teamsApi.exportMeetingPrep(teamId, member.userId, from, to);
+      const blobUrl = URL.createObjectURL(new Blob([res.data as BlobPart], { type: 'text/markdown' }));
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `1on1-${member.username}-${from}-${to}.md`;
+      a.click();
+      URL.revokeObjectURL(blobUrl);
+    } finally {
+      setExportLoading(false);
+    }
+  };
 
   const m = member.metrics;
   const churn = m.DAILY_CHURN_RATIO ?? 0;
@@ -246,6 +264,17 @@ export function MemberDetailModal({ member, teamId, open, onClose }: MemberDetai
                 {aiLoading ? <Spinner size="sm" /> : <Sparkles width={12} height={12} />}
                 {aiLoading ? 'Generating…' : `ask AI about ${member.username}`}
               </button>
+              {(isManager || isAdmin) && (
+                <button
+                  className="btn btn-sm"
+                  onClick={handleExport}
+                  disabled={exportLoading}
+                  aria-label={`Export 1:1 summary for ${member.username}`}
+                >
+                  {exportLoading ? <Spinner size="sm" /> : null}
+                  {exportLoading ? 'Preparing…' : 'export 1:1'}
+                </button>
+              )}
             </div>
             {aiError && (
               <span style={{ fontSize: 11, color: 'var(--coral-strong)' }}>{aiError}</span>
