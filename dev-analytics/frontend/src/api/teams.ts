@@ -18,4 +18,6 @@ export const teamsApi = {
   duplicate: (teamId: number) => api.post<Team>(`/teams/${teamId}/duplicate`),
   exportCsv: (teamId: number, from: string, to: string) =>
     api.get(`/teams/${teamId}/export`, { params: { from, to }, responseType: 'blob' }),
+  exportMeetingPrep: (teamId: number, memberId: number, from: string, to: string) =>
+    api.get(`/teams/${teamId}/members/${memberId}/export`, { params: { from, to }, responseType: 'blob' }),
 };
