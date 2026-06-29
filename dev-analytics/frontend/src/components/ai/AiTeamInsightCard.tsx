@@ -1,9 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, RefreshCw, Shield, AlertCircle, Copy, Check } from 'lucide-react';
+import axios from 'axios';
+import { clsx } from 'clsx';
+import {
+  RefreshCw, Shield, AlertCircle,
+  Square, Download, FileDown, FileCode, FileText, FileJson, Printer, Copy, Check,
+} from 'lucide-react';
 import { Chip } from '@/components/ui/Chip';
 import { aiApi } from '@/api/ai';
 import { AI } from '@/components/icons';
+import { timeAgo } from '@/lib/dates';
+import { summaryToText, summaryToMarkdown, summaryToHtml, downloadFile } from '@/lib/export';
 import type { MetricsSummaryDto } from '@/types/ai';
 import type { DateRange, MemberSummaryDto } from '@/types';
 
@@ -19,15 +26,6 @@ function fmtHours(h: number): string {
   if (h < 24) return `${h.toFixed(1)}h`;
   return `${(h / 24).toFixed(1)}d`;
 }
-
-function timeAgo(date: Date): string {
-  const diffMin = Math.floor((Date.now() - date.getTime()) / 60_000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin} min ago`;
-  return `${Math.floor(diffMin / 60)}h ago`;
-}
-
-
 
 function computeHighlights(members: MemberSummaryDto[]): string[] {
   const highlights: string[] = [];
@@ -66,17 +64,6 @@ function computeHighlights(members: MemberSummaryDto[]): string[] {
   return highlights;
 }
 
-
-
-function summaryToText(s: MetricsSummaryDto): string {
-  const lines: string[] = [];
-  if (s.headline) lines.push(s.headline);
-  if (s.overview) lines.push('Team Overview\n' + s.overview);
-  if (s.insights.length) lines.push('Insights\n' + s.insights.map((i) => `• [${i.kind}] ${i.text}`).join('\n'));
-  if (s.recommendations.length) lines.push('Suggested Actions\n' + s.recommendations.map((r) => `• ${r}`).join('\n'));
-  return lines.join('\n\n');
-}
-
 function insightSymbol(kind: string): { symbol: string; color: string } {
   if (kind === 'positive') return { symbol: '+', color: 'var(--emerald)' };
   if (kind === 'risk')     return { symbol: '!', color: 'var(--coral)' };
@@ -86,6 +73,9 @@ function insightSymbol(kind: string): { symbol: string; color: string } {
 export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGenerated }: Omit<Props, 'teamName'> & { teamName?: string }) {
   const qc = useQueryClient();
   const cacheKey = ['ai-summary-team', teamId, range.from, range.to];
+
+  const abortRef = useRef<AbortController | null>(null);
+  const exportMenuRef = useRef<HTMLDetailsElement>(null);
 
   const [summary, setSummary] = useState<MetricsSummaryDto | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -137,34 +127,86 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
   const highlights = hasData ? computeHighlights(memberSummary) : [];
 
   async function generate() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsLoading(true);
     setError(null);
     try {
-      const result = await aiApi.generateTeamSummary(teamId, range.from, range.to);
+      const result = await aiApi.generateTeamSummary(teamId, range.from, range.to, controller.signal);
       const now = Date.now();
       setSummary(result);
       setGeneratedForRange(range);
       setGeneratedAt(new Date(now));
       qc.setQueryData(cacheKey, { summary: result, generatedAt: now, range });
       onSummaryGenerated?.(result);
-    } catch {
-      setError('AI summary is temporarily unavailable. Metrics remain accessible.');
+    } catch (err) {
+      if (axios.isCancel(err)) {
+        // user aborted — reset silently
+      } else {
+        setError('AI summary is temporarily unavailable. Metrics remain accessible.');
+      }
     } finally {
-      setIsLoading(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setIsLoading(false);
+      }
     }
   }
+
+  function stop() {
+    abortRef.current?.abort();
+  }
+
+  function closeExportMenu() {
+    if (exportMenuRef.current) exportMenuRef.current.open = false;
+  }
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (exportMenuRef.current?.open && !exportMenuRef.current.contains(e.target as Node)) {
+        exportMenuRef.current.open = false;
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   async function copyToClipboard() {
     if (!summary) return;
     await navigator.clipboard.writeText(summaryToText(summary));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    closeExportMenu();
+  }
+
+  function exportAs(format: 'md' | 'html' | 'pdf' | 'txt' | 'json') {
+    if (!summary) return;
+    const stamp = `team-${teamId}-${summary.to}`;
+    if (format === 'md') {
+      downloadFile(`ai-team-insight-${stamp}.md`, summaryToMarkdown(summary), 'text/markdown');
+    } else if (format === 'html') {
+      downloadFile(`ai-team-insight-${stamp}.html`, summaryToHtml(summary), 'text/html');
+    } else if (format === 'txt') {
+      downloadFile(`ai-team-insight-${stamp}.txt`, summaryToText(summary), 'text/plain');
+    } else if (format === 'json') {
+      downloadFile(`ai-team-insight-${stamp}.json`, JSON.stringify(summary, null, 2), 'application/json');
+    } else if (format === 'pdf') {
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(summaryToHtml(summary));
+        w.document.close();
+        w.focus();
+        w.print();
+      }
+    }
+    closeExportMenu();
   }
 
   return (
     <div className="card" style={{ padding: 22, marginBottom: 24, display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 24 }}>
       {/* Left — label + headline */}
-      <div>
+      <div style={{ position: 'relative', zIndex: 1 }}>
         <div className="row gap-2" style={{ color: 'var(--accent)', marginBottom: 10 }}>
           <AI width={16} height={16} />
           <span className="t-label" style={{ color: 'var(--accent)' }}>TEAM INSIGHT</span>
@@ -184,29 +226,70 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
           {summary && !isLoading && (
             <Chip color={isOutdated ? 'amber' : 'emerald'}>{isOutdated ? 'Outdated' : 'Fresh'}</Chip>
           )}
-          {isLoading && <Chip accent>Generating…</Chip>}
+
+          {/* Export menu */}
           {summary && !isLoading && (
-            <button
-              className="btn btn-sm btn-icon"
-              onClick={copyToClipboard}
-              title="Copy to clipboard"
-              aria-label="Copy summary"
-            >
-              {copied ? <Check width={12} height={12} /> : <Copy width={12} height={12} />}
-            </button>
+            <details className="export-menu" ref={exportMenuRef} style={{ position: 'relative' }}>
+              <summary
+                role="button"
+                className="btn btn-sm btn-icon"
+                style={{ listStyle: 'none', cursor: 'pointer' }}
+                title="Export insight"
+                aria-label="Export insight"
+              >
+                <Download width={12} height={12} />
+              </summary>
+              <div className="card export-menu-panel">
+                <span className="t-label export-menu-label">Share</span>
+                <button className="menu-item" onClick={copyToClipboard}>
+                  {copied ? <Check width={13} height={13} style={{ color: 'var(--emerald)' }} /> : <Copy width={13} height={13} />}
+                  <span>{copied ? 'Copied to clipboard' : 'Copy to clipboard'}</span>
+                </button>
+                <span className="divider-2 export-menu-divider" />
+                <span className="t-label export-menu-label">Download</span>
+                <button className="menu-item" onClick={() => exportAs('md')}>
+                  <FileDown width={13} height={13} /><span>Markdown</span><span className="export-menu-ext font-mono">.md</span>
+                </button>
+                <button className="menu-item" onClick={() => exportAs('html')}>
+                  <FileCode width={13} height={13} /><span>HTML document</span><span className="export-menu-ext font-mono">.html</span>
+                </button>
+                <button className="menu-item" onClick={() => exportAs('pdf')}>
+                  <Printer width={13} height={13} /><span>Print to PDF…</span>
+                </button>
+                <button className="menu-item" onClick={() => exportAs('txt')}>
+                  <FileText width={13} height={13} /><span>Plain text</span><span className="export-menu-ext font-mono">.txt</span>
+                </button>
+                <button className="menu-item" onClick={() => exportAs('json')}>
+                  <FileJson width={13} height={13} /><span>Raw JSON</span><span className="export-menu-ext font-mono">.json</span>
+                </button>
+              </div>
+            </details>
           )}
+
+          {/* Generate / Regenerate */}
           <button
-            className="btn btn-sm"
+            className={clsx('btn btn-sm', isLoading && 'is-disabled')}
             onClick={generate}
             disabled={isLoading || !hasData}
-            aria-label={summary ? 'Regenerate AI summary' : 'Generate AI summary'}
+            aria-disabled={isLoading}
+            aria-label={summary ? 'Regenerate AI team insight' : 'Generate AI team insight'}
           >
-            {summary ? (
-              <><RefreshCw width={12} height={12} />regenerate</>
-            ) : (
-              <><Sparkles width={12} height={12} />generate</>
-            )}
+            <RefreshCw width={12} height={12} className={clsx(isLoading && 'animate-spin')} />
+            {summary ? 'Regenerate' : 'Generate'}
           </button>
+
+          {/* Stop — only while generating */}
+          {isLoading && (
+            <button
+              className="btn btn-sm"
+              onClick={stop}
+              aria-label="Stop generating team insight"
+              style={{ color: 'var(--coral)', borderColor: 'var(--coral)' }}
+            >
+              <Square width={12} height={12} />
+              Stop
+            </button>
+          )}
         </div>
       </div>
 
@@ -222,6 +305,24 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
           <div className="row gap-2" style={{ color: 'var(--coral)', alignItems: 'flex-start' }}>
             <AlertCircle width={14} height={14} style={{ flexShrink: 0, marginTop: 2 }} />
             <p className="t-body" style={{ margin: 0, fontSize: 13 }}>{error}</p>
+          </div>
+        )}
+
+        {/* Loading skeleton */}
+        {isLoading && (
+          <div className="col gap-3">
+            {[85, 70, 90, 65, 75].map((w, i) => (
+              <div
+                key={i}
+                style={{
+                  height: 11,
+                  width: `${w}%`,
+                  background: 'var(--bg-2)',
+                  borderRadius: 4,
+                  animation: 'pulse 1.5s infinite',
+                }}
+              />
+            ))}
           </div>
         )}
 

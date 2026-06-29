@@ -5,8 +5,8 @@ export const aiApi = {
   generateSummary: (from: string, to: string, repoId?: number, signal?: AbortSignal): Promise<MetricsSummaryDto> =>
     api.get<MetricsSummaryDto>('/ai/summary', { params: { from, to, repoId }, signal }).then((r) => r.data),
 
-  generateTeamSummary: (teamId: number, from: string, to: string): Promise<MetricsSummaryDto> =>
-    api.get<MetricsSummaryDto>(`/ai/summary/teams/${teamId}`, { params: { from, to } }).then((r) => r.data),
+  generateTeamSummary: (teamId: number, from: string, to: string, signal?: AbortSignal): Promise<MetricsSummaryDto> =>
+    api.get<MetricsSummaryDto>(`/ai/summary/teams/${teamId}`, { params: { from, to }, signal }).then((r) => r.data),
 
   generateMemberSummary: (teamId: number, memberId: number, from: string, to: string): Promise<MetricsSummaryDto> =>
     api.get<MetricsSummaryDto>(`/ai/summary/teams/${teamId}/member/${memberId}`, { params: { from, to } }).then((r) => r.data),
