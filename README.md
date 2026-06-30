@@ -1,7 +1,7 @@
 # Personal Developer Analytics
 
 Master's thesis project — a self-hosted platform that aggregates developer productivity
-metrics from local Git repositories, GitHub, GitLab, and Jira, and surfaces them through
+metrics from local Git repositories, GitHub, and Jira, and surfaces them through
 a React dashboard with AI-generated insights via local Ollama.
 
 ## Architecture
@@ -10,7 +10,7 @@ a React dashboard with AI-generated insights via local Ollama.
 |-------|-----------|
 | Backend API | Spring Boot 3.5, Java 17, JWT auth |
 | Database | PostgreSQL 16, Flyway migrations |
-| Frontend SPA | React 18, TypeScript, Vite, Tailwind v4, Recharts |
+| Frontend SPA | React 18, TypeScript, Vite, Tailwind CSS 3, Recharts |
 | AI insights | Ollama (llama3.2) — runs locally, no cloud dependency |
 | Deployment | Docker Compose (app + Postgres + Ollama) |
 
