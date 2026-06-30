@@ -68,6 +68,9 @@ export const metricsApi = {
   knowledgeSilo: (from: string, to: string, repoId?: number) =>
     api.get<MetricAggregateDto>('/metrics/knowledge-silo-score', { params: { from, to, repoId } }),
 
+  reviewParticipation: (from: string, to: string) =>
+    api.get<MetricAggregateDto>('/metrics/review-participation', { params: { from, to } }),
+
   freshness: () =>
     api.get<{ metricsComputedThrough?: string }>('/metrics/freshness'),
 

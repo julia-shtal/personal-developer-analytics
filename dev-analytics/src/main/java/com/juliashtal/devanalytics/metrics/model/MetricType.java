@@ -30,7 +30,9 @@ public enum MetricType {
     /** Fraction of merged PRs that had zero reviews. */
     MERGE_WITHOUT_REVIEW_RATIO(false, false, false),
     /** Average commits per ISO calendar week (DORA deployment-frequency proxy). */
-    MERGE_TO_MAIN_FREQUENCY_PER_WEEK(false, false, false);
+    MERGE_TO_MAIN_FREQUENCY_PER_WEEK(false, false, false),
+    /** Count of distinct PRs the user reviewed (excluding self-reviews) in the calculation window. */
+    REVIEW_PARTICIPATION_COUNT(false, false, true);
 
     /** True when this metric is included in the AI context for summary generation. */
     public final boolean inAiContext;
