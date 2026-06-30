@@ -45,5 +45,7 @@ export function timeAgo(date: Date): string {
   const diffMin = Math.floor(diffMs / 60_000);
   if (diffMin < 60) return `${diffMin} min ago`;
   const diffH = Math.floor(diffMin / 60);
-  return `${diffH}h ago`;
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  return `${diffD} ${diffD === 1 ? 'day' : 'days'} ago`;
 }

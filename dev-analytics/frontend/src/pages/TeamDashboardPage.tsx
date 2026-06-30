@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ComponentType, CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Users, ChevronDown, MessageSquare, Mail, Sparkles, AlertCircle, Shield } from 'lucide-react';
+import { Users, ChevronDown, MessageSquare, Mail, Sparkles, AlertCircle, Shield,
+         Download, FileImage, FileCode, FileText } from 'lucide-react';
 import { teamsApi } from '@/api/teams';
 import { usersApi } from '@/api/users';
 import { teamMetricsApi } from '@/api/metrics';
@@ -15,15 +16,133 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { MetricBarChart } from '@/components/charts/MetricBarChart';
 import { MultiLineChart } from '@/components/charts/MultiLineChart';
+import { TeamHealthRadarChart } from '@/components/charts/TeamHealthRadarChart';
 import { PageSpinner, Spinner } from '@/components/ui/Spinner';
 import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
 import { ProseWithNumbers } from '@/components/ui/ProseWithNumbers';
 import { useDateRange } from '@/context/DateRangeContext';
 import { useAuth } from '@/context/AuthContext';
 import { formatDate, timeAgo } from '@/lib/dates';
+import { downloadFile } from '@/lib/export';
 import { Commits, PRMerged, IssuesClosed, LeadTime, Churn, Focus } from '@/components/icons';
 import type { Team, TeamMembership, MemberSummaryDto, RepoDto } from '@/types';
+import type { MetricType } from '@/types';
 import type { MetricsSummaryDto } from '@/types/ai';
+
+const RADAR_CSV_COLS: Array<{ key: MetricType; col: string }> = [
+  { key: 'DAILY_COMMITS_COUNT',               col: 'daily_commits' },
+  { key: 'DAILY_CHURN_RATIO',                 col: 'churn_ratio' },
+  { key: 'PR_LEAD_TIME_HOURS_MEDIAN',         col: 'pr_lead_time_h' },
+  { key: 'MERGE_WITHOUT_REVIEW_RATIO',        col: 'merge_wo_review' },
+  { key: 'FOCUS_RATIO_DAYS_TASKS',            col: 'focus_ratio_d' },
+  { key: 'REVIEW_RESPONSE_TIME_HOURS_MEDIAN', col: 'review_response_h' },
+];
+
+function replaceCssVars(str: string): string {
+  return str.replace(/var\((--[^)]+)\)/g, (_, name: string) =>
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888888',
+  );
+}
+
+function resolveAllCssVars(svgClone: SVGElement): void {
+  svgClone.querySelectorAll('*').forEach((el) => {
+    Array.from(el.attributes).forEach((attr) => {
+      if (attr.value.includes('var(')) {
+        el.setAttribute(attr.name, replaceCssVars(attr.value));
+      }
+    });
+    const styleEl = el as HTMLElement;
+    if (styleEl.style?.cssText?.includes('var(')) {
+      el.setAttribute('style', replaceCssVars(styleEl.style.cssText));
+    }
+  });
+}
+
+function exportRadarChart(
+  containerRef: { current: HTMLDivElement | null },
+  members: MemberSummaryDto[],
+  format: 'svg' | 'png' | 'csv',
+): void {
+  if (format === 'csv') {
+    const header = ['member', ...RADAR_CSV_COLS.map((c) => c.col)].join(',');
+    const rows = members.map((m) => {
+      const vals = RADAR_CSV_COLS.map(({ key }) => {
+        const v = m.metrics[key];
+        return v != null ? v.toFixed(4) : '';
+      });
+      return [m.username, ...vals].join(',');
+    });
+    downloadFile('team-radar-metrics.csv', [header, ...rows].join('\n'), 'text/csv');
+    return;
+  }
+
+  // querySelector('svg') returns the first SVG in DOM order, which in Recharts is
+  // a legend icon SVG (a small circle), not the main chart. Pick the SVG with the
+  // largest rendered area instead — that is always the main chart surface.
+  const allSvgs = Array.from(containerRef.current?.querySelectorAll('svg') ?? []);
+  const svgEl = allSvgs.reduce<SVGSVGElement | null>((best, s) => {
+    const r = s.getBoundingClientRect();
+    const br = best?.getBoundingClientRect();
+    return r.width * r.height > (br?.width ?? 0) * (br?.height ?? 0) ? s : best;
+  }, null);
+  if (!svgEl) return;
+
+  const attrW = parseFloat(svgEl.getAttribute('width') ?? '');
+  const attrH = parseFloat(svgEl.getAttribute('height') ?? '');
+  const fallbackW = containerRef.current?.offsetWidth ?? 800;
+  const w = (isFinite(attrW) && attrW > 10) ? attrW : fallbackW;
+  const h = (isFinite(attrH) && attrH > 10) ? attrH : 400;
+  const dpr = window.devicePixelRatio || 1;
+
+  const clone = svgEl.cloneNode(true) as SVGElement;
+  clone.setAttribute('width', String(w));
+  clone.setAttribute('height', String(h));
+  clone.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('width', '100%');
+  bg.setAttribute('height', '100%');
+  bg.setAttribute('fill', '#ffffff');
+  clone.insertBefore(bg, clone.firstChild);
+
+  resolveAllCssVars(clone);
+  const svgStr = new XMLSerializer().serializeToString(clone);
+
+  if (format === 'svg') {
+    downloadFile('team-radar-chart.svg', svgStr, 'image/svg+xml');
+    return;
+  }
+
+  // PNG via canvas.
+  // Chrome silently produces a transparent result when an SVG is loaded from a
+  // blob: URL and then drawn onto a canvas — a known security restriction.
+  // A base64 data: URL bypasses this and renders correctly.
+  const dataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgStr)))}`;
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    canvas.toBlob((pngBlob) => {
+      if (!pngBlob) return;
+      const pngUrl = URL.createObjectURL(pngBlob);
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = 'team-radar-chart.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(pngUrl);
+    }, 'image/png');
+  };
+  img.src = dataUrl;
+}
 
 function fmt(v: number | undefined, decimals = 1) {
   if (v == null || v === 0) return '—';
@@ -373,6 +492,8 @@ export function TeamDashboardPage() {
   const [teamRepoId, setTeamRepoId] = useState<number | null>(null);
   const [teamPickerOpen, setTeamPickerOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<MemberSummaryDto | null>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const radarExportMenuRef = useRef<HTMLDetailsElement>(null);
   const { from, to } = range;
 
   // Managers/admins see their managed teams; developers see teams they are members of.
@@ -398,6 +519,16 @@ export function TeamDashboardPage() {
 
   // Reset repo filter whenever the active team changes.
   useEffect(() => { setTeamRepoId(null); }, [activeTeamId]);
+
+  useEffect(() => {
+    function handleRadarMenuClickOutside(e: MouseEvent) {
+      if (radarExportMenuRef.current?.open && !radarExportMenuRef.current.contains(e.target as Node)) {
+        radarExportMenuRef.current.open = false;
+      }
+    }
+    document.addEventListener('mousedown', handleRadarMenuClickOutside);
+    return () => document.removeEventListener('mousedown', handleRadarMenuClickOutside);
+  }, []);
 
   const { data: teamRepos } = useQuery<RepoDto[]>({
     queryKey: ['team-repos', activeTeamId],
@@ -650,6 +781,57 @@ export function TeamDashboardPage() {
           teamName={activeTeam?.name ?? ''}
           memberSummary={summary ?? []}
         />
+      )}
+
+      {/* Team Health Radar — managers/admins only; requires per-member summary */}
+      {isFullAccess && activeTeamId && summary && summary.length > 0 && (
+        <div className="card" style={{ padding: 22, marginBottom: 24 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+            <div>
+              <div className="t-eyebrow">team health</div>
+              <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Member comparison — 6 key metrics</div>
+              <p className="t-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Normalized to the team's own range for the period. Higher = better on all axes.
+              </p>
+            </div>
+            <details className="export-menu" ref={radarExportMenuRef} style={{ position: 'relative' }}>
+              <summary
+                className="btn btn-sm btn-icon"
+                style={{ listStyle: 'none', cursor: 'pointer' }}
+                title="Export chart"
+                aria-label="Export chart"
+              >
+                <Download width={12} height={12} />
+              </summary>
+              <div className="card export-menu-panel">
+                <span className="t-label export-menu-label">Download chart</span>
+                <button
+                  className="menu-item"
+                  onClick={() => { exportRadarChart(chartContainerRef, summary, 'png'); if (radarExportMenuRef.current) radarExportMenuRef.current.open = false; }}
+                >
+                  <FileImage width={13} height={13} /><span>PNG image</span><span className="export-menu-ext font-mono">.png</span>
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => { exportRadarChart(chartContainerRef, summary, 'svg'); if (radarExportMenuRef.current) radarExportMenuRef.current.open = false; }}
+                >
+                  <FileCode width={13} height={13} /><span>SVG vector</span><span className="export-menu-ext font-mono">.svg</span>
+                </button>
+                <span className="divider-2 export-menu-divider" />
+                <span className="t-label export-menu-label">Download data</span>
+                <button
+                  className="menu-item"
+                  onClick={() => { exportRadarChart(chartContainerRef, summary, 'csv'); if (radarExportMenuRef.current) radarExportMenuRef.current.open = false; }}
+                >
+                  <FileText width={13} height={13} /><span>Raw metrics</span><span className="export-menu-ext font-mono">.csv</span>
+                </button>
+              </div>
+            </details>
+          </div>
+          <div ref={chartContainerRef}>
+            <TeamHealthRadarChart members={summary} />
+          </div>
+        </div>
       )}
 
       {/* Commits chart */}
