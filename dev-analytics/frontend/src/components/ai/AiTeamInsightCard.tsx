@@ -239,7 +239,7 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
               >
                 <Download width={12} height={12} />
               </summary>
-              <div className="card export-menu-panel">
+              <div className="card export-menu-panel" style={{ right: 'auto', left: 0 }}>
                 <span className="t-label export-menu-label">Share</span>
                 <button className="menu-item" onClick={copyToClipboard}>
                   {copied ? <Check width={13} height={13} style={{ color: 'var(--emerald)' }} /> : <Copy width={13} height={13} />}

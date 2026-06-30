@@ -76,14 +76,28 @@ function exportRadarChart(
     return;
   }
 
-  const svgEl = containerRef.current?.querySelector('svg');
+  // querySelector('svg') returns the first SVG in DOM order, which in Recharts is
+  // a legend icon SVG (a small circle), not the main chart. Pick the SVG with the
+  // largest rendered area instead — that is always the main chart surface.
+  const allSvgs = Array.from(containerRef.current?.querySelectorAll('svg') ?? []);
+  const svgEl = allSvgs.reduce<SVGSVGElement | null>((best, s) => {
+    const r = s.getBoundingClientRect();
+    const br = best?.getBoundingClientRect();
+    return r.width * r.height > (br?.width ?? 0) * (br?.height ?? 0) ? s : best;
+  }, null);
   if (!svgEl) return;
 
-  const w = svgEl.clientWidth || 800;
-  const h = svgEl.clientHeight || 400;
+  const attrW = parseFloat(svgEl.getAttribute('width') ?? '');
+  const attrH = parseFloat(svgEl.getAttribute('height') ?? '');
+  const fallbackW = containerRef.current?.offsetWidth ?? 800;
+  const w = (isFinite(attrW) && attrW > 10) ? attrW : fallbackW;
+  const h = (isFinite(attrH) && attrH > 10) ? attrH : 400;
+  const dpr = window.devicePixelRatio || 1;
+
   const clone = svgEl.cloneNode(true) as SVGElement;
   clone.setAttribute('width', String(w));
   clone.setAttribute('height', String(h));
+  clone.setAttribute('viewBox', `0 0 ${w} ${h}`);
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
   const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -100,19 +114,21 @@ function exportRadarChart(
     return;
   }
 
-  // PNG via canvas
-  const blob = new Blob([svgStr], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
+  // PNG via canvas.
+  // Chrome silently produces a transparent result when an SVG is loaded from a
+  // blob: URL and then drawn onto a canvas — a known security restriction.
+  // A base64 data: URL bypasses this and renders correctly.
+  const dataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgStr)))}`;
   const img = new Image();
   img.onload = () => {
     const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
     const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(url);
+    ctx.drawImage(img, 0, 0, w, h);
     canvas.toBlob((pngBlob) => {
       if (!pngBlob) return;
       const pngUrl = URL.createObjectURL(pngBlob);
@@ -125,7 +141,7 @@ function exportRadarChart(
       URL.revokeObjectURL(pngUrl);
     }, 'image/png');
   };
-  img.src = url;
+  img.src = dataUrl;
 }
 
 function fmt(v: number | undefined, decimals = 1) {
