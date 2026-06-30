@@ -89,6 +89,7 @@ public class TeamExportController {
             case DEEP_WORK_STREAK_DAYS                         -> "d";
             case PR_SIZE_COMPLEXITY_SCORE                      -> "ln/c";
             case MERGE_TO_MAIN_FREQUENCY_PER_WEEK              -> "/wk";
+            case REVIEW_PARTICIPATION_COUNT                    -> "prs";
         };
     }
 }

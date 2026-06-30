@@ -255,6 +255,15 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(MERGE_WITHOUT_REVIEW_RATIO, from, to, repoId);
     }
 
+    @Operation(summary = "Code Review Participation (distinct PRs reviewed) for the current user")
+    @GetMapping("/review-participation")
+    public MetricAggregateDto getReviewParticipation(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return getPersonalLeadTimeAggregate(REVIEW_PARTICIPATION_COUNT, from, to, null);
+    }
+
     // =========================================================================
     // Backfill + freshness
     // =========================================================================

@@ -160,6 +160,11 @@ export function DashboardPage() {
     queryFn: () => metricsApi.knowledgeSilo(from, to, rId).then((r) => r.data),
   });
 
+  const reviewParticipation = useQuery({
+    queryKey: ['review-participation', from, to],
+    queryFn: () => metricsApi.reviewParticipation(from, to).then((r) => r.data),
+  });
+
   const freshness = useQuery({
     queryKey: ['metrics-freshness'],
     queryFn: () => metricsApi.freshness().then((r) => r.data),
@@ -199,6 +204,7 @@ export function DashboardPage() {
   const firstCommitLeadTimeHrs = prFirstCommitLeadTime.data?.value ?? 0;
   const deepWorkDays = Math.round(deepWorkStreak.data?.value ?? 0);
   const peakCommits = commits.data?.length ? Math.max(...commits.data.map((d) => d.value)) : 0;
+  const reviewParticipationCount = Math.round(reviewParticipation.data?.value ?? 0);
 
   // issueLeadTime kept for future use — data is fetched but not yet shown in KPI tiles
   void issueLeadTime;
@@ -430,6 +436,17 @@ export function DashboardPage() {
             accent="amber"
             icon={<PRSize />}
             tooltip="Median lines changed per PR (additions + deletions)."
+          />
+        </div>
+        <div className="divider" />
+        <div className="grid-kpi">
+          <KpiTile
+            label="code review participation"
+            value={reviewParticipationCount > 0 ? reviewParticipationCount : '—'}
+            sub="prs reviewed"
+            accent="cyan"
+            icon={<Review />}
+            tooltip="Number of distinct pull requests in which you participated as a reviewer (approved, requested changes, or commented) in the selected period. Self-reviews excluded."
           />
         </div>
       </div>
