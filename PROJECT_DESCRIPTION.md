@@ -38,7 +38,7 @@
 | Multi-source collection | Local Git (JGit), GitHub commits + PRs + Issues (Kohsuke), Jira Issues (REST) |
 | Two-phase async enrichment | Fast ingest → immediate enrich top 150 → background scheduler for the rest |
 | Incremental sync | Resumes from last fetched commit hash; no full re-scans |
-| 19 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, merge frequency |
+| 20 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, merge frequency, code review participation |
 | Dual-scope metrics | Personal (`team = NULL`) and team-scoped (per-member attribution on shared repos) |
 | AI insights | On-demand and weekly scheduled summaries via local Ollama (llama3.2); personal and team scopes; Spring Cache backed |
 | Stateless JWT auth | HS256 access tokens (15 min), rotating refresh tokens (7 days), token-version logout invalidation; single-flight concurrent 401 refresh (one `POST /auth/refresh` per burst) |
@@ -110,7 +110,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | `git/` | Local Git repo registration, JGit commit collection, repo subscription |
 | `github/` | GitHub repo registration, two-phase commit/PR collection, stats enrichment |
 | `issue/` | Unified Jira + GitHub issue collection and retrieval |
-| `metrics/` | 19-metric calculation engine, snapshot persistence and retrieval |
+| `metrics/` | 20-metric calculation engine (registry-based dispatch), snapshot persistence and retrieval |
 | `ai/` | LLM context building, Ollama client, personal/team summaries, weekly scheduler |
 | `security/` | JWT filter, token service, user details, AES-256-GCM token encryption, legacy migration runner |
 | `email/` | SMTP password reset email |
@@ -813,7 +813,8 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 **`GitHubPrReviewRepository`**
 - `deleteAllByPullRequest(pr)`, `deleteAllByPullRequestIn(List<pr>)`
-- `@Query("SELECT r.pullRequest.id, MIN(r.submittedAt) FROM ... WHERE r.pullRequest.id IN :prIds GROUP BY r.pullRequest.id")` `findFirstReviewTimestampsByPrIds(List<Long>)` — returns `List<Object[]>` with `(prId, firstReviewInstant)`
+- `findFirstReviewTimestampsByPrIds(List<Long>)` — JPQL aggregate query: `SELECT r.pullRequest.id, MIN(r.submittedAt) ... GROUP BY r.pullRequest.id`; returns `List<Object[]>` with `(prId, firstReviewInstant)`.
+- `countDistinctPrsReviewedByUser(String reviewerLogin, List<Long> repoIds, Instant from, Instant to)` → `long` — counts distinct PRs reviewed within the time window, scoped to given repos, excluding self-reviews. Used by `ReviewParticipationCalculator` (PDA-78).
 
 #### Services
 
@@ -938,35 +939,38 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 | `team_id` | FK → teams | NULL = personal; NOT NULL = team scope |
 | `repository_id` | FK → git_repositories | NULL = all-repo aggregate |
 | `date` | DATE NOT NULL | Calendar day |
-| `metric_type` | VARCHAR(64) NOT NULL | One of 19 MetricType values |
+| `metric_type` | VARCHAR(64) NOT NULL | One of 20 MetricType values |
 | `value` | DOUBLE PRECISION | |
 | `period_from` / `period_to` | DATE | Window boundaries for aggregate metrics |
 
 Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date, metric_type)`.
 
-#### MetricType (Enum) — 19 values
+#### MetricType (Enum) — 20 values
 
-| Value | Description |
-|---|---|
-| `DAILY_COMMITS_COUNT` | Commits authored on a given day |
-| `DAILY_COMMITS_AVG_SIZE` | Avg (additions + deletions) per commit |
-| `DAILY_PR_CREATED` | PRs opened on a given day |
-| `DAILY_PR_MERGED` | PRs merged on a given day |
-| `DAILY_ISSUES_CREATED` | Issues created on a given day |
-| `DAILY_ISSUES_CLOSED` | Issues closed on a given day |
-| `DAILY_CHURN_RATIO` | `deletions / (additions + deletions)` |
-| `PR_LEAD_TIME_HOURS_MEDIAN` | Median hours from PR open to merge |
-| `PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN` | Median hours from first commit to PR merge |
-| `REVIEW_RESPONSE_TIME_HOURS_MEDIAN` | Median hours from PR open to first review |
-| `ISSUE_LEAD_TIME_HOURS_MEDIAN` | Median hours from issue create to close |
-| `FOCUS_RATIO_DAYS_TASKS` | Presence indicator (1.0) for weekdays with commits; ratio computed on read |
-| `AFTER_HOURS_COMMIT_RATIO` | Share of commits outside 09:00–18:00 Mon–Fri in user's timezone |
-| `REFACTOR_RATIO` | Share of commits where deletions > additions |
-| `DEEP_WORK_STREAK_DAYS` | Longest consecutive run of commit days |
-| `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` | Average merges to main per ISO week (DORA proxy) |
-| `KNOWLEDGE_SILO_SCORE` | Max commit share across repos — bus-factor risk indicator |
-| `PR_SIZE_COMPLEXITY_SCORE` | Median `(additions + deletions) / max(commitsCount, 1)` per PR |
-| `MERGE_WITHOUT_REVIEW_RATIO` | Share of merged PRs with zero reviews |
+Each value carries three boolean flags: `(inAiContext, dailySum, aggregatePeriod)`. `inAiContext` marks whether the metric is included in the AI summary context; `dailySum` marks daily-count metrics (summed per-day); `aggregatePeriod` marks aggregate-period metrics stored with `period_from`/`period_to`.
+
+| Value | Flags | Description |
+|---|---|---|
+| `DAILY_COMMITS_COUNT` | `(true, true, false)` | Commits authored on a given day |
+| `DAILY_COMMITS_AVG_SIZE` | `(false, true, false)` | Avg (additions + deletions) per commit |
+| `DAILY_PR_CREATED` | `(true, true, false)` | PRs opened on a given day |
+| `DAILY_PR_MERGED` | `(true, true, false)` | PRs merged on a given day |
+| `DAILY_ISSUES_CREATED` | `(true, true, false)` | Issues created on a given day |
+| `DAILY_ISSUES_CLOSED` | `(true, true, false)` | Issues closed on a given day |
+| `DAILY_CHURN_RATIO` | `(true, true, false)` | `deletions / (additions + deletions)` |
+| `PR_LEAD_TIME_HOURS_MEDIAN` | `(true, false, true)` | Median hours from PR open to merge |
+| `PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN` | `(true, false, true)` | Median hours from first commit to PR merge |
+| `REVIEW_RESPONSE_TIME_HOURS_MEDIAN` | `(true, false, true)` | Median hours from PR open to first review |
+| `ISSUE_LEAD_TIME_HOURS_MEDIAN` | `(true, false, true)` | Median hours from issue create to close |
+| `FOCUS_RATIO_DAYS_TASKS` | `(true, true, false)` | Presence indicator (1.0) for weekdays with commits; ratio computed on read |
+| `AFTER_HOURS_COMMIT_RATIO` | `(false, false, true)` | Share of commits outside 09:00–18:00 Mon–Fri in user's timezone |
+| `REFACTOR_RATIO` | `(false, false, true)` | Share of commits where deletions > additions |
+| `DEEP_WORK_STREAK_DAYS` | `(false, false, true)` | Longest consecutive run of commit days |
+| `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` | `(false, false, true)` | Average merges to main per ISO week (DORA proxy) |
+| `KNOWLEDGE_SILO_SCORE` | `(false, false, true)` | Max commit share across repos — bus-factor risk indicator |
+| `PR_SIZE_COMPLEXITY_SCORE` | `(false, false, true)` | Median `(additions + deletions) / max(commitsCount, 1)` per PR |
+| `MERGE_WITHOUT_REVIEW_RATIO` | `(false, false, true)` | Share of merged PRs with zero reviews |
+| `REVIEW_PARTICIPATION_COUNT` | `(false, false, true)` | Count of distinct PRs the user reviewed (excluding self-reviews) in the calculation window |
 
 #### Repository
 
@@ -976,30 +980,48 @@ Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date
 - `findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(userIds, teamId, type, from, to)` — team summary query.
 - `getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo` / `...AndRepositoryAndDateFromAndTo` — exact-period queries for aggregate metrics (lead times stored with periodFrom/periodTo).
 
+#### Metric Calculator Infrastructure (PDA-73)
+
+The calculation layer uses a registry-based dispatch pattern instead of a monolithic service.
+
+**`MetricCalculator`** (interface) — `produces(): Set<MetricType>` and `calculate(MetricCalcContext): void`. Each implementing bean is a `@Component` responsible for one or more metric types.
+
+**`MetricCalcContext`** (record) — Immutable per-invocation context: `(User user, Team team, List<Long> repoIds, Instant from, Instant to, LocalDate fromDate, LocalDate toDate)`. Calculators inject their own repositories via constructor injection and receive only this runtime data.
+
+**`MetricCalculatorRegistry`** — Collects all `MetricCalculator` beans at startup. Validates that every `MetricType` enum value is covered by exactly one calculator and that no type is claimed twice. Startup fails immediately if coverage is incomplete — this prevents silent metric gaps when a new `MetricType` value is added without a corresponding calculator.
+
+**`MetricSnapshotWriter`** — Thin wrapper around `MetricSnapshotRepository.saveMetric(...)` used by all calculators to persist snapshots through the native-SQL upsert guard.
+
+**`RepoScopeResolver`** — Resolves the list of repo IDs for a calculation context: personal scope uses `user_repo_registrations`; team scope uses `data_source_configs.team_id`.
+
+**`MetricCalculator` implementations** (one `@Component` per metric group):
+
+| Calculator | MetricType(s) produced |
+|---|---|
+| `DailyCommitsCalculator` | `DAILY_COMMITS_COUNT`, `DAILY_COMMITS_AVG_SIZE` |
+| `DailyPrCalculator` | `DAILY_PR_CREATED`, `DAILY_PR_MERGED` |
+| `DailyIssuesCalculator` | `DAILY_ISSUES_CREATED`, `DAILY_ISSUES_CLOSED` |
+| `DailyChurnCalculator` | `DAILY_CHURN_RATIO` |
+| `PrLeadTimeCalculator` | `PR_LEAD_TIME_HOURS_MEDIAN` |
+| `IssueLeadTimeCalculator` | `ISSUE_LEAD_TIME_HOURS_MEDIAN` |
+| `FirstCommitToMergeCalculator` | `PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN` |
+| `ReviewResponseTimeCalculator` | `REVIEW_RESPONSE_TIME_HOURS_MEDIAN` |
+| `FocusRatioCalculator` | `FOCUS_RATIO_DAYS_TASKS` (saves 1.0 only for active weekdays) |
+| `AfterHoursAndRefactorCalculator` | `AFTER_HOURS_COMMIT_RATIO`, `REFACTOR_RATIO` (one DB call) |
+| `DeepWorkStreakCalculator` | `DEEP_WORK_STREAK_DAYS` (TreeSet → longest consecutive run) |
+| `MergeFrequencyCalculator` | `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` (ISO week grouping) |
+| `KnowledgeSiloCalculator` | `KNOWLEDGE_SILO_SCORE` (max user-share across repos) |
+| `PrSizeComplexityCalculator` | `PR_SIZE_COMPLEXITY_SCORE` (sorted median) |
+| `MergeWithoutReviewCalculator` | `MERGE_WITHOUT_REVIEW_RATIO` (PRs with no review events) |
+| `ReviewParticipationCalculator` | `REVIEW_PARTICIPATION_COUNT` (distinct PRs reviewed, cross-repo, attributed via `githubLogin`) |
+
 #### Services
 
-**`MetricsService`** — Core calculation engine.
-- `calculateDailyMetrics(Long userId, LocalDate from, LocalDate to)` — personal scope (team=null).
-- `calculateForTeam(Long teamId, Long requestingUserId, LocalDate from, LocalDate to)` — team scope; verifies requester is manager or ADMIN.
-- **Repo resolution**: personal → `UserRepoRegistration`; fallback to team membership repos. Team → `DataSourceConfig.team`.
-- **Attribution**: always filtered by `user.email` (commits) or `user.githubLogin` (PRs) — shared repos never pollute individual metrics.
-- **Private calc methods** (one per metric group):
-  - `calcDailyCommits` → `DAILY_COMMITS_COUNT`, `DAILY_COMMITS_AVG_SIZE`
-  - `calcDailyPrs` → `DAILY_PR_CREATED`, `DAILY_PR_MERGED`
-  - `calcDailyIssues` → `DAILY_ISSUES_CREATED`, `DAILY_ISSUES_CLOSED`
-  - `calcDailyChurn` → `DAILY_CHURN_RATIO`
-  - `calcLeadTimePrs` → `PR_LEAD_TIME_HOURS_MEDIAN`
-  - `calcLeadTimeIssues` → `ISSUE_LEAD_TIME_HOURS_MEDIAN`
-  - `calcLeadTimeFirstCommitToMerge` → `PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN`
-  - `calcReviewResponseTime` → `REVIEW_RESPONSE_TIME_HOURS_MEDIAN`
-  - `calcFocusRatio` → `FOCUS_RATIO_DAYS_TASKS` (saves 1.0 only for active weekdays)
-  - `calcAfterHoursRatioAndRefactorRatio` → `AFTER_HOURS_COMMIT_RATIO`, `REFACTOR_RATIO` (one DB call)
-  - `calcDeepWorkStreak` → `DEEP_WORK_STREAK_DAYS` (TreeSet → longest consecutive run)
-  - `calcMergeToMainFrequency` → `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` (ISO week grouping)
-  - `calcKnowledgeSilo` → `KNOWLEDGE_SILO_SCORE` (max user-share across repos)
-  - `calcPrSizeComplexity` → `PR_SIZE_COMPLEXITY_SCORE` (sorted median)
-  - `calcMergeWithoutReview` → `MERGE_WITHOUT_REVIEW_RATIO` (PRs with no review events)
-- **`saveMetric(user, team, date, type, value, repo, periodFrom, periodTo)`** — native SQL upsert guard; updates if exists, inserts if not.
+**`MetricsService`** — Thin calculation dispatcher.
+- `calculateDailyMetrics(Long userId, LocalDate from, LocalDate to)` — personal scope (team=null). Resolves repo IDs via `RepoScopeResolver`, builds `MetricCalcContext`, calls `metricCalculatorRegistry.all().forEach(c -> c.calculate(ctx))`.
+- `calculateForTeam(Long teamId, Long requestingUserId, LocalDate from, LocalDate to)` — team scope; verifies requester is manager or ADMIN; runs same dispatch for each team member.
+- **Attribution**: always filtered by `user.email` (commits) or `user.githubLogin` (PRs) — shared repos never pollute individual metrics. Attribution is enforced per-calculator inside each `calculate()` implementation.
+- **`saveMetric(user, team, date, type, value, repo, periodFrom, periodTo)`** — on `MetricSnapshotRepository`; native SQL upsert guard; updates if exists, inserts if not. Always accessed through `MetricSnapshotWriter` from calculators.
 
 **`MetricSnapshotService`** — Query facade over `MetricSnapshotRepository`.
 - `getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to)`
@@ -1008,6 +1030,7 @@ Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date
 - `getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(user, type, repo, from, to)`
 - `getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(user, team, type, from, to)`
 - `getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(userIds, teamId, type, from, to)`
+- `getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndRepositoryAndDateBetween(userIds, teamId, type, repo, from, to)` — team series scoped to a single repository; used by `MetricsTeamController` `?repoId=` filter.
 - `findMaxPersonalDate(Long userId)` → `Optional<LocalDate>` — latest personal (`team_id IS NULL`) snapshot date, used by the dashboard freshness indicator.
 
 **`MetricsScheduler`** — `@Scheduled(cron = "0 0 1 * * ?")` (daily 01:00 UTC). Iterates all users, calls `calculateDailyMetrics(userId, yesterday, yesterday)`. Per-user exceptions caught and logged as warnings.
@@ -1021,46 +1044,54 @@ Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date
 | `TeamMetricPointDto` | `date`, `value`, `metricType`, `userId?`, `username` |
 | `MemberSummaryDto` | `userId`, `username`, `metrics: Map<MetricType, Double>`, `hasCustomAvatar`, `avatarPreset`, `lastActiveAt?`, `email?` |
 
-#### Controller
+#### Controllers
 
-**`MetricsController`** — `/api/metrics`, `@PreAuthorize("isAuthenticated()")`, injects: `MetricSnapshotService`, `MetricsService`, `RepoService`, `TeamService`, `UserService`, `CheckHelper`.
+**`MetricsController`** — `/api/metrics`, `@PreAuthorize("isAuthenticated()")` (class-level), injects: `MetricSnapshotService`, `MetricsService`, `MetricsAnomalyService`, `RepoService`, `CheckHelper`. Personal endpoints only (AR-3 extracted team endpoints to `MetricsTeamController`).
 
 **Personal endpoints:**
 
 | Method | Path | Query | Response |
 |---|---|---|---|
 | POST | `/calculate` | `from`, `to` | void |
-| GET | `/daily-commits` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
+| POST | `/backfill` | `from`, `to` | 202 void — manual historical backfill; validates `from ≤ to` and `to < today` |
+| GET | `/daily-commits-count` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
 | GET | `/daily-pr-created` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
 | GET | `/daily-pr-merged` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
 | GET | `/daily-issues-created` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
 | GET | `/daily-issues-closed` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
-| GET | `/daily-churn` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
+| GET | `/daily-churn-ratio` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
 | GET | `/pr-lead-time` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
-| GET | `/pr-first-commit-lead-time` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
+| GET | `/pr-first-commit-to-merge-lead-time` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/review-response-time` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/issue-lead-time` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/focus-ratio/series` | `from`, `to` | `List<MetricPointDto>` (active days only, value=1.0) |
 | GET | `/focus-ratio` | `from`, `to` | `MetricAggregateDto` (activeDays / totalWeekdays) |
-| GET | `/after-hours-ratio` | `from`, `to` | `MetricAggregateDto` |
+| GET | `/after-hours-commit-ratio` | `from`, `to` | `MetricAggregateDto` |
 | GET | `/refactor-ratio` | `from`, `to` | `MetricAggregateDto` |
 | GET | `/deep-work-streak` | `from`, `to` | `MetricAggregateDto` |
-| GET | `/merge-frequency` | `from`, `to` | `MetricAggregateDto` |
-| GET | `/knowledge-silo` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
+| GET | `/merge-to-main-frequency-per-week` | `from`, `to` | `MetricAggregateDto` |
+| GET | `/knowledge-silo-score` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/pr-size-complexity` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
-| GET | `/merge-without-review` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
+| GET | `/merge-without-review-ratio` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
+| GET | `/review-participation` | `from`, `to` | `MetricAggregateDto` — cross-repo, no `repoId` param |
+| GET | `/anomalies` | `from`, `to` | `Map<String, Boolean>` — per-metric 2σ anomaly flags |
+| GET | `/freshness` | — | `{metricsComputedThrough: date}` — latest personal snapshot date |
 
-**Team endpoints** (MANAGER / ADMIN):
+**`MetricsTeamController`** — `/api/metrics/teams`, injects: `MetricSnapshotService`, `MetricsService`, `RepoService`, `TeamService`, `UserService`, `CheckHelper`. Extracted from `MetricsController` in AR-3 (PDA-71).
 
-| Method | Path | Response |
-|---|---|---|
-| POST | `/teams/{teamId}/calculate?from&to` | void |
-| GET | `/teams/{teamId}/daily-commits?from&to` | `List<TeamMetricPointDto>` |
-| GET | `/teams/{teamId}/summary?from&to` | `List<MemberSummaryDto>` |
-| GET | `/teams/{teamId}/members/{memberId}/summary?from&to` | `MemberSummaryDto` |
-| GET | `/teams/{teamId}/members/{memberId}/daily-commits?from&to` | `List<MetricPointDto>` |
-| GET | `/teams/{teamId}/members/{memberId}/daily-pr-created?from&to` | `List<MetricPointDto>` |
-| GET | `/teams/{teamId}/members/{memberId}/daily-churn?from&to` | `List<MetricPointDto>` |
+**Team endpoints:**
+
+| Method | Path | Auth | Query | Response |
+|---|---|---|---|---|
+| POST | `/{teamId}/calculate` | MANAGER / ADMIN | `from`, `to` | void |
+| GET | `/{teamId}/daily-commits-count` | `@teamAccessGuard.canRead` | `from`, `to`, `repoId?` | `List<TeamMetricPointDto>` — developers get only aggregate row (userId=null) |
+| GET | `/{teamId}/daily-pr-merged` | `@teamAccessGuard.canRead` | `from`, `to`, `repoId?` | `List<TeamMetricPointDto>` — developers get only aggregate row |
+| GET | `/{teamId}/daily-issues-closed` | `@teamAccessGuard.canRead` | `from`, `to`, `repoId?` | `List<TeamMetricPointDto>` — developers get only aggregate row |
+| GET | `/{teamId}/summary` | MANAGER / ADMIN | `from`, `to` | `List<MemberSummaryDto>` |
+| GET | `/{teamId}/members/{memberId}/summary` | MANAGER / ADMIN | `from`, `to` | `MemberSummaryDto` |
+| GET | `/{teamId}/members/{memberId}/daily-commits-count` | MANAGER / ADMIN | `from`, `to` | `List<MetricPointDto>` |
+| GET | `/{teamId}/members/{memberId}/daily-pr-created` | MANAGER / ADMIN | `from`, `to` | `List<MetricPointDto>` |
+| GET | `/{teamId}/members/{memberId}/daily-churn-ratio` | MANAGER / ADMIN | `from`, `to` | `List<MetricPointDto>` |
 
 ---
 
@@ -1118,26 +1149,28 @@ Index: `(conversation_id, created_at)`.
 
 #### Services
 
+**`AiContextBuilderService`** — Extracted from `MetricsAiService` in AR-4 (PDA-74). Builds the metrics context objects consumed by `MetricsAiService` and `MeetingExportService`. Deliberately free of LLM, prompt, and persistence concerns so statistical logic can be unit-tested in isolation.
+- `buildPersonalContext(User, from, to, repoId?)` → `AggregatedMetricsContext` — fetches snapshots for all `inAiContext=true` metric types, computes `{min, max, median, total, trendPct, anomaly}` per metric.
+- `buildTeamContext(Team, members, from, to)` → `TeamMetricsContext` — per-member `{username, metrics: Map<MetricType, aggregatedValue>}`.
+- **Routing**: `dailySum=true` metrics use `dateBetween` query; `aggregatePeriod=true` metrics use exact `periodFrom/periodTo` query. Routing is driven by `MetricType` flags.
+
 **`MetricsAiService`** — Core AI service. `@Cacheable(value = "ai_summaries", key = "{#user.id, #from, #to, #repoId}")`.
 
-- **Context metric types used**: `DAILY_COMMITS_COUNT`, `DAILY_PR_CREATED`, `DAILY_PR_MERGED`, `DAILY_ISSUES_CREATED`, `DAILY_ISSUES_CLOSED`, `DAILY_CHURN_RATIO`, `PR_LEAD_TIME_HOURS_MEDIAN`, `PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN`, `ISSUE_LEAD_TIME_HOURS_MEDIAN`, `REVIEW_RESPONSE_TIME_HOURS_MEDIAN`, `FOCUS_RATIO_DAYS_TASKS`.
-
-- **Routing**: daily-sum metrics (`DAILY_*`) → `dateBetween` query; aggregate metrics (lead times, review time) → exact `periodFrom/periodTo` query.
+- **Context metric types used**: all 11 `MetricType` values with `inAiContext=true` flag: `DAILY_COMMITS_COUNT`, `DAILY_PR_CREATED`, `DAILY_PR_MERGED`, `DAILY_ISSUES_CREATED`, `DAILY_ISSUES_CLOSED`, `DAILY_CHURN_RATIO`, `PR_LEAD_TIME_HOURS_MEDIAN`, `PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN`, `ISSUE_LEAD_TIME_HOURS_MEDIAN`, `REVIEW_RESPONSE_TIME_HOURS_MEDIAN`, `FOCUS_RATIO_DAYS_TASKS`.
 
 - **`generateSummary(User, from, to, repoId)`** — personal/repo scope:
-  1. Fetches snapshots for all context metric types.
-  2. Builds `AggregatedMetricsContext` — per metric: `{min, max, median, total, trendPct, anomaly}`.
-  3. `trendPct` — compares avg of first half vs. second half of the time series.
-  4. `anomaly` — true if any value is more than 2 standard deviations from the mean.
-  5. Serialises context to JSON, builds structured system + user prompt.
-  6. Calls `LlmClient.complete(model, systemPrompt, userPrompt)`.
-  7. Parses JSON response into `MetricsSummaryDto` with headline, overview, insights, recommendations; strips markdown code fences if present (PDA-53).
-  8. Persists to `metric_summaries` table; result cached in `ai_summaries` by `(userId, from, to, repoId)` (PDA-53).
+  1. Delegates to `AiContextBuilderService.buildPersonalContext()` → `AggregatedMetricsContext`.
+  2. Serialises context to JSON, builds structured system + user prompt.
+  3. Calls `LlmClient.complete(model, systemPrompt, userPrompt)`.
+  4. Parses JSON response into `MetricsSummaryDto` with headline, overview, insights, recommendations; strips markdown code fences if present (PDA-53).
+  5. Persists to `metric_summaries` table; result cached in `ai_summaries` by `(userId, from, to, repoId)` (PDA-53).
 
 - **`generateTeamSummary(User requestingUser, Long teamId, from, to)`** — team scope (MANAGER or ADMIN only):
-  1. Builds `TeamMetricsContext` — per member: `{username, metrics: Map<MetricType, aggregatedValue>}`.
+  1. Delegates to `AiContextBuilderService.buildTeamContext()` → `TeamMetricsContext`.
   2. Same prompt/parse flow as personal summary; generates team-scoped `metric_summaries` row with `team_id` set, `user_id = NULL` (PDA-50).
   3. Cached by `("team", teamId, from, to)`.
+
+- **`generateMemberSummary(User requestingUser, Long teamId, Long memberId, from, to)`** — per-member AI summary used by the 1:1 meeting prep export (PDA-76).
 
 - **System prompt design**: instructs the model to return only a JSON object with fields `headline` (1-sentence), `overview`, `insights` (5–8 items with kind/text/metric), `recommendations` (3–5 items). Priority order for insights: Churn Ratio → Focus Ratio → anomalies → remaining metrics. No markdown, no extra text.
 
@@ -1163,6 +1196,10 @@ Index: `(conversation_id, created_at)`.
 - Saves result as `MetricSummaryEntity` via `MetricSummaryRepository` with headline, created_at set to now() (PDA-53).
 - Triggers `NotificationDispatchService.dispatchSummaries()` if user has `ai_brief=true` in `user_notification_prefs` (PDA-58).
 - Per-user failures are logged but do not abort the run.
+
+**`MeetingExportService`** — Builds a structured Markdown 1:1 meeting prep document (PDA-76).
+- `buildMarkdown(member, summary, aiSummary, anomalies, from, to, modelName)` → `String` — formats member metrics, AI insights, anomaly highlights, and recommendations into a downloadable `.md` file.
+- Called by `MeetingExportController`; consumes `MemberSummaryDto`, `MetricsSummaryDto` (from `generateMemberSummary`), and `Map<MetricType, Boolean>` anomaly flags.
 
 **`AiConversationService`** — Manages follow-up conversations on summary insights (PDA-51/T2).
 - `startConversation(User, summaryScope, summaryContext)` → creates `AiConversationEntity`.
@@ -1202,11 +1239,13 @@ Index: `(conversation_id, created_at)`.
 | GET | `/{conversationId}/messages` | 200 List<MessageDto> | Get messages in conversation (PDA-51) |
 | POST | `/{conversationId}/messages` | 201 MessageDto | Send follow-up message `{content}` (PDA-51) |
 
-**`MetricsAnomalyController`** — `/api/metrics`, `@PreAuthorize("isAuthenticated()")`
+**`MeetingExportController`** — `/api/teams`, `@PreAuthorize("hasAnyRole('MANAGER','ADMIN')")`
 
 | Method | Path | Query | Response | Description |
 |---|---|---|---|---|
-| GET | `/anomalies` | `from`, `to` | 200 Map<MetricType, Boolean> | Per-metric 2σ anomaly flags (PDA-58) |
+| GET | `/{teamId}/members/{memberId}/export` | `from`, `to` | 200 `text/markdown` | Export 1:1 meeting prep document for a team member as a downloadable Markdown file (PDA-76) |
+
+Note: `anomalies` endpoint lives on `MetricsController` (personal) — see Section 3.11 personal endpoints table.
 
 ---
 
@@ -1312,7 +1351,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 ## 4. Database Design
 
-### 4.1 Schema Evolution — 53 Flyway Migrations
+### 4.1 Schema Evolution — 55 Flyway Migrations
 
 | Version | File | What it does |
 |---|---|---|
@@ -1369,6 +1408,8 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 | V51 | `V51__sync_jobs.sql` | Create `sync_jobs` (id, data_source_id FK, status, phase, total_processed, started_at, completed_at, result, error); indexes on (data_source_id) and partial on (status='RUNNING') — persistent job state for backfill detection (PDA-56/T2) |
 | V52 | `V52__direct_messages.sql` | Create `messages` (id, sender_id FK, recipient_id FK, body, created_at, read_at); indexes on (sender_id, recipient_id, created_at) and (recipient_id, read_at) — 1:1 direct messaging (PDA-60/T1) |
 | V53 | `V53__backfill_notification_prefs.sql` | Backfill an all-FALSE `user_notification_prefs` row for every user lacking one (idempotent `INSERT ... WHERE NOT EXISTS` guard preserves existing custom rows); ALTER COLUMN `ai_brief`/`sync_failures`/`after_hours` SET DEFAULT FALSE — aligns new-row defaults with the opt-out notification policy (PDA-68/T7) |
+| V54 | `V54__add_default_contact_method.sql` | ALTER `user_notification_prefs` ADD `default_contact_method` VARCHAR(16) NOT NULL DEFAULT 'IN_APP' CHECK IN ('IN_APP','EMAIL') — user preference for in-app vs. email contact in `MemberDetailModal` (PDA-69/T8) |
+| V55 | `V55__timestamps_to_timestamptz.sql` | Convert `data_source_configs.(last_success_sync, created_at, updated_at)` and `git_repositories.last_scan_at` from `TIMESTAMP` to `TIMESTAMPTZ` (QF-3) — Instant-based Java fields require `TIMESTAMPTZ` so Postgres preserves timezone context and comparisons are unambiguous |
 
 ### 4.2 Entity-Relationship Overview
 
@@ -1408,10 +1449,10 @@ All secured endpoints require `Authorization: Bearer {accessToken}`.
 | GitHub | `/api/github` | Authenticated |
 | Issues | `/api/issues` | Authenticated |
 | Metrics (personal) | `/api/metrics` | Authenticated |
-| Metrics (team) | `/api/metrics/teams/{teamId}` | MANAGER / ADMIN |
+| Metrics (team) | `/api/metrics/teams` | MANAGER / ADMIN (DEVELOPER for read-only aggregate endpoints) |
 | AI Summaries | `/api/ai` | Authenticated |
 
-Selected notable endpoints (PDA-48 through PDA-60):
+Selected notable endpoints (PDA-48 through PDA-78):
 
 | Method | Path | Status | Description |
 |---|---|---|---|
@@ -1434,6 +1475,8 @@ Selected notable endpoints (PDA-48 through PDA-60):
 | GET | `/api/ai/conversations/{conversationId}/messages` | 200 | Get messages in a conversation (PDA-51) |
 | POST | `/api/ai/conversations/{conversationId}/messages` | 201 | Send a follow-up message in a conversation (PDA-51) |
 | GET | `/api/metrics/anomalies` | 200 | Per-metric anomaly flags using 2σ rule (PDA-58) |
+| GET | `/api/metrics/review-participation` | 200 | Code review participation (distinct PRs reviewed, cross-repo) (PDA-78) |
+| GET | `/api/teams/{teamId}/members/{memberId}/export` | 200 text/markdown | 1:1 meeting prep document for a team member with AI insights and anomaly highlights (PDA-76) |
 | GET | `/api/invitations/generate` | 200 | Generate invite token with optional email (PDA-52) |
 | POST | `/api/invitations/redeem` | 201 | Redeem invite token to join team (PDA-52) |
 | GET | `/api/invitations/pending` | 200 | List pending invites sent by current user (PDA-52) |
@@ -1545,15 +1588,17 @@ Phase C — Background sweep (every 2 minutes, 50 items/run)
 
 ### 8.3 Notable Calculation Details
 
-| Metric | Method |
-|---|---|
-| `FOCUS_RATIO_DAYS_TASKS` | Saves value=1.0 for each weekday with ≥1 commit. Zero-commit days not stored. Aggregate ratio computed at read time. |
-| `AFTER_HOURS_COMMIT_RATIO` | Converts `authorDate` to `ZoneId.of(user.timezone)`; counts commits where `hour < 9` or `hour >= 18` or `dayOfWeek in {SAT, SUN}`. |
-| `DEEP_WORK_STREAK_DAYS` | Collects unique commit dates into `TreeSet<LocalDate>`, walks to find max consecutive run. |
-| `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` | Groups daily commit counts by ISO week key `"YYYY-WWnn"`, averages counts per week. |
-| `KNOWLEDGE_SILO_SCORE` | `max(userCommitsInRepo / totalCommitsInRepo)` across all repos in window. |
-| `PR_SIZE_COMPLEXITY_SCORE` | Per PR: `(additions + deletions) / max(commitsCount, 1)`. Groups by repo, takes sorted median. |
-| `MERGE_WITHOUT_REVIEW_RATIO` | `findFirstReviewTimestampsByPrIds()` gives PRs WITH reviews. Ratio = `(merged PRs − PRs with reviews) / merged PRs`. |
+| Metric | Calculator | Notes |
+|---|---|---|
+| `FOCUS_RATIO_DAYS_TASKS` | `FocusRatioCalculator` | Saves value=1.0 for each weekday with ≥1 commit. Zero-commit days not stored. Aggregate ratio computed at read time. |
+| `AFTER_HOURS_COMMIT_RATIO` | `AfterHoursAndRefactorCalculator` | Converts `authorDate` to `ZoneId.of(user.timezone)`; counts commits where `hour < 9` or `hour >= 18` or `dayOfWeek in {SAT, SUN}`. |
+| `REFACTOR_RATIO` | `AfterHoursAndRefactorCalculator` | Computed in the same DB call as `AFTER_HOURS_COMMIT_RATIO`. |
+| `DEEP_WORK_STREAK_DAYS` | `DeepWorkStreakCalculator` | Collects unique commit dates into `TreeSet<LocalDate>`, walks to find max consecutive run. |
+| `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` | `MergeFrequencyCalculator` | Groups daily commit counts by ISO week key `"YYYY-WWnn"`, averages counts per week. |
+| `KNOWLEDGE_SILO_SCORE` | `KnowledgeSiloCalculator` | `max(userCommitsInRepo / totalCommitsInRepo)` across all repos in window. |
+| `PR_SIZE_COMPLEXITY_SCORE` | `PrSizeComplexityCalculator` | Per PR: `(additions + deletions) / max(commitsCount, 1)`. Groups by repo, takes sorted median. |
+| `MERGE_WITHOUT_REVIEW_RATIO` | `MergeWithoutReviewCalculator` | `findFirstReviewTimestampsByPrIds()` gives PRs WITH reviews. Ratio = `(merged PRs − PRs with reviews) / merged PRs`. |
+| `REVIEW_PARTICIPATION_COUNT` | `ReviewParticipationCalculator` | `countDistinctPrsReviewedByUser` JPQL on `GitHubPrReviewRepository`; cross-repo (`repo=null`); attributed via `User.githubLogin`; guards: skip if `githubLogin=null` or `repoIds` empty. |
 
 ---
 
@@ -1562,20 +1607,20 @@ Phase C — Background sweep (every 2 minutes, 50 items/run)
 ### 9.1 Architecture
 
 ```
-AiSummaryController
+AiSummaryController / MeetingExportController
   └─▶ MetricsAiService
-        ├─▶ MetricSnapshotService   (fetch snapshots for context window)
-        ├─▶ buildAggregatedContext  (min/max/median/trend/2σ anomaly per metric)
-        ├─▶ buildPrompt             (structured JSON system + user prompt)
-        ├─▶ OllamaLlmClient         (POST /api/chat → llama3.2)
-        └─▶ parseResponse           (strip code fences, deserialize JSON)
-              └─▶ MetricsSummaryDto (overview, insights[], recommendations[])
+        ├─▶ AiContextBuilderService  (fetch snapshots, compute min/max/median/trend/2σ)
+        │     └─▶ MetricSnapshotService
+        ├─▶ buildPrompt              (structured JSON system + user prompt)
+        ├─▶ OllamaLlmClient          (POST /api/chat → llama3.2)
+        └─▶ parseResponse            (strip code fences, deserialize JSON)
+              └─▶ MetricsSummaryDto  (overview, insights[], recommendations[])
                     └─▶ cached in "ai_summaries" (Caffeine)
 ```
 
 ### 9.2 Context Building
 
-`MetricsAiService` uses 11 of the 19 metric types as AI context: the 6 daily-count metrics, DAILY_CHURN_RATIO, the 4 aggregate lead/review time metrics, and FOCUS_RATIO_DAYS_TASKS. For each metric it computes:
+Context building is handled by `AiContextBuilderService` (extracted in AR-4/PDA-74). It uses 11 of the 20 metric types as AI context — those with `inAiContext=true`: the 6 daily-count metrics, `DAILY_CHURN_RATIO`, the 4 aggregate lead/review time metrics, and `FOCUS_RATIO_DAYS_TASKS`. For each metric it computes:
 
 | Aggregate | How |
 |---|---|
@@ -1584,7 +1629,7 @@ AiSummaryController
 | `trendPct` | `(avg(recent half) − avg(early half)) / avg(early half) × 100` |
 | `anomaly` | True if any value is > 2 standard deviations from the mean |
 
-Aggregate metrics (lead times, review time) use an exact `periodFrom/periodTo` query; daily-count metrics use a `dateBetween` query. This distinction is enforced in `AGGREGATE_METRICS` set.
+Aggregate metrics (lead times, review time) use an exact `periodFrom/periodTo` query; daily-count metrics use a `dateBetween` query. This distinction is now driven by the `MetricType.aggregatePeriod` and `MetricType.dailySum` flags in `AiContextBuilderService`.
 
 ### 9.3 Ollama Configuration
 
@@ -1640,7 +1685,7 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 - **Hero block**: `t-h1` headline interpolates live totals (commits, PRs merged, deep-work streak); appended with `aiSummary.headline` when a summary is available. `t-body` overview paragraph from `aiSummary.overview` (placeholder when none).
 - **Commits hero card**: total count + `<Sparkline>` of daily commit activity.
 - **Velocity group** (`hr-label velocity`): 8 `<KpiTile>` in 2 rows of 4 with a `.divider` between rows — commits, prs merged, pr lead time, focus ratio, prs created, issues closed, review response, 1st commit→merge. Each tile shows a red anomaly badge if the current metric value deviates >2σ from the historical mean (PDA-58/T1).
-- **Wellness · Quality group** (`hr-label wellness · quality`): 8 `<KpiTile>` in 2 rows of 4 — after-hours, refactor ratio, merge w/o review, merge frequency, deep work streak, avg churn, knowledge silo, pr size · median. Anomaly badges shown per metric (PDA-58/T1).
+- **Wellness · Quality group** (`hr-label wellness · quality`): 9 `<KpiTile>` in 3 rows — after-hours, refactor ratio, merge w/o review, merge frequency; then deep work streak, avg churn, knowledge silo, pr size · median; then code review participation (`REVIEW_PARTICIPATION_COUNT`, "prs reviewed", cyan accent, cross-repo, self-reviews excluded). Anomaly badges shown per metric (PDA-58/T1).
 - **AI Summary** (`hr-label ai summary`): `<AiSummaryCard>` for the selected date range; passes summary up via `onSummaryGenerated` to drive the hero block.
 - **Activity over time** (`hr-label activity · over time`): full-width commits bar chart; `.charts-grid` with PR flow (created/merged sparklines) and Code churn sparkline; Issues card (closed + created bar charts, shown only when data present).
 
@@ -1739,7 +1784,7 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 | Module | Endpoints covered |
 |---|---|
-| `api/metrics.ts` | All 20 personal metric endpoints (all accept optional `?repoId=`) + 5 team metric endpoints (daily-commits / daily-pr-merged / daily-issues-closed accept optional `?repoId=`) |
+| `api/metrics.ts` | All 20 personal metric endpoints + team metric endpoints; daily-count endpoints accept optional `?repoId=`; `reviewParticipation(from, to)` is cross-repo (no repoId) |
 | `api/datasources.ts` | CRUD + collect + status polling; defines `SyncStatus` interface |
 | `api/repos.ts` | `list(?dataSourceId, ?teamId)`, subscribe, unsubscribe |
 | `api/teams.ts` | CRUD, add/remove member, rename, delete, `getMyMemberships()` → `TeamMembershipDto[]` |
@@ -1795,7 +1840,7 @@ The editorial design system lives in `frontend/src/index.css` (`@theme` block re
 | Spring Cache / Caffeine | (managed) | AI summary caching (`ai_summaries`) |
 | JJWT | 0.13.0 | HS256 token generation/validation |
 | PostgreSQL | 16 | Primary data store |
-| Flyway | (managed) | Schema versioning (43 migrations) |
+| Flyway | (managed) | Schema versioning (55 migrations) |
 | JGit | 7.2.1.202505142326-r | Local Git repository reading |
 | Kohsuke GitHub API | 2.0-rc.5 | GitHub REST API client |
 | Spring RestTemplate | (managed) | Jira API + Ollama HTTP calls |
@@ -1908,4 +1953,4 @@ Ollama must be running separately: `ollama serve` (and `ollama pull llama3.2` on
 
 ---
 
-*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 19-metric calculation engine with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries and 2σ anomaly detection, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (21 controllers, 53 Flyway migrations, 18+ repositories).*
+*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 20-metric calculation engine (registry-based dispatch via `MetricCalculatorRegistry`, 16 `MetricCalculator` beans) with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries, 2σ anomaly detection, 1:1 meeting prep export, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (23 controllers, 55 Flyway migrations, 18+ repositories).*
