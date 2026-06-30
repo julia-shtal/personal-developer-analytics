@@ -11,9 +11,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MetricTypeTest {
 
     @Test
-    void inAiContext_exactlyElevenMetrics() {
+    void inAiContext_exactlyTwelveMetrics() {
         long count = Arrays.stream(MetricType.values()).filter(t -> t.inAiContext).count();
-        assertThat(count).as("CONTEXT_METRIC_TYPES size").isEqualTo(11);
+        assertThat(count).as("CONTEXT_METRIC_TYPES size").isEqualTo(12);
     }
 
     @Test
@@ -23,9 +23,9 @@ class MetricTypeTest {
     }
 
     @Test
-    void aggregatePeriod_exactlyFourMetrics() {
+    void aggregatePeriod_exactlyFiveMetrics() {
         long count = Arrays.stream(MetricType.values()).filter(t -> t.aggregatePeriod).count();
-        assertThat(count).as("AGGREGATE_METRICS size").isEqualTo(4);
+        assertThat(count).as("AGGREGATE_METRICS size").isEqualTo(5);
     }
 
     @Test
@@ -49,7 +49,7 @@ class MetricTypeTest {
     }
 
     @Test
-    void totalMetricCount_isNineteen() {
-        assertThat(MetricType.values()).hasSize(19);
+    void totalMetricCount_isTwenty() {
+        assertThat(MetricType.values()).hasSize(20);
     }
 }

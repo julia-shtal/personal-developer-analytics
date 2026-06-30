@@ -18,6 +18,7 @@ import { TeamManagePage } from '@/pages/TeamManagePage';
 import { AdminPage } from '@/pages/AdminPage';
 import { WelcomePage } from '@/pages/WelcomePage';
 import { MessagesPage } from '@/pages/MessagesPage';
+import { GoalsPage } from '@/pages/GoalsPage';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const queryClient = new QueryClient({
@@ -69,6 +70,7 @@ function AppRoutes() {
           <Route path="/datasources" element={<DataSourcesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/goals" element={<GoalsPage />} />
           <Route path="/admin" element={<AdminPage />} />
         </Route>
 

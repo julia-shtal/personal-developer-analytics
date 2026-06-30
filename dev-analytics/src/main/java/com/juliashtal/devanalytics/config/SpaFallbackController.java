@@ -13,7 +13,7 @@ public class SpaFallbackController {
 
     @RequestMapping(value = {"/", "/login", "/register", "/forgot-password", "/reset-password",
             "/welcome", "/dashboard", "/team", "/team-manage", "/datasources",
-            "/settings", "/messages", "/admin"})
+            "/settings", "/messages", "/goals", "/admin"})
     public String spa(HttpServletRequest request) {
         return "forward:/index.html";
     }

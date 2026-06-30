@@ -134,10 +134,10 @@ class MeetingExportControllerTest {
     }
 
     @Test
-    void exportMeetingPrep_unauthenticated_returns403() throws Exception {
+    void exportMeetingPrep_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/teams/1/members/20/export")
                         .param("from", "2026-06-01")
                         .param("to", "2026-06-30"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 }

@@ -7,7 +7,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -17,6 +19,9 @@ public class AggregatedMetricsContext {
     private LocalDate to;
     private String repoName;
     private Map<String, MetricAggregate> metrics = new LinkedHashMap<>();
+
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    private List<GoalSummary> activeGoals = new ArrayList<>();
 
     @Data
     @Builder

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { Target } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 
 type AccentColor = 'violet' | 'cyan' | 'amber' | 'emerald' | 'coral' | 'accent';
@@ -13,6 +15,7 @@ interface KpiTileProps {
   size?: 'md' | 'lg';
   emphasis?: boolean;
   anomaly?: boolean;
+  onSetGoal?: () => void;
 }
 
 export function KpiTile({
@@ -25,16 +28,22 @@ export function KpiTile({
   size = 'md',
   emphasis = false,
   anomaly = false,
+  onSetGoal,
 }: KpiTileProps) {
+  const [hovered, setHovered] = useState(false);
+
   return (
     <div
       style={{
+        position: 'relative',
         padding: size === 'lg' ? '22px 24px' : '18px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
         minHeight: size === 'lg' ? 130 : 100,
       }}
+      onMouseEnter={() => onSetGoal && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div className="row" style={{ alignItems: 'center', gap: 6 }}>
@@ -70,6 +79,30 @@ export function KpiTile({
         {value}
       </div>
       {sub && <div className="t-label" style={{ marginTop: -4 }}>{sub}</div>}
+      {onSetGoal && (
+        <button
+          onClick={onSetGoal}
+          title="Set a goal for this metric"
+          aria-label="Set a goal for this metric"
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            right: 10,
+            opacity: hovered ? 0.45 : 0,
+            transition: 'opacity 0.15s',
+            pointerEvents: hovered ? 'auto' : 'none',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 2,
+            color: 'var(--fg-3)',
+            lineHeight: 1,
+            display: 'flex',
+          }}
+        >
+          <Target width={12} height={12} />
+        </button>
+      )}
     </div>
   );
 }
