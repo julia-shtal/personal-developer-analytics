@@ -156,6 +156,7 @@ public class MetricsAiService {
                 - ISSUE_LEAD_TIME_HOURS_MEDIAN: "Issue Lead Time"
                 - REVIEW_RESPONSE_TIME_HOURS_MEDIAN: "Review Response Time"
                 - FOCUS_RATIO_DAYS_TASKS: "Focus Ratio"
+                - REVIEW_PARTICIPATION_COUNT: "Review Participation"
 
                 Each metric has: min, max, median, total (count metrics only), trendPct (% change recent vs early), anomaly (boolean).
 
@@ -202,6 +203,15 @@ public class MetricsAiService {
                 - Totals are whole numbers; do not add decimal places.
                 - Express time metrics in hours (e.g., "22 hours", not "22.0 hours").
                 - Express trend as a percentage with one decimal (e.g., "-19.3%", not "-19.3000%").
+
+                Goal progress coaching (only when activeGoals is non-empty in the context):
+                - For each goal in activeGoals, compare currentValue to targetValue.
+                - Use domain knowledge to determine direction: lower is better for lead times,
+                  churn ratio, after-hours ratio; higher is better for commit counts, PRs merged,
+                  issues closed, review participation, deep work streak.
+                - If on track: emit a "positive" insight with metric = the human-readable name.
+                - If behind: emit a "risk" insight and add a specific, actionable recommendation.
+                - Reference the targetDate in the insight text so the developer knows the deadline.
                 """;
     }
 
@@ -239,6 +249,7 @@ public class MetricsAiService {
                 - ISSUE_LEAD_TIME_HOURS_MEDIAN: "Issue Lead Time"
                 - REVIEW_RESPONSE_TIME_HOURS_MEDIAN: "Review Response Time"
                 - FOCUS_RATIO_DAYS_TASKS: "Focus Ratio"
+                - REVIEW_PARTICIPATION_COUNT: "Review Participation"
 
                 Each member has a "metrics" map of aggregated values for the period.
 

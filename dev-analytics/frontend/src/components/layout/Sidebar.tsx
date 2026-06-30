@@ -13,6 +13,7 @@ import {
   LogOut,
   Search,
   MessageSquare,
+  Target,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -166,6 +167,7 @@ export function Sidebar() {
           <NavItem to="/team-manage" icon={<UserCog width={15} height={15} />} label="Manage" />
         )}
         <NavItem to="/datasources" icon={<Database width={15} height={15} />} label="Sources" />
+        <NavItem to="/goals" icon={<Target width={15} height={15} />} label="Goals" />
         <NavItem
           to="/messages"
           icon={<MessageSquare width={15} height={15} />}

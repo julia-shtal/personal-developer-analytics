@@ -1,7 +1,10 @@
 package com.juliashtal.devanalytics.ai.service;
 
 import com.juliashtal.devanalytics.ai.model.AggregatedMetricsContext;
+import com.juliashtal.devanalytics.ai.model.GoalEntity;
+import com.juliashtal.devanalytics.ai.model.GoalSummary;
 import com.juliashtal.devanalytics.ai.model.TeamMetricsContext;
+import com.juliashtal.devanalytics.ai.repository.GoalRepository;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
@@ -46,6 +49,7 @@ public class AiContextBuilderService {
     private static final double ANOMALY_STD_DEV_THRESHOLD = 2.0;
 
     private final MetricSnapshotService metricSnapshotService;
+    private final GoalRepository goalRepository;
 
     public AggregatedMetricsContext buildPersonalContext(User user, LocalDate from, LocalDate to,
                                                          GitRepositoryEntity repo) {
@@ -78,6 +82,23 @@ public class AiContextBuilderService {
         ctx.setTo(to);
         ctx.setRepoName(repo != null ? repo.getName() : null);
         ctx.setMetrics(aggregates);
+
+        // Attach active goals — target date >= today so past-due goals are excluded
+        List<GoalEntity> activeGoalEntities =
+                goalRepository.findByUser_IdAndTargetDateGreaterThanEqual(user.getId(), LocalDate.now());
+
+        List<GoalSummary> goalSummaries = activeGoalEntities.stream().map(goal -> {
+            MetricType type;
+            try { type = MetricType.valueOf(goal.getMetricType()); }
+            catch (IllegalArgumentException e) { return null; }
+            List<MetricSnapshot> snaps = metricSnapshotService
+                    .getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to);
+            Double current = snaps.isEmpty() ? null
+                    : snaps.stream().mapToDouble(MetricSnapshot::getValue).average().orElse(0.0);
+            return new GoalSummary(goal.getMetricType(), goal.getTargetValue(), goal.getTargetDate(), current);
+        }).filter(Objects::nonNull).toList();
+
+        ctx.setActiveGoals(goalSummaries);
         return ctx;
     }
 

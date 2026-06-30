@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { X } from 'lucide-react';
+import { goalsApi } from '@/api/goals';
+import type { GoalRequestDto } from '@/api/goals';
 import { metricsApi } from '@/api/metrics';
 import { MetricBarChart } from '@/components/charts/MetricBarChart';
 import { Sparkline } from '@/components/charts/Sparkline';
@@ -179,11 +182,38 @@ export function DashboardPage() {
     retry: false,
   });
 
+  const { data: goals } = useQuery({
+    queryKey: ['goals'],
+    queryFn: () => goalsApi.list(),
+  });
+
   const recalculateMutation = useMutation({
     mutationFn: () => metricsApi.calculate(from, to),
     onSuccess: () => qc.invalidateQueries({ queryKey: [] }),
     onSettled: () => window.dispatchEvent(new CustomEvent('da:recalculate-done')),
   });
+
+  const [goalModal, setGoalModal] = useState<{ metricType: string; label: string } | null>(null);
+  const [goalForm, setGoalForm] = useState<Omit<GoalRequestDto, 'metricType'>>({ targetValue: 0, targetDate: '' });
+
+  const createGoalMutation = useMutation({
+    mutationFn: (req: GoalRequestDto) => goalsApi.create(req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['goals'] });
+      setGoalModal(null);
+    },
+  });
+
+  function openGoalModal(metricType: string, label: string) {
+    setGoalForm({ targetValue: 0, targetDate: '' });
+    setGoalModal({ metricType, label });
+  }
+
+  function handleGoalSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!goalModal || !goalForm.targetDate || goalForm.targetValue < 0) return;
+    createGoalMutation.mutate({ metricType: goalModal.metricType, ...goalForm });
+  }
 
   useEffect(() => {
     const h = () => {
@@ -242,7 +272,9 @@ export function DashboardPage() {
               <Chip color="cyan">{selectedRepo.name}</Chip>
             )}
           </div>
-          <RepoSelector />
+          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <RepoSelector />
+          </div>
         </div>
         <h1 className="t-h1" style={{ textAlign: 'justify' }}>
           <em>{totalCommits} commits</em>, <em>{totalPrsMerged} PRs merged</em>,
@@ -289,6 +321,7 @@ export function DashboardPage() {
             icon={<Commits />}
             tooltip="Number of Git commits authored in the selected period."
             anomaly={anomalies.data?.DAILY_COMMITS_COUNT}
+            onSetGoal={() => openGoalModal('DAILY_COMMITS_COUNT', 'commits')}
           />
           <KpiTile
             label="prs merged"
@@ -298,6 +331,7 @@ export function DashboardPage() {
             icon={<PRMerged />}
             tooltip="Pull requests merged to a target branch in the selected period."
             anomaly={anomalies.data?.DAILY_PR_MERGED}
+            onSetGoal={() => openGoalModal('DAILY_PR_MERGED', 'prs merged')}
           />
           <KpiTile
             label="pr lead time"
@@ -307,6 +341,7 @@ export function DashboardPage() {
             icon={<LeadTime />}
             tooltip="Median time from when a PR is opened to when it is merged."
             anomaly={anomalies.data?.PR_LEAD_TIME_HOURS_MEDIAN}
+            onSetGoal={() => openGoalModal('PR_LEAD_TIME_HOURS_MEDIAN', 'pr lead time')}
           />
           <KpiTile
             label="focus ratio"
@@ -316,6 +351,7 @@ export function DashboardPage() {
             icon={<Focus />}
             tooltip="Coding days ÷ working days (Mon–Fri)."
             anomaly={anomalies.data?.FOCUS_RATIO_DAYS_TASKS}
+            onSetGoal={() => openGoalModal('FOCUS_RATIO_DAYS_TASKS', 'focus ratio')}
           />
         </div>
         <div className="divider" />
@@ -328,6 +364,7 @@ export function DashboardPage() {
             icon={<PRCreated />}
             tooltip="Pull requests opened by you in the selected period."
             anomaly={anomalies.data?.DAILY_PR_CREATED}
+            onSetGoal={() => openGoalModal('DAILY_PR_CREATED', 'prs created')}
           />
           <KpiTile
             label="issues closed"
@@ -337,6 +374,7 @@ export function DashboardPage() {
             icon={<IssuesClosed />}
             tooltip="Issues resolved or closed by you in the selected period."
             anomaly={anomalies.data?.DAILY_ISSUES_CLOSED}
+            onSetGoal={() => openGoalModal('DAILY_ISSUES_CLOSED', 'issues closed')}
           />
           <KpiTile
             label="review response"
@@ -346,6 +384,7 @@ export function DashboardPage() {
             icon={<Review />}
             tooltip="Median time from PR open to receiving the first review comment or approval."
             anomaly={anomalies.data?.REVIEW_RESPONSE_TIME_HOURS_MEDIAN}
+            onSetGoal={() => openGoalModal('REVIEW_RESPONSE_TIME_HOURS_MEDIAN', 'review response')}
           />
           <KpiTile
             label="1st commit → merge"
@@ -355,6 +394,7 @@ export function DashboardPage() {
             icon={<FirstCommit />}
             tooltip="Median hours from first commit on a PR branch to its merge."
             anomaly={anomalies.data?.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN}
+            onSetGoal={() => openGoalModal('PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN', '1st commit → merge')}
           />
         </div>
       </div>
@@ -370,6 +410,7 @@ export function DashboardPage() {
             accent="amber"
             icon={<AfterHours />}
             tooltip="Share of commits made outside 09:00–18:00 Mon–Fri in your local timezone."
+            onSetGoal={() => openGoalModal('AFTER_HOURS_COMMIT_RATIO', 'after-hours')}
           />
           <KpiTile
             label="refactor ratio"
@@ -378,6 +419,7 @@ export function DashboardPage() {
             accent="emerald"
             icon={<Refactor />}
             tooltip="Share of commits where deleted lines outnumber added lines — a proxy for cleanup and refactoring activity."
+            onSetGoal={() => openGoalModal('REFACTOR_RATIO', 'refactor ratio')}
           />
           <KpiTile
             label="merge w/o review"
@@ -386,6 +428,7 @@ export function DashboardPage() {
             accent="coral"
             icon={<NoReview />}
             tooltip="Share of merged PRs that had zero reviewer approvals or comments before merge."
+            onSetGoal={() => openGoalModal('MERGE_WITHOUT_REVIEW_RATIO', 'merge w/o review')}
           />
           <KpiTile
             label="merge frequency"
@@ -394,6 +437,7 @@ export function DashboardPage() {
             accent="accent"
             icon={<MergeFreq />}
             tooltip="Merges to the default branch per week."
+            onSetGoal={() => openGoalModal('MERGE_TO_MAIN_FREQUENCY_PER_WEEK', 'merge frequency')}
           />
         </div>
         <div className="divider" />
@@ -407,6 +451,7 @@ export function DashboardPage() {
             accent="emerald"
             icon={<DeepWork />}
             tooltip="Longest consecutive run of days on which you authored at least one commit."
+            onSetGoal={() => openGoalModal('DEEP_WORK_STREAK_DAYS', 'deep work streak')}
           />
           <KpiTile
             label="avg churn"
@@ -418,6 +463,7 @@ export function DashboardPage() {
             icon={<Churn />}
             tooltip="Average daily ratio of deleted lines to total changed lines. High churn may indicate rework or rewrites."
             anomaly={anomalies.data?.DAILY_CHURN_RATIO}
+            onSetGoal={() => openGoalModal('DAILY_CHURN_RATIO', 'avg churn')}
           />
           <KpiTile
             label="knowledge silo"
@@ -426,6 +472,7 @@ export function DashboardPage() {
             accent="coral"
             icon={<Silo />}
             tooltip="Your highest commit share across all repos. A high value means you are the sole owner of that repo's knowledge — a bus-factor risk."
+            onSetGoal={() => openGoalModal('KNOWLEDGE_SILO_SCORE', 'knowledge silo')}
           />
           <KpiTile
             label="pr size · median"
@@ -436,6 +483,7 @@ export function DashboardPage() {
             accent="amber"
             icon={<PRSize />}
             tooltip="Median lines changed per PR (additions + deletions)."
+            onSetGoal={() => openGoalModal('PR_SIZE_COMPLEXITY_SCORE', 'pr size')}
           />
         </div>
         <div className="divider" />
@@ -447,6 +495,7 @@ export function DashboardPage() {
             accent="cyan"
             icon={<Review />}
             tooltip="Number of distinct pull requests in which you participated as a reviewer (approved, requested changes, or commented) in the selected period. Self-reviews excluded."
+            onSetGoal={() => openGoalModal('REVIEW_PARTICIPATION_COUNT', 'code review participation')}
           />
         </div>
       </div>
@@ -570,6 +619,132 @@ export function DashboardPage() {
       )}
 
       <div style={{ height: 32 }} />
+
+      {/* ── Set Goal Modal ───────────────────────────────── */}
+      {goalModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setGoalModal(null); }}
+        >
+          <div
+            style={{
+              background: 'var(--bg)',
+              border: '1px solid var(--line)',
+              borderRadius: 12,
+              padding: '28px 32px',
+              width: '100%',
+              maxWidth: 400,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 20,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 4 }}>set goal</div>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: 'var(--fg)' }}>
+                  {goalModal.label}
+                </h2>
+              </div>
+              <button
+                className="btn btn-sm"
+                aria-label="Close"
+                onClick={() => setGoalModal(null)}
+                style={{ padding: '4px 8px' }}
+              >
+                <X width={16} height={16} />
+              </button>
+            </div>
+
+            {(() => {
+              const existing = goals?.filter((g) => g.metricType === goalModal.metricType) ?? [];
+              return existing.length > 0 ? (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  padding: '10px 12px',
+                  background: 'var(--bg-2)',
+                  borderRadius: 6,
+                  border: '1px solid var(--line)',
+                }}>
+                  <span className="t-label" style={{ fontSize: 10, color: 'var(--fg-3)', marginBottom: 2 }}>
+                    active goal{existing.length > 1 ? 's' : ''} for this metric
+                  </span>
+                  {existing.map((g) => (
+                    <span key={g.id} style={{ fontSize: 12, color: 'var(--fg-2)' }}>
+                      target <strong style={{ color: 'var(--fg)' }}>{g.targetValue}</strong>
+                      {' · '}by <strong style={{ color: 'var(--fg)' }}>{g.targetDate}</strong>
+                    </span>
+                  ))}
+                </div>
+              ) : null;
+            })()}
+
+            <form onSubmit={handleGoalSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg-muted)' }}>
+                  Target Value
+                </label>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={goalForm.targetValue}
+                  onChange={(e) => setGoalForm((f) => ({ ...f, targetValue: Number(e.target.value) }))}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg-muted)' }}>
+                  Target Date
+                </label>
+                <input
+                  className="input"
+                  type="date"
+                  value={goalForm.targetDate}
+                  onChange={(e) => setGoalForm((f) => ({ ...f, targetDate: e.target.value }))}
+                  required
+                />
+              </div>
+
+              {createGoalMutation.isError && (
+                <p style={{ fontSize: 12, color: 'var(--coral-strong)', margin: 0 }}>
+                  Failed to save goal. Please try again.
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => setGoalModal(null)}
+                  disabled={createGoalMutation.isPending}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-sm btn-accent"
+                  disabled={createGoalMutation.isPending}
+                >
+                  {createGoalMutation.isPending ? 'Saving…' : 'Save Goal'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.ai.service;
 
 import com.juliashtal.devanalytics.ai.model.AggregatedMetricsContext;
 import com.juliashtal.devanalytics.ai.model.TeamMetricsContext;
+import com.juliashtal.devanalytics.ai.repository.GoalRepository;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.when;
 class AiContextBuilderServiceTest {
 
     @Mock MetricSnapshotService metricSnapshotService;
+    @Mock GoalRepository goalRepository;
 
     AiContextBuilderService service;
 
@@ -40,7 +42,7 @@ class AiContextBuilderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AiContextBuilderService(metricSnapshotService);
+        service = new AiContextBuilderService(metricSnapshotService, goalRepository);
 
         // Base: all five query variants return empty list.
         // Tests that need data override the specific (type-scoped) variant.

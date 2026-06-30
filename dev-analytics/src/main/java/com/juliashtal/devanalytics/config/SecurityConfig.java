@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.security.JwtAuthFilter;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -15,7 +16,9 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -58,6 +61,7 @@ public class SecurityConfig {
             "/datasources",
             "/settings",
             "/messages",
+            "/goals",
             "/admin",
             "/assets/**",
             "/avatars/**",
@@ -90,6 +94,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/teams/**").hasAnyRole("MANAGER", "ADMIN")
                         .anyRequest().authenticated()
+                )
+
+                // Return 401 (not 403) for unauthenticated requests — standard REST API semantics.
+                // Authenticated users lacking the required role still receive 403 from AccessDeniedHandler.
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
                 )
 
                 .authenticationProvider(authenticationProvider())

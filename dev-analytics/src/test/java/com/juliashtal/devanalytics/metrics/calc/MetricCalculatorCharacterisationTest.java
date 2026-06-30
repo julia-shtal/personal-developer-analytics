@@ -119,7 +119,8 @@ class MetricCalculatorCharacterisationTest {
                 new MergeFrequencyCalculator(commitRepository, writer),
                 new KnowledgeSiloCalculator(commitRepository, gitRepoRepository, writer),
                 new PrSizeComplexityCalculator(pullRequestRepository, gitRepoRepository, writer),
-                new MergeWithoutReviewCalculator(pullRequestRepository, prReviewRepository, gitRepoRepository, writer)
+                new MergeWithoutReviewCalculator(pullRequestRepository, prReviewRepository, gitRepoRepository, writer),
+                new ReviewParticipationCalculator(prReviewRepository, writer)
         ));
     }
 }
