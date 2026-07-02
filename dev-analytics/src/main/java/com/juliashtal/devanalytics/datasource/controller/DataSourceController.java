@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.SyncJobEntity;
 import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
 import com.juliashtal.devanalytics.datasource.model.dto.DataSourceResponseDto;
+import com.juliashtal.devanalytics.datasource.model.dto.SyncJobSummaryDto;
 import com.juliashtal.devanalytics.datasource.model.dto.SyncStatusResponse;
 import com.juliashtal.devanalytics.datasource.model.dto.UpdateDataSourceRequest;
 import com.juliashtal.devanalytics.datasource.service.AsyncDataSourceCollectService;
@@ -130,6 +131,19 @@ public class DataSourceController {
             });
         }
         return result;
+    }
+
+    /**
+     * Returns the most recent sync jobs for a data source (default limit: 5, max: 20).
+     * Used by the frontend to derive the health badge and show a compact history timeline.
+     */
+    @Operation(summary = "Get recent sync job history for a data source")
+    @GetMapping("/{id}/sync-history")
+    public List<SyncJobSummaryDto> getSyncHistory(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "5") int limit) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        return dataSourceService.getSyncHistory(id, limit, userId);
     }
 
     // -------------------------------------------------------------------------

@@ -22,13 +22,17 @@ import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.datasource.model.dto.CreateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.model.dto.SyncJobSummaryDto;
 import com.juliashtal.devanalytics.datasource.model.dto.UpdateDataSourceRequest;
+import com.juliashtal.devanalytics.datasource.repository.SyncJobRepository;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.security.TokenEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +58,7 @@ public class DataSourceService {
     private final GitRepositoryEntityRepository gitRepoRepository;
     private final UserRepoRegistrationRepository userRepoRegRepository;
     private final JiraProjectService jiraProjectService;
+    private final SyncJobRepository syncJobRepository;
 
     public DataSourceConfig getDataSource(Long dataSourceId) {
         return repository.findById(dataSourceId)
@@ -333,6 +338,24 @@ public class DataSourceService {
     public void delete(Long userId, Long id) {
         DataSourceConfig cfg = loadForWrite(userId, id);
         repository.delete(cfg);
+    }
+
+    /**
+     * Returns the most recent {@code limit} sync jobs for a data source, newest-first.
+     * Calls {@link #getForUser} to enforce owner / team-member / subscriber access —
+     * throws {@link java.util.NoSuchElementException} (→ 404) if the caller cannot see this DS.
+     */
+    @Transactional(readOnly = true)
+    public List<SyncJobSummaryDto> getSyncHistory(Long dsId, int limit, Long userId) {
+        getForUser(userId, dsId); // owner / access check; throws if unauthorized
+        Pageable page = PageRequest.of(0, Math.max(1, Math.min(limit, 20)));
+        return syncJobRepository.findByDataSourceIdOrderByStartedAtDesc(dsId, page)
+                .stream()
+                .map(e -> new SyncJobSummaryDto(
+                        e.getId(), e.getStatus(), e.getPhase(),
+                        e.getStartedAt(), e.getCompletedAt(),
+                        e.getTotalProcessed(), e.getError()))
+                .toList();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

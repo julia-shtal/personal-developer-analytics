@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.datasource.repository;
 
 import com.juliashtal.devanalytics.datasource.model.SyncJobEntity;
 import com.juliashtal.devanalytics.datasource.model.SyncJobStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -9,12 +10,16 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface SyncJobRepository extends JpaRepository<SyncJobEntity, Long> {
 
     /** Returns the most recent job record for a given data source, regardless of status. */
     Optional<SyncJobEntity> findTopByDataSourceIdOrderByStartedAtDesc(Long dataSourceId);
+
+    /** Returns the most recent N jobs for a data source, ordered newest-first. */
+    List<SyncJobEntity> findByDataSourceIdOrderByStartedAtDesc(Long dataSourceId, Pageable pageable);
 
     /** Called at startup: marks any job still in RUNNING state as INTERRUPTED. */
     @Modifying

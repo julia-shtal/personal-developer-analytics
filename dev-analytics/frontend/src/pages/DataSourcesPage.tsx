@@ -1,12 +1,12 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Trash2, ChevronDown, ChevronRight,
   ExternalLink, UserCheck, UserMinus, Play,
-  Eye, EyeOff, MessageSquare, AlertCircle, X,
+  Eye, EyeOff, MessageSquare, AlertCircle, X, History,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { datasourcesApi, jiraProjectsApi, type SyncStatus } from '@/api/datasources';
+import { datasourcesApi, jiraProjectsApi, type SyncStatus, type SyncJobSummaryDto } from '@/api/datasources';
 import { issuesApi } from '@/api/issues';
 import { reposApi } from '@/api/repos';
 import { DiscoverReposModal } from './DiscoverReposModal';
@@ -123,6 +123,137 @@ function syncDotVariant(dateStr?: string): 'live' | 'warn' | 'fail' {
   if (diffH < 24) return 'live';
   if (diffH < 168) return 'warn';
   return 'fail';
+}
+
+// ─── Health badge (derived from sync job history) ──────────────────────────────
+
+type BadgeState = 'synced' | 'syncing' | 'error' | 'never';
+
+function deriveBadge(jobs: SyncJobSummaryDto[] | undefined): BadgeState {
+  if (!jobs || jobs.length === 0) return 'never';
+  const latest = jobs[0];
+  if (latest.status === 'RUNNING') return 'syncing';
+  if (latest.status === 'FAILED' || latest.status === 'INTERRUPTED') return 'error';
+  return 'synced';
+}
+
+const BADGE_COLORS: Record<BadgeState, string> = {
+  synced:  'var(--emerald)',
+  syncing: 'var(--amber)',
+  error:   'var(--coral-strong)',
+  never:   'var(--fg-3)',
+};
+
+const BADGE_BG: Record<BadgeState, string> = {
+  synced:  'var(--emerald-bg)',
+  syncing: 'var(--amber-bg)',
+  error:   'var(--coral-bg)',
+  never:   'var(--bg-2)',
+};
+
+const BADGE_LABELS: Record<BadgeState, string> = {
+  synced:  'Synced',
+  syncing: 'Syncing…',
+  error:   'Error',
+  never:   'Never synced',
+};
+
+function SyncBadge({ dsId }: { dsId: number }) {
+  const { data } = useQuery({
+    queryKey: ['sync-history', dsId, 1],
+    queryFn: () => datasourcesApi.syncHistory(dsId, 1).then((r) => r.data),
+    staleTime: 30_000,
+  });
+  const state = deriveBadge(data);
+  return (
+    <span
+      className="chip"
+      style={{
+        background: BADGE_BG[state],
+        color: BADGE_COLORS[state],
+        borderColor: 'transparent',
+        fontSize: 10,
+        fontWeight: 500,
+      }}
+    >
+      {BADGE_LABELS[state]}
+    </span>
+  );
+}
+
+// ─── Sync history timeline (shown in expanded panel) ──────────────────────────
+
+function fmtInstant(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function StatusDot({ status }: { status: SyncJobSummaryDto['status'] }) {
+  const color = status === 'COMPLETED' ? 'var(--emerald)'
+    : status === 'RUNNING' ? 'var(--amber)'
+    : 'var(--coral-strong)';
+  return (
+    <span style={{
+      display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+      background: color, flexShrink: 0, marginTop: 3,
+    }} />
+  );
+}
+
+function SyncHistoryPanel({ dsId }: { dsId: number }) {
+  const { data: jobs, isLoading, isError } = useQuery({
+    queryKey: ['sync-history', dsId, 5],
+    queryFn: () => datasourcesApi.syncHistory(dsId, 5).then((r) => r.data),
+    staleTime: 30_000,
+  });
+  const [showErrorId, setShowErrorId] = useState<number | null>(null);
+
+  if (isLoading) return (
+    <p className="t-label" style={{ padding: '8px 0', fontSize: 11 }}>Loading history…</p>
+  );
+  if (isError) return (
+    <p className="t-label" style={{ padding: '8px 0', fontSize: 11, color: 'var(--coral)' }}>Failed to load sync history.</p>
+  );
+  if (!jobs || jobs.length === 0) return (
+    <p className="t-label" style={{ padding: '8px 0', fontSize: 11 }}>No sync history yet.</p>
+  );
+
+  return (
+    <div className="col gap-2">
+      {jobs.map((job) => {
+        const errorText = job.error ?? '';
+        const truncated = errorText.length > 120 ? errorText.slice(0, 120) + '…' : errorText;
+        const isExpanded = showErrorId === job.id;
+        return (
+          <div key={job.id} className="row gap-2" style={{ alignItems: 'flex-start', fontSize: 11, color: 'var(--fg-2)' }}>
+            <StatusDot status={job.status} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontWeight: 500, color: 'var(--fg)' }}>{job.status}</span>
+              {job.phase && <span style={{ color: 'var(--fg-3)', marginLeft: 4 }}>· {job.phase}</span>}
+              {job.totalProcessed != null && (
+                <span style={{ color: 'var(--fg-3)', marginLeft: 4 }}>· {job.totalProcessed} items</span>
+              )}
+              <span style={{ color: 'var(--fg-3)', marginLeft: 4 }}>· {fmtInstant(job.startedAt)}</span>
+              {job.error && (
+                <div style={{ marginTop: 3, color: 'var(--coral-strong)' }}>
+                  {isExpanded ? errorText : truncated}
+                  {errorText.length > 120 && (
+                    <button
+                      onClick={() => setShowErrorId(isExpanded ? null : job.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 10, marginLeft: 4, padding: 0 }}
+                    >
+                      {isExpanded ? 'show less' : 'show more'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function SyncStatusLine({ dateStr }: { dateStr?: string }) {
@@ -631,6 +762,7 @@ export function DataSourcesPage() {
   const [showToken, setShowToken] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [syncStatuses, setSyncStatuses] = useState<Record<number, SyncStatus>>({});
+  const collectCooldowns = useRef<Set<number>>(new Set());
 
   const { data: sources, isLoading } = useQuery({
     queryKey: ['datasources'],
@@ -714,6 +846,7 @@ export function DataSourcesPage() {
           if (!data.running) {
             qc.invalidateQueries({ queryKey: ['datasources'] });
             qc.invalidateQueries({ queryKey: ['jira-issue-count'] });
+            qc.invalidateQueries({ queryKey: ['sync-history'] });
           }
         } catch {
           setSyncStatuses(prev => { const n = { ...prev }; delete n[id]; return n; });
@@ -972,6 +1105,7 @@ export function DataSourcesPage() {
                     <span style={{ fontWeight: 500, fontSize: 14, color: 'var(--fg)' }}>{src.name}</span>
                     <span className="chip" style={{ background: TYPE_ACCENT_BG[src.type], color: TYPE_ACCENT[src.type], borderColor: 'transparent' }}>{TYPE_LABELS[src.type]}</span>
                     {src.teamId && <Chip>team</Chip>}
+                    <SyncBadge dsId={src.id} />
                   </div>
                   {displayUrl && (
                     <div className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -993,8 +1127,13 @@ export function DataSourcesPage() {
                     className="btn btn-sm btn-icon"
                     title={isSyncing ? 'Sync in progress' : 'Collect data'}
                     aria-label="Collect data"
-                    disabled={isSyncing}
-                    onClick={() => collectMutation.mutate(src.id)}
+                    disabled={isSyncing || collectCooldowns.current.has(src.id)}
+                    onClick={() => {
+                      if (collectCooldowns.current.has(src.id)) return;
+                      collectCooldowns.current.add(src.id);
+                      setTimeout(() => collectCooldowns.current.delete(src.id), 2000);
+                      collectMutation.mutate(src.id);
+                    }}
                   >
                     <Play width={11} height={11} />
                   </button>
@@ -1032,6 +1171,13 @@ export function DataSourcesPage() {
                       <JiraProjectsPanel dataSourceId={src.id} syncing={isSyncing} isOwner={!!src.canDelete} />
                     </>
                   )}
+                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--line-2)' }}>
+                    <div className="row gap-2" style={{ marginBottom: 10, alignItems: 'center' }}>
+                      <div className="t-eyebrow">── sync history</div>
+                      <History width={12} height={12} style={{ color: 'var(--fg-3)' }} />
+                    </div>
+                    <SyncHistoryPanel dsId={src.id} />
+                  </div>
                 </div>
               )}
             </div>
