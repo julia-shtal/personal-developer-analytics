@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { RepoScopeProvider } from '@/context/RepoScopeContext';
@@ -107,5 +108,59 @@ describe('DashboardPage — empty state', () => {
     await waitFor(() =>
       expect(screen.getByTestId('ai-summary-card')).toBeInTheDocument(),
     );
+  });
+});
+
+describe('DashboardPage — period comparison', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('shows a Compare toggle on the Commit cadence card', async () => {
+    render(<DashboardPage />, { wrapper: Wrapper });
+    await screen.findByText('Commit cadence');
+    expect(screen.getAllByRole('button', { name: /compare/i }).length).toBeGreaterThan(0);
+  });
+
+  it('reveals comparison date inputs and fetches a second commits series when toggled on', async () => {
+    const { metricsApi } = await import('@/api/metrics');
+    render(<DashboardPage />, { wrapper: Wrapper });
+    await screen.findByText('Commit cadence');
+
+    const [compareBtn] = screen.getAllByRole('button', { name: /compare/i });
+    await userEvent.click(compareBtn);
+
+    expect(screen.getAllByLabelText('Comparison range start').length).toBeGreaterThan(0);
+    await waitFor(() => expect(metricsApi.dailyCommits).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows a Compare toggle on the PR flow card and fetches both comparison series', async () => {
+    const { metricsApi } = await import('@/api/metrics');
+    render(<DashboardPage />, { wrapper: Wrapper });
+    await screen.findByText('PR flow');
+
+    const compareButtons = screen.getAllByRole('button', { name: /compare/i });
+    // Buttons render in page order: Commit cadence, PR flow, Issues.
+    await userEvent.click(compareButtons[1]);
+
+    await waitFor(() => expect(metricsApi.dailyPrCreated).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(metricsApi.dailyPrMerged).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows a Compare toggle on the Issues card and fetches both comparison series', async () => {
+    const { metricsApi } = await import('@/api/metrics');
+    vi.mocked(metricsApi.dailyIssuesClosed).mockResolvedValueOnce({
+      data: [{ date: '2026-06-01', value: 3, metricType: 'DAILY_ISSUES_CLOSED' }],
+    } as never);
+
+    render(<DashboardPage />, { wrapper: Wrapper });
+    await screen.findByText('Created vs closed');
+
+    const compareButtons = screen.getAllByRole('button', { name: /compare/i });
+    await userEvent.click(compareButtons[2]);
+
+    await waitFor(() => expect(metricsApi.dailyIssuesClosed).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(metricsApi.dailyIssuesCreated).toHaveBeenCalledTimes(2));
   });
 });

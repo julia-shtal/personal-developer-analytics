@@ -12,6 +12,27 @@ export function isoDate(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
+const MS_PER_DAY = 86_400_000;
+
+/** Shift a single ISO date by `days` (can be negative). UTC-based, DST-safe. */
+export function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return isoDate(d);
+}
+
+/** Inclusive day count of a range. Jun 26–Jul 3 → 8. */
+export function windowLengthDays(range: DateRange): number {
+  const from = Date.parse(`${range.from}T00:00:00Z`);
+  const to = Date.parse(`${range.to}T00:00:00Z`);
+  return Math.round((to - from) / MS_PER_DAY) + 1;
+}
+
+/** Shift both ends of a range by `days` (can be negative). Length preserved. */
+export function shiftWindow(range: DateRange, days: number): DateRange {
+  return { from: addDays(range.from, days), to: addDays(range.to, days) };
+}
+
 export function today(): string {
   return isoDate(new Date());
 }

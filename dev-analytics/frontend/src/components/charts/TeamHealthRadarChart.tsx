@@ -140,7 +140,7 @@ export function TeamHealthRadarChart({ members, height = 340 }: TeamHealthRadarC
               borderRadius: 8,
               fontSize: 12,
             }}
-            formatter={(value: number) => [`${(value * 100).toFixed(0)}%`, '']}
+            formatter={(value) => [`${(Number(value) * 100).toFixed(0)}%`, '']}
           />
           <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
           {members.map((m, i) => (
