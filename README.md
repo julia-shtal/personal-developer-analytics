@@ -1,5 +1,7 @@
 # Personal Developer Analytics
 
+![CI](https://github.com/julia-shtal/personal-developer-analytics/actions/workflows/ci.yml/badge.svg?branch=dev)
+
 Master's thesis project — a self-hosted platform that aggregates developer productivity
 metrics from local Git repositories, GitHub, and Jira, and surfaces them through
 a React dashboard with AI-generated insights via local Ollama.
