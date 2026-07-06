@@ -518,6 +518,7 @@ export function TeamDashboardPage() {
   const activeTeam = teams?.find((t) => t.id === activeTeamId);
 
   // Reset repo filter whenever the active team changes.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the repo filter as a side effect of the active team changing; there is no derived-render equivalent for a user-controlled filter
   useEffect(() => { setTeamRepoId(null); }, [activeTeamId]);
 
   useEffect(() => {
