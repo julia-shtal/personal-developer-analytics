@@ -15,7 +15,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Avatar } from '@/components/ui/Avatar';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { MetricBarChart } from '@/components/charts/MetricBarChart';
-import { MultiLineChart } from '@/components/charts/MultiLineChart';
+import { MultiLineChart, type LineSeriesDef } from '@/components/charts/MultiLineChart';
 import { TeamHealthRadarChart } from '@/components/charts/TeamHealthRadarChart';
 import { PageSpinner, Spinner } from '@/components/ui/Spinner';
 import { AiTeamInsightCard } from '@/components/ai/AiTeamInsightCard';
@@ -25,7 +25,7 @@ import { useAuth } from '@/context/AuthContext';
 import { formatDate, timeAgo } from '@/lib/dates';
 import { downloadFile } from '@/lib/export';
 import { Commits, PRMerged, IssuesClosed, LeadTime, Churn, Focus } from '@/components/icons';
-import type { Team, TeamMembership, MemberSummaryDto, RepoDto } from '@/types';
+import type { Team, TeamMembership, MemberSummaryDto, MetricPointDto, RepoDto } from '@/types';
 import type { MetricType } from '@/types';
 import type { MetricsSummaryDto } from '@/types/ai';
 
@@ -242,18 +242,94 @@ function MemberAiSummaryModal({ member, summary, onClose }: {
   );
 }
 
+interface MemberSeriesChartProps {
+  title: string;
+  primaryLabel: string;
+  primaryData: MetricPointDto[] | undefined;
+  primaryLoading: boolean;
+  comparing: boolean;
+  compareLabel?: string;
+  compareData: MetricPointDto[] | undefined;
+  compareError: boolean;
+}
+
+/**
+ * One daily-series chart in the member detail modal. Renders the primary
+ * member's line and, when a comparison member is selected, overlays their line
+ * (dashed). Owns the loading/empty/error states so each metric renders them
+ * consistently.
+ */
+function MemberSeriesChart({
+  title, primaryLabel, primaryData, primaryLoading,
+  comparing, compareLabel, compareData, compareError,
+}: MemberSeriesChartProps) {
+  const primaryEmpty = (primaryData?.length ?? 0) === 0;
+  const compareEmpty = (compareData?.length ?? 0) === 0;
+  const showEmpty = !primaryLoading && primaryEmpty && (!comparing || compareEmpty);
+
+  const series: LineSeriesDef[] = [
+    { label: primaryLabel, color: PRIMARY_MEMBER_COLOR, data: primaryData ?? [] },
+  ];
+  if (comparing && compareLabel && !compareEmpty) {
+    series.push({ label: compareLabel, color: COMPARE_MEMBER_COLOR, dashed: true, data: compareData ?? [] });
+  }
+
+  return (
+    <div className="card-quiet" style={{ padding: 14, borderRadius: 8 }}>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+        <span className="t-eyebrow">{title}</span>
+        <span className="t-label">
+          {primaryLoading ? 'loading…' : `${primaryData?.length ?? 0} days`}
+        </span>
+      </div>
+      {primaryLoading ? (
+        <div style={{ height: 140, display: 'flex', alignItems: 'center' }}>
+          <span className="t-muted" style={{ fontSize: 12 }}>Loading…</span>
+        </div>
+      ) : showEmpty ? (
+        <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span className="t-muted" style={{ fontSize: 12 }}>No data for this period.</span>
+        </div>
+      ) : (
+        <MultiLineChart series={series} height={160} />
+      )}
+      {comparing && compareError && (
+        <span className="t-label" style={{ fontSize: 10, color: 'var(--coral)' }}>comparison failed to load</span>
+      )}
+    </div>
+  );
+}
+
 interface MemberDetailModalProps {
   member: MemberSummaryDto;
   teamId: number;
   open: boolean;
   onClose: () => void;
+  /** Other team members, used to populate the "Compare with" selector. */
+  teamMembers: MemberSummaryDto[];
 }
 
-export function MemberDetailModal({ member, teamId, open, onClose }: MemberDetailModalProps) {
+/** Member colours for the comparison overlay — solid primary vs. dashed comparison. */
+const PRIMARY_MEMBER_COLOR = 'var(--violet)';
+const COMPARE_MEMBER_COLOR = 'var(--cyan)';
+
+export function MemberDetailModal({ member, teamId, open, onClose, teamMembers }: MemberDetailModalProps) {
   const navigate = useNavigate();
   const { range } = useDateRange();
   const { from, to } = range;
   const { isManager, isAdmin } = useAuth();
+
+  // FC-8 comparison: which other member to overlay. Resets when the modal is
+  // reused for a different primary member (drill-into-other-members flow) and,
+  // via unmount, when the modal closes.
+  const [comparisonMemberId, setComparisonMemberId] = useState<number | null>(null);
+  const [prevMemberId, setPrevMemberId] = useState(member.userId);
+  if (member.userId !== prevMemberId) {
+    setComparisonMemberId(null);
+    setPrevMemberId(member.userId);
+  }
+  const comparisonMember = teamMembers.find((m) => m.userId === comparisonMemberId) ?? null;
+  const comparing = comparisonMember != null;
 
   const { data: contactPrefs } = useQuery({
     queryKey: ['notification-prefs'],
@@ -273,6 +349,42 @@ export function MemberDetailModal({ member, teamId, open, onClose }: MemberDetai
     queryFn: () =>
       teamMetricsApi.memberDailyCommits(teamId, member.userId, from, to).then((r) => r.data),
     enabled: open,
+  });
+
+  const prCreated = useQuery({
+    queryKey: ['member-pr-created', teamId, member.userId, from, to],
+    queryFn: () =>
+      teamMetricsApi.memberDailyPrCreated(teamId, member.userId, from, to).then((r) => r.data),
+    enabled: open,
+  });
+
+  const prMerged = useQuery({
+    queryKey: ['member-pr-merged', teamId, member.userId, from, to],
+    queryFn: () =>
+      teamMetricsApi.memberDailyPrMerged(teamId, member.userId, from, to).then((r) => r.data),
+    enabled: open,
+  });
+
+  // Comparison-member series — fetched only while a comparison member is selected.
+  const cmpCommits = useQuery({
+    queryKey: ['member-commits', teamId, comparisonMemberId, from, to],
+    queryFn: () =>
+      teamMetricsApi.memberDailyCommits(teamId, comparisonMemberId!, from, to).then((r) => r.data),
+    enabled: open && comparing,
+  });
+
+  const cmpPrCreated = useQuery({
+    queryKey: ['member-pr-created', teamId, comparisonMemberId, from, to],
+    queryFn: () =>
+      teamMetricsApi.memberDailyPrCreated(teamId, comparisonMemberId!, from, to).then((r) => r.data),
+    enabled: open && comparing,
+  });
+
+  const cmpPrMerged = useQuery({
+    queryKey: ['member-pr-merged', teamId, comparisonMemberId, from, to],
+    queryFn: () =>
+      teamMetricsApi.memberDailyPrMerged(teamId, comparisonMemberId!, from, to).then((r) => r.data),
+    enabled: open && comparing,
   });
 
   const [aiSummary, setAiSummary] = useState<MetricsSummaryDto | null>(null);
@@ -420,6 +532,25 @@ export function MemberDetailModal({ member, teamId, open, onClose }: MemberDetai
             }
           </div>
         </div>
+        {teamMembers.some((m) => m.userId !== member.userId) && (
+          <div className="col gap-1" style={{ alignItems: 'flex-end' }}>
+            <label className="t-label" style={{ fontSize: 10 }} htmlFor="compare-with">Compare with</label>
+            <select
+              id="compare-with"
+              className="input"
+              style={{ fontSize: 12, padding: '4px 8px', minWidth: 140 }}
+              value={comparisonMemberId ?? ''}
+              onChange={(e) => setComparisonMemberId(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">None</option>
+              {teamMembers
+                .filter((m) => m.userId !== member.userId)
+                .map((m) => (
+                  <option key={m.userId} value={m.userId}>{m.username}</option>
+                ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* 3×2 KPI grid */}
@@ -444,30 +575,38 @@ export function MemberDetailModal({ member, teamId, open, onClose }: MemberDetai
         ))}
       </div>
 
-      {/* Daily commits bar chart */}
-      <div className="card-quiet" style={{ padding: 14, borderRadius: 8 }}>
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-          <span className="t-eyebrow">commits — daily</span>
-          <span className="t-label">
-            {commits.isLoading ? 'loading…' : `${(commits.data ?? []).length} days`}
-          </span>
-        </div>
-        {commits.isLoading ? (
-          <div style={{ height: 140, display: 'flex', alignItems: 'center' }}>
-            <span className="t-muted" style={{ fontSize: 12 }}>Loading…</span>
-          </div>
-        ) : (commits.data ?? []).length === 0 ? (
-          <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span className="t-muted" style={{ fontSize: 12 }}>No data for this period.</span>
-          </div>
-        ) : (
-          <MetricBarChart
-            data={(commits.data ?? []).slice(-60)}
-            color="var(--accent)"
-            label="commits"
-            height={140}
-          />
-        )}
+      {/* Daily series charts — overlay a comparison member when one is selected. */}
+      <div className="col gap-3">
+        <MemberSeriesChart
+          title="commits — daily"
+          primaryLabel={member.username}
+          primaryData={commits.data}
+          primaryLoading={commits.isLoading}
+          comparing={comparing}
+          compareLabel={comparisonMember?.username}
+          compareData={cmpCommits.data}
+          compareError={cmpCommits.isError}
+        />
+        <MemberSeriesChart
+          title="prs created — daily"
+          primaryLabel={member.username}
+          primaryData={prCreated.data}
+          primaryLoading={prCreated.isLoading}
+          comparing={comparing}
+          compareLabel={comparisonMember?.username}
+          compareData={cmpPrCreated.data}
+          compareError={cmpPrCreated.isError}
+        />
+        <MemberSeriesChart
+          title="prs merged — daily"
+          primaryLabel={member.username}
+          primaryData={prMerged.data}
+          primaryLoading={prMerged.isLoading}
+          comparing={comparing}
+          compareLabel={comparisonMember?.username}
+          compareData={cmpPrMerged.data}
+          compareError={cmpPrMerged.isError}
+        />
       </div>
     </Modal>
 
@@ -964,6 +1103,7 @@ export function TeamDashboardPage() {
           teamId={activeTeamId}
           open={!!selectedMember}
           onClose={() => setSelectedMember(null)}
+          teamMembers={summary ?? []}
         />
       )}
     </div>

@@ -110,4 +110,10 @@ export const teamMetricsApi = {
 
   memberDailyCommits: (teamId: number, memberId: number, from: string, to: string) =>
     api.get<MetricPointDto[]>(`/metrics/teams/${teamId}/members/${memberId}/daily-commits-count`, { params: { from, to } }),
+
+  memberDailyPrCreated: (teamId: number, memberId: number, from: string, to: string) =>
+    api.get<MetricPointDto[]>(`/metrics/teams/${teamId}/members/${memberId}/daily-pr-created`, { params: { from, to } }),
+
+  memberDailyPrMerged: (teamId: number, memberId: number, from: string, to: string) =>
+    api.get<MetricPointDto[]>(`/metrics/teams/${teamId}/members/${memberId}/daily-pr-merged`, { params: { from, to } }),
 };

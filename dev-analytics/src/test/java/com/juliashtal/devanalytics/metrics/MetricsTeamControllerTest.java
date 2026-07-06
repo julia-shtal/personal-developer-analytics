@@ -329,6 +329,27 @@ class MetricsTeamControllerTest {
 
     @Test
     @WithMockUser(roles = "MANAGER")
+    void getMemberDailyPrMerged_returnsSeries() throws Exception {
+        User member = new User();
+        member.setId(MEMBER_ID);
+        member.setUsername("alice");
+        Team team = teamWithMember(member);
+        when(teamService.getById(TEAM_ID)).thenReturn(team);
+        when(userService.getById(MEMBER_ID)).thenReturn(member);
+        when(snapshotService.getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(
+                eq(member), eq(team), eq(MetricType.DAILY_PR_MERGED), eq(FROM), eq(TO)))
+                .thenReturn(List.of(teamSnapshot(member, MetricType.DAILY_PR_MERGED, DAY, 3)));
+
+        mvc.perform(get("/api/metrics/teams/{teamId}/members/{memberId}/daily-pr-merged", TEAM_ID, MEMBER_ID)
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].value").value(3.0))
+                .andExpect(jsonPath("$[0].metricType").value("DAILY_PR_MERGED"));
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
     void getMemberDailyChurn_returnsSeries() throws Exception {
         User member = new User();
         member.setId(MEMBER_ID);
