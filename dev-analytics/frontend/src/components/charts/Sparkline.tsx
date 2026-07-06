@@ -1,3 +1,10 @@
+// Comparison series stays visually secondary and shares one dash convention
+// with every other compare card. The sparkline is straight-segment SVG (no
+// spline smoothing) by construction.
+const STROKE_WIDTH = '1.5';
+const COMPARE_DASH = '4 3';
+const AREA_OPACITY = '0.12';
+
 interface DataPoint {
   value: number;
   date?: string;
@@ -11,6 +18,8 @@ interface SparklineProps {
   area?: boolean;
   responsive?: boolean;
   ariaLabel?: string;
+  compareData?: DataPoint[];
+  compareColor?: string;
 }
 
 export function Sparkline({
@@ -21,29 +30,40 @@ export function Sparkline({
   area = true,
   responsive = false,
   ariaLabel,
+  compareData,
+  compareColor = 'var(--fg-3)',
 }: SparklineProps) {
   if (!data || data.length === 0) return null;
 
-  const vals = data.map((d) => d.value);
-  const max = Math.max(...vals, 1);
-  const min = Math.min(...vals, 0);
+  const isComparing = !!compareData && compareData.length > 0;
+  const allVals = isComparing
+    ? [...data.map((d) => d.value), ...compareData!.map((d) => d.value)]
+    : data.map((d) => d.value);
+  const max = Math.max(...allVals, 1);
+  const min = Math.min(...allVals, 0);
   const range = max - min || 1;
-  const step = width / (data.length - 1 || 1);
 
-  const points = data.map((d, i) => {
-    const x = i * step;
-    const y = height - ((d.value - min) / range) * (height - 4) - 2;
-    return [x, y] as [number, number];
-  });
+  function toPath(points: DataPoint[]): string {
+    const step = width / (points.length - 1 || 1);
+    return points
+      .map((d, i) => {
+        const x = i * step;
+        const y = height - ((d.value - min) / range) * (height - 4) - 2;
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+  }
 
-  const path = points
-    .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`)
-    .join(' ');
+  const path = toPath(data);
   const areaPath = `${path} L${width},${height} L0,${height} Z`;
+  const comparePath = isComparing ? toPath(compareData!) : null;
 
   return (
     <figure aria-label={ariaLabel ?? 'Sparkline chart'} style={{ margin: 0 }}>
-      <figcaption className="sr-only">Sparkline: {data.length} data points</figcaption>
+      <figcaption className="sr-only">
+        Sparkline: {data.length} data points
+        {isComparing ? `, compared against ${compareData!.length} prior data points` : ''}
+      </figcaption>
       <svg
         width={responsive ? '100%' : width}
         height={height}
@@ -51,11 +71,23 @@ export function Sparkline({
         preserveAspectRatio="none"
         style={{ display: 'block' }}
       >
-        {area && <path d={areaPath} fill={color} opacity="0.12" />}
+        {area && <path d={areaPath} fill={color} opacity={AREA_OPACITY} />}
+        {comparePath && (
+          <path
+            d={comparePath}
+            stroke={compareColor}
+            strokeWidth={STROKE_WIDTH}
+            strokeDasharray={COMPARE_DASH}
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
         <path
           d={path}
           stroke={color}
-          strokeWidth="1.5"
+          strokeWidth={STROKE_WIDTH}
           fill="none"
           strokeLinecap="round"
           strokeLinejoin="round"

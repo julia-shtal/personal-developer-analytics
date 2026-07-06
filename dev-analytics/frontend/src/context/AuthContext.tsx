@@ -71,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const raw = localStorage.getItem(LAST_ACTIVITY_KEY);
     const lastActivityMs = raw ? Number(raw) : NaN;
     if (Number.isFinite(lastActivityMs) && Date.now() - lastActivityMs >= IDLE_TIMEOUT_MS) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-time session bootstrap: skips the silent refresh when the idle window has elapsed, ending the loading state
       setIsLoading(false);
       return;
     }

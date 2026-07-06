@@ -111,6 +111,7 @@ export function AiTeamInsightCard({ range, teamId, memberSummary, onSummaryGener
   // Fall back to DB-persisted latest when no in-memory summary is present
   useEffect(() => {
     if (!summary && dbLatest) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from the DB-persisted latest summary when no in-memory summary exists; guarded and depends only on dbLatest
       setSummary(dbLatest);
       setGeneratedAt(dbLatest.generatedAt ? new Date(dbLatest.generatedAt) : null);
       setGeneratedForRange({ from: dbLatest.from, to: dbLatest.to });

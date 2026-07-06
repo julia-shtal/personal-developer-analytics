@@ -14,6 +14,9 @@ import { useDateRange } from '@/context/DateRangeContext';
 import { useRepoScope } from '@/context/RepoScopeContext';
 import { RepoSelector } from '@/components/RepoSelector';
 import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
+import { useCompareRange } from '@/hooks/useCompareRange';
+import { CompareToggle } from '@/components/charts/CompareToggle';
+import { CompareDelta } from '@/components/charts/CompareDelta';
 import { formatDate } from '@/lib/dates';
 import { reposApi } from '@/api/repos';
 import type { MetricsSummaryDto } from '@/types/ai';
@@ -78,6 +81,13 @@ export function DashboardPage() {
     queryFn: () => metricsApi.dailyCommits(from, to, rId).then((r) => r.data),
   });
 
+  const commitsCompareRange = useCompareRange(range);
+  const commitsCompareQuery = useQuery({
+    queryKey: ['daily-commits-count', commitsCompareRange.compareRange.from, commitsCompareRange.compareRange.to, repoId, 'compare'],
+    queryFn: () => metricsApi.dailyCommits(commitsCompareRange.compareRange.from, commitsCompareRange.compareRange.to, rId).then((r) => r.data),
+    enabled: commitsCompareRange.enabled,
+  });
+
   const prCreated = useQuery({
     queryKey: ['daily-pr-created', from, to, repoId],
     queryFn: () => metricsApi.dailyPrCreated(from, to, rId).then((r) => r.data),
@@ -86,6 +96,18 @@ export function DashboardPage() {
   const prMerged = useQuery({
     queryKey: ['daily-pr-merged', from, to, repoId],
     queryFn: () => metricsApi.dailyPrMerged(from, to, rId).then((r) => r.data),
+  });
+
+  const prFlowCompareRange = useCompareRange(range);
+  const prCreatedCompareQuery = useQuery({
+    queryKey: ['daily-pr-created', prFlowCompareRange.compareRange.from, prFlowCompareRange.compareRange.to, repoId, 'compare'],
+    queryFn: () => metricsApi.dailyPrCreated(prFlowCompareRange.compareRange.from, prFlowCompareRange.compareRange.to, rId).then((r) => r.data),
+    enabled: prFlowCompareRange.enabled,
+  });
+  const prMergedCompareQuery = useQuery({
+    queryKey: ['daily-pr-merged', prFlowCompareRange.compareRange.from, prFlowCompareRange.compareRange.to, repoId, 'compare'],
+    queryFn: () => metricsApi.dailyPrMerged(prFlowCompareRange.compareRange.from, prFlowCompareRange.compareRange.to, rId).then((r) => r.data),
+    enabled: prFlowCompareRange.enabled,
   });
 
   const churn = useQuery({
@@ -116,6 +138,18 @@ export function DashboardPage() {
   const issuesCreated = useQuery({
     queryKey: ['daily-issues-created', from, to, repoId],
     queryFn: () => metricsApi.dailyIssuesCreated(from, to, rId).then((r) => r.data),
+  });
+
+  const issuesCompareRange = useCompareRange(range);
+  const issuesClosedCompareQuery = useQuery({
+    queryKey: ['daily-issues-closed', issuesCompareRange.compareRange.from, issuesCompareRange.compareRange.to, repoId, 'compare'],
+    queryFn: () => metricsApi.dailyIssuesClosed(issuesCompareRange.compareRange.from, issuesCompareRange.compareRange.to, rId).then((r) => r.data),
+    enabled: issuesCompareRange.enabled,
+  });
+  const issuesCreatedCompareQuery = useQuery({
+    queryKey: ['daily-issues-created', issuesCompareRange.compareRange.from, issuesCompareRange.compareRange.to, repoId, 'compare'],
+    queryFn: () => metricsApi.dailyIssuesCreated(issuesCompareRange.compareRange.from, issuesCompareRange.compareRange.to, rId).then((r) => r.data),
+    enabled: issuesCompareRange.enabled,
   });
 
   const issueLeadTime = useQuery({
@@ -523,33 +557,88 @@ export function DashboardPage() {
       <div className="hr-label"><span>activity · over time</span></div>
 
       <div className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
           <div>
             <div className="t-eyebrow">commits — daily</div>
             <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Commit cadence</div>
           </div>
-          <div className="row gap-2">
+          <div className="row gap-2" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
             <Chip accent dot>{commits.data?.length ?? 0} days</Chip>
             {peakCommits > 0 && <Chip>peak: {peakCommits}</Chip>}
+            <CompareToggle
+              enabled={commitsCompareRange.enabled}
+              onToggle={commitsCompareRange.toggle}
+              compareRange={commitsCompareRange.compareRange}
+              onCompareRangeChange={commitsCompareRange.setCompareRange}
+              windowDays={commitsCompareRange.windowDays}
+            />
+            {commitsCompareRange.enabled && commitsCompareQuery.isError && (
+              <span className="t-label" style={{ fontSize: 10, color: 'var(--coral)' }}>comparison failed to load</span>
+            )}
           </div>
         </div>
+        {commitsCompareRange.enabled && commitsCompareQuery.data && (
+          <div style={{ marginBottom: 12 }}>
+            <CompareDelta
+              label="commits"
+              primaryTotal={totalCommits}
+              comparisonTotal={sum(commitsCompareQuery.data)}
+              primaryRange={range}
+              comparisonRange={commitsCompareRange.compareRange}
+            />
+          </div>
+        )}
         <MetricBarChart
           data={commits.data ?? []}
           label="commits/day"
           color="var(--accent)"
           height={160}
+          compareData={commitsCompareRange.enabled ? commitsCompareQuery.data : undefined}
+          primaryRangeLabel={`${formatDate(from)} – ${formatDate(to)}`}
+          compareRangeLabel={`${formatDate(commitsCompareRange.compareRange.from)} – ${formatDate(commitsCompareRange.compareRange.to)}`}
         />
       </div>
 
       <div className="charts-grid">
         <div className="card" style={{ padding: 22 }}>
-          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
             <div>
               <div className="t-eyebrow">pull requests</div>
               <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>PR flow</div>
             </div>
-            <Chip color="cyan" dot>open → merge</Chip>
+            <div className="row gap-2" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+              <Chip color="cyan" dot>open → merge</Chip>
+              <CompareToggle
+                enabled={prFlowCompareRange.enabled}
+                onToggle={prFlowCompareRange.toggle}
+                compareRange={prFlowCompareRange.compareRange}
+                onCompareRangeChange={prFlowCompareRange.setCompareRange}
+                windowDays={prFlowCompareRange.windowDays}
+              />
+            </div>
           </div>
+          {prFlowCompareRange.enabled && (prCreatedCompareQuery.data || prMergedCompareQuery.data) && (
+            <div className="col gap-1" style={{ marginBottom: 12 }}>
+              {prCreatedCompareQuery.data && (
+                <CompareDelta
+                  label="created"
+                  primaryTotal={sum(prCreated.data ?? [])}
+                  comparisonTotal={sum(prCreatedCompareQuery.data)}
+                  primaryRange={range}
+                  comparisonRange={prFlowCompareRange.compareRange}
+                />
+              )}
+              {prMergedCompareQuery.data && (
+                <CompareDelta
+                  label="merged"
+                  primaryTotal={totalPrsMerged}
+                  comparisonTotal={sum(prMergedCompareQuery.data)}
+                  primaryRange={range}
+                  comparisonRange={prFlowCompareRange.compareRange}
+                />
+              )}
+            </div>
+          )}
           <div className="col gap-3">
             <div>
               <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
@@ -558,15 +647,45 @@ export function DashboardPage() {
                 <span className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{sum(prCreated.data ?? [])}</span>
               </div>
               {/* Semantic: violet = created/open, emerald = merged/done — do not replace with var(--accent) */}
-              <Sparkline data={prCreated.data ?? []} color="var(--violet)" height={36} width={500} responsive />
+              <Sparkline
+                data={prCreated.data ?? []}
+                color="var(--violet)"
+                height={36}
+                width={500}
+                responsive
+                compareData={prFlowCompareRange.enabled ? prCreatedCompareQuery.data : undefined}
+              />
             </div>
             <div>
               <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                 <span className="t-label" style={{ color: 'var(--emerald)' }}>merged</span>
                 <span className="font-mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{totalPrsMerged}</span>
               </div>
-              <Sparkline data={prMerged.data ?? []} color="var(--emerald)" height={36} width={500} responsive />
+              <Sparkline
+                data={prMerged.data ?? []}
+                color="var(--emerald)"
+                height={36}
+                width={500}
+                responsive
+                compareData={prFlowCompareRange.enabled ? prMergedCompareQuery.data : undefined}
+              />
             </div>
+            {prFlowCompareRange.enabled && (
+              <div className="row gap-3" style={{ marginTop: 2, flexWrap: 'wrap' }}>
+                <span className="t-label" style={{ fontSize: 10, color: 'var(--fg-2)' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 2, background: 'var(--fg-2)', marginRight: 4, verticalAlign: 'middle' }} />
+                  This period — {formatDate(from)} – {formatDate(to)}
+                </span>
+                <span className="t-label" style={{ fontSize: 10, color: 'var(--fg-3)' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 0, borderTop: '1.5px dashed var(--fg-3)', marginRight: 4, verticalAlign: 'middle' }} />
+                  Previous period — {formatDate(prFlowCompareRange.compareRange.from)} – {formatDate(prFlowCompareRange.compareRange.to)}
+                </span>
+                <span className="t-label" style={{ fontSize: 10, color: 'var(--fg-3)' }}>x-axis: day of period</span>
+                {(prCreatedCompareQuery.isError || prMergedCompareQuery.isError) && (
+                  <span className="t-label" style={{ fontSize: 10, color: 'var(--coral)' }}>comparison failed to load</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -594,24 +713,72 @@ export function DashboardPage() {
       {/* ── Issues (additional chart) ─────────────────────── */}
       {((issuesClosed.data?.length ?? 0) > 0 || (issuesCreated.data?.length ?? 0) > 0) && (
         <div className="card" style={{ padding: 22, marginTop: 14 }}>
-          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
             <div>
               <div className="t-eyebrow">issues</div>
               <div className="t-h2" style={{ fontSize: 22, marginTop: 4 }}>Created vs closed</div>
             </div>
-            <Chip color="emerald" dot>tracker</Chip>
+            <div className="row gap-2" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+              <Chip color="emerald" dot>tracker</Chip>
+              <CompareToggle
+                enabled={issuesCompareRange.enabled}
+                onToggle={issuesCompareRange.toggle}
+                compareRange={issuesCompareRange.compareRange}
+                onCompareRangeChange={issuesCompareRange.setCompareRange}
+                windowDays={issuesCompareRange.windowDays}
+              />
+              {issuesCompareRange.enabled && (issuesClosedCompareQuery.isError || issuesCreatedCompareQuery.isError) && (
+                <span className="t-label" style={{ fontSize: 10, color: 'var(--coral)' }}>comparison failed to load</span>
+              )}
+            </div>
           </div>
+          {issuesCompareRange.enabled && (issuesClosedCompareQuery.data || issuesCreatedCompareQuery.data) && (
+            <div className="col gap-1" style={{ marginBottom: 12 }}>
+              {(issuesClosed.data?.length ?? 0) > 0 && issuesClosedCompareQuery.data && (
+                <CompareDelta
+                  label="closed"
+                  primaryTotal={sum(issuesClosed.data ?? [])}
+                  comparisonTotal={sum(issuesClosedCompareQuery.data)}
+                  primaryRange={range}
+                  comparisonRange={issuesCompareRange.compareRange}
+                />
+              )}
+              {(issuesCreated.data?.length ?? 0) > 0 && issuesCreatedCompareQuery.data && (
+                <CompareDelta
+                  label="created"
+                  primaryTotal={sum(issuesCreated.data ?? [])}
+                  comparisonTotal={sum(issuesCreatedCompareQuery.data)}
+                  primaryRange={range}
+                  comparisonRange={issuesCompareRange.compareRange}
+                />
+              )}
+            </div>
+          )}
           <div className="col gap-4">
             {(issuesClosed.data?.length ?? 0) > 0 && (
               <div>
                 <span className="t-label" style={{ display: 'block', marginBottom: 6, color: 'var(--emerald)' }}>closed</span>
-                <MetricBarChart data={issuesClosed.data ?? []} label="Closed" color="var(--emerald)" />
+                <MetricBarChart
+                  data={issuesClosed.data ?? []}
+                  label="Closed"
+                  color="var(--emerald)"
+                  compareData={issuesCompareRange.enabled ? issuesClosedCompareQuery.data : undefined}
+                  primaryRangeLabel={`${formatDate(from)} – ${formatDate(to)}`}
+                  compareRangeLabel={`${formatDate(issuesCompareRange.compareRange.from)} – ${formatDate(issuesCompareRange.compareRange.to)}`}
+                />
               </div>
             )}
             {(issuesCreated.data?.length ?? 0) > 0 && (
               <div>
                 <span className="t-label" style={{ display: 'block', marginBottom: 6, color: 'var(--cyan)' }}>created</span>
-                <MetricBarChart data={issuesCreated.data ?? []} label="Created" color="var(--cyan)" />
+                <MetricBarChart
+                  data={issuesCreated.data ?? []}
+                  label="Created"
+                  color="var(--cyan)"
+                  compareData={issuesCompareRange.enabled ? issuesCreatedCompareQuery.data : undefined}
+                  primaryRangeLabel={`${formatDate(from)} – ${formatDate(to)}`}
+                  compareRangeLabel={`${formatDate(issuesCompareRange.compareRange.from)} – ${formatDate(issuesCompareRange.compareRange.to)}`}
+                />
               </div>
             )}
           </div>

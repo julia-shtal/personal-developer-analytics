@@ -57,6 +57,7 @@ const LABEL: Record<MetricType, string> = {
  *   - min === max (all members identical): everyone receives 0.5.
  *   - metric absent for all members: everyone receives 0.
  */
+// eslint-disable-next-line react-refresh/only-export-components -- pure helper exported alongside the chart for unit testing; kept co-located because it is specific to this chart's radar normalization
 export function normalize(
   members: MemberSummaryDto[],
 ): Array<{ username: string; [key: string]: number | string }> {
@@ -140,7 +141,7 @@ export function TeamHealthRadarChart({ members, height = 340 }: TeamHealthRadarC
               borderRadius: 8,
               fontSize: 12,
             }}
-            formatter={(value: number) => [`${(value * 100).toFixed(0)}%`, '']}
+            formatter={(value) => [`${(Number(value) * 100).toFixed(0)}%`, '']}
           />
           <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
           {members.map((m, i) => (

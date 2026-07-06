@@ -1076,6 +1076,7 @@ export function DataSourcesPage() {
 
       {/* ── Sources list ────────────────────────────────────── */}
       <div className="col gap-3" style={{ marginBottom: 24 }}>
+        {/* eslint-disable-next-line react-hooks/refs -- reads collectCooldowns.current inside the row's `disabled` prop to reflect the 2s per-source cooldown; the ref is a transient debounce set, intentionally not render state */}
         {sources?.map((src) => {
           const isExpanded = expandedIds.has(src.id);
           const displayUrl = src.baseUrl ?? src.path;
