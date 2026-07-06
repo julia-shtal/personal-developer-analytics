@@ -1,25 +1,19 @@
 name: CI
 
-# Run on pushes to the main lines of development, and on every PR targeting them.
 on:
   push:
     branches: [dev, main]
   pull_request:
     branches: [dev, main]
 
-# Cancel superseded runs on the same ref to save minutes and give faster feedback.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Least-privilege default: the workflow only needs to read the repo.
 permissions:
   contents: read
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Backend: build + test against a real PostgreSQL 16 service container.
-  # ---------------------------------------------------------------------------
   backend:
     name: Backend (build + test)
     runs-on: ubuntu-latest
@@ -33,7 +27,6 @@ jobs:
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
-        # Wait until Postgres is genuinely ready before tests start.
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 10s
@@ -57,12 +50,14 @@ jobs:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/dev_analytics
           SPRING_DATASOURCE_USERNAME: postgres
           SPRING_DATASOURCE_PASSWORD: postgres
+          # --- CI-only throwaway secrets (NOT real credentials) ---
+          # JwtService does Keys.hmacShaKeyFor(secret.getBytes()), so the secret
+          # must be >= 32 bytes (256 bits) for HMAC-SHA. 64 ASCII chars = 64 bytes.
+          JWT_SECRET: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          # AES-256 key: base64-encoded 32 bytes, per application.yml comment.
+          ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
         run: ./mvnw --batch-mode --no-transfer-progress verify
 
-  # ---------------------------------------------------------------------------
-  # Frontend: lint + unit tests. No database needed.
-  # Test comment here.
-  # ---------------------------------------------------------------------------
   frontend:
     name: Frontend (lint + test)
     runs-on: ubuntu-latest
