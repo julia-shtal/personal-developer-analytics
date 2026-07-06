@@ -61,6 +61,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Frontend: lint + unit tests. No database needed.
+  # Test comment here.
   # ---------------------------------------------------------------------------
   frontend:
     name: Frontend (lint + test)
