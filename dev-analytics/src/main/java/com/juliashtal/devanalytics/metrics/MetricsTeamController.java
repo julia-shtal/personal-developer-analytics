@@ -192,6 +192,18 @@ public class MetricsTeamController {
         return getMemberDailySeries(teamId, memberId, DAILY_PR_CREATED, from, to);
     }
 
+    @Operation(summary = "Daily PRs Merged series for one team member (manager/admin only)")
+    @GetMapping("/{teamId}/members/{memberId}/daily-pr-merged")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    public List<MetricPointDto> getMemberDailyPrMerged(
+            @PathVariable Long teamId,
+            @PathVariable Long memberId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return getMemberDailySeries(teamId, memberId, DAILY_PR_MERGED, from, to);
+    }
+
     @Operation(summary = "Daily Churn Ratio series for one team member (manager/admin only)")
     @GetMapping("/{teamId}/members/{memberId}/daily-churn-ratio")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
