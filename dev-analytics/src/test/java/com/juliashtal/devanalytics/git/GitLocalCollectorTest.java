@@ -34,10 +34,8 @@ import static org.mockito.Mockito.*;
  * inside a {@link TempDir}. This is the only way to cover the JGit walk + diff computation
  * with meaningful assertions on the extracted commit metadata and stats.
  *
- * <p>The root commit is always treated as already-collected (its hash is seeded into
- * {@code existingHashes}) so the diffed commits all have a parent. The root-commit branch of
- * {@code calculateDiffStats} (diff against the empty tree via {@code ObjectId.zeroId()}) is
- * deliberately not exercised here — see the PR notes on the root-commit diff defect.
+ * <p>Covers both the root-commit path (diff against the empty tree) and child-commit paths
+ * (diff against the parent tree).
  */
 @ExtendWith(MockitoExtension.class)
 class GitLocalCollectorTest {
@@ -132,6 +130,25 @@ class GitLocalCollectorTest {
         assertThat(addFileCommit.getParentHash()).isEqualTo(secondCommit.getName());
         assertThat(addFileCommit.getAdditions()).isEqualTo(2);  // new file, two lines
         assertThat(addFileCommit.getFilesChanged()).isEqualTo(1);
+    }
+
+    @Test
+    void collectForRepository_rootCommit_countsWholeFileAsAdditions() throws Exception {
+        buildThreeCommitRepo();
+        GitRepositoryEntity dbRepo = dbRepoPointingAtTempDir();
+        when(repoRepository.findByIdWithDataSourceConfig(REPO_ID)).thenReturn(Optional.of(dbRepo));
+        when(commitRepository.findHashesByRepositoryId(REPO_ID)).thenReturn(List.of());
+
+        int collected = collector.collectForRepository(REPO_ID, null);
+
+        assertThat(collected).isEqualTo(3);
+        GitCommitEntity root = captureSavedBatch().stream()
+                .filter(c -> c.getHash().equals(rootCommit.getName())).findFirst().orElseThrow();
+        // Root commit is diffed against the empty tree: every line of the new file counts as an addition.
+        assertThat(root.getParentHash()).isNull();
+        assertThat(root.getAdditions()).isEqualTo(2);   // a.txt: line1, line2
+        assertThat(root.getDeletions()).isZero();
+        assertThat(root.getFilesChanged()).isEqualTo(1);
     }
 
     @Test
