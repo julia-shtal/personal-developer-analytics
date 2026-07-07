@@ -21,7 +21,9 @@ import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
+import org.eclipse.jgit.treewalk.EmptyTreeIterator;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -245,21 +247,22 @@ public class GitLocalCollector {
     private DiffStats calculateDiffStats(RevCommit commit,
                                          ObjectReader reader, RevWalk revWalk,
                                          DiffFormatter diffFormatter) throws IOException {
-        ObjectId oldTreeId;
-        ObjectId newTreeId = commit.getTree().getId();
-
+        AbstractTreeIterator oldTreeIter;
         if (commit.getParentCount() == 0) {
-            oldTreeId = ObjectId.zeroId();
+            // Root commit: diff against the empty tree. JGit cannot open ObjectId.zeroId()
+            // as a real tree object, so an EmptyTreeIterator is required — resetting a
+            // CanonicalTreeParser to zeroId throws MissingObjectException.
+            oldTreeIter = new EmptyTreeIterator();
         } else {
             RevCommit parent = commit.getParent(0);
-            oldTreeId = revWalk.parseCommit(parent.getId()).getTree().getId();
+            ObjectId oldTreeId = revWalk.parseCommit(parent.getId()).getTree().getId();
+            CanonicalTreeParser parentTreeIter = new CanonicalTreeParser();
+            parentTreeIter.reset(reader, oldTreeId);
+            oldTreeIter = parentTreeIter;
         }
 
-        CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
-        oldTreeIter.reset(reader, oldTreeId);
-
         CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
-        newTreeIter.reset(reader, newTreeId);
+        newTreeIter.reset(reader, commit.getTree().getId());
 
         List<DiffEntry> diffs = diffFormatter.scan(oldTreeIter, newTreeIter);
 
