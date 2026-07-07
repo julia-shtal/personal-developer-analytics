@@ -2,7 +2,6 @@
 
 <!-- CI / build -->
 ![CI](https://github.com/julia-shtal/personal-developer-analytics/actions/workflows/ci.yml/badge.svg?branch=dev)
-![Coverage](https://codecov.io/gh/julia-shtal/personal-developer-analytics/branch/main/graph/badge.svg)
 ![Release](https://img.shields.io/github/v/release/julia-shtal/personal-developer-analytics)
 
 <!-- Backend stack -->
