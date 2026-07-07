@@ -1,6 +1,30 @@
 # Personal Developer Analytics
 
+<!-- CI / build -->
 ![CI](https://github.com/julia-shtal/personal-developer-analytics/actions/workflows/ci.yml/badge.svg?branch=dev)
+![Coverage](https://codecov.io/gh/julia-shtal/personal-developer-analytics/branch/main/graph/badge.svg)
+![Release](https://img.shields.io/github/v/release/julia-shtal/personal-developer-analytics)
+
+<!-- Backend stack -->
+![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.10-6DB33F?logo=springboot&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Flyway migrations](https://img.shields.io/github/directory-file-count/julia-shtal/personal-developer-analytics/dev-analytics%2Fsrc%2Fmain%2Fresources%2Fdb%2Fmigration?type=file&label=Flyway%20migrations&logo=flyway&logoColor=white&color=CC0200)
+
+<!-- Frontend stack -->
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.x-06B6D4?logo=tailwindcss&logoColor=white)
+
+<!-- AI / infra -->
+![Ollama](https://img.shields.io/badge/Ollama-llama3.2-000000?logo=ollama&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+
+<!-- Repo activity -->
+![Last commit](https://img.shields.io/github/last-commit/julia-shtal/personal-developer-analytics/main)
+![Open issues](https://img.shields.io/github/issues/julia-shtal/personal-developer-analytics)
+![License](https://img.shields.io/github/license/julia-shtal/personal-developer-analytics)
 
 Master's thesis project — a self-hosted platform that aggregates developer productivity
 metrics from local Git repositories, GitHub, and Jira, and surfaces them through
