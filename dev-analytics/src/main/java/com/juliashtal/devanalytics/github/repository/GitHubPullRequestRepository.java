@@ -147,6 +147,23 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
             @Param("to") Instant to);
 
     /**
+     * Currently-open PRs (not merged, not closed) authored by the given login within the repo
+     * scope. Unlike every other PR query this has no date bound: a PR opened before the reporting
+     * window still counts if it is open now. Used by WipOpenPrAgeCalculator.
+     */
+    @Query("""
+    select p
+    from GitHubPullRequestEntity p
+    where p.repository.id IN :repoIds
+      and p.authorLogin = :authorLogin
+      and p.mergedAt is null
+      and p.closedAt is null
+    """)
+    List<GitHubPullRequestEntity> findOpenPrsByRepoIdsAndAuthorLogin(
+            @Param("repoIds") List<Long> repoIds,
+            @Param("authorLogin") String authorLogin);
+
+    /**
      * Returns the next batch of PRs needing stats enrichment for a specific repository,
      * newest-first so that recent PRs are always prioritised.
      */

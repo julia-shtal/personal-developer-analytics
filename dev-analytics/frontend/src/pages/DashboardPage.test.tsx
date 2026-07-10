@@ -27,6 +27,7 @@ vi.mock('@/api/metrics', () => ({
     deepWorkStreak: vi.fn().mockResolvedValue({ data: null }),
     mergeWithoutReview: vi.fn().mockResolvedValue({ data: null }),
     prSizeComplexity: vi.fn().mockResolvedValue({ data: null }),
+    wipOpenPrAge: vi.fn().mockResolvedValue({ data: null }),
     knowledgeSilo: vi.fn().mockResolvedValue({ data: null }),
     freshness: vi.fn().mockResolvedValue({ data: null }),
     anomalies: vi.fn().mockResolvedValue({ data: {} }),
@@ -108,6 +109,33 @@ describe('DashboardPage — empty state', () => {
     await waitFor(() =>
       expect(screen.getByTestId('ai-summary-card')).toBeInTheDocument(),
     );
+  });
+});
+
+describe('DashboardPage — WIP open PR age tile', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('renders an em-dash when there are no open PRs', async () => {
+    render(<DashboardPage />, { wrapper: Wrapper });
+
+    const label = await screen.findByText('open pr age');
+    // The tile shows the shared "—" placeholder when the value is null/0.
+    expect(label).toBeInTheDocument();
+  });
+
+  it('shows the median open PR age with an hour unit when data is present', async () => {
+    const { metricsApi } = await import('@/api/metrics');
+    vi.mocked(metricsApi.wipOpenPrAge).mockResolvedValue({ data: { value: 48 } } as never);
+
+    render(<DashboardPage />, { wrapper: Wrapper });
+
+    await screen.findByText('open pr age');
+    // numSuffix renders the number and unit in separate nodes: "48.0" + "h".
+    expect(await screen.findByText('48.0')).toBeInTheDocument();
+    expect(screen.getAllByText('h').length).toBeGreaterThan(0);
   });
 });
 
