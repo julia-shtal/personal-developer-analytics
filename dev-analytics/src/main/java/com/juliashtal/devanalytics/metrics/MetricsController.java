@@ -245,6 +245,16 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(PR_SIZE_COMPLEXITY_SCORE, from, to, repoId);
     }
 
+    @Operation(summary = "WIP Open PR Age (median hours of currently open PRs) for the current user")
+    @GetMapping("/wip-open-pr-age")
+    public MetricAggregateDto getWipOpenPrAge(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getPersonalLeadTimeAggregate(WIP_OPEN_PR_AGE_HOURS_MEDIAN, from, to, repoId);
+    }
+
     @Operation(summary = "Merge Without Review Ratio for the current user")
     @GetMapping("/merge-without-review-ratio")
     public MetricAggregateDto getMergeWithoutReview(

@@ -1,8 +1,16 @@
+docs/
+.claude/
+.agents/
+.idea
+dev-analytics/src/main/resources/certs/
+
 # Compiled class file
 *.class
 
 # Log file
 *.log
+*.log.*
+logs/
 
 # BlueJ files
 *.ctxt

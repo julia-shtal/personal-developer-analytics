@@ -85,7 +85,8 @@ public class TeamExportController {
             case PR_LEAD_TIME_HOURS_MEDIAN,
                  PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
                  REVIEW_RESPONSE_TIME_HOURS_MEDIAN,
-                 ISSUE_LEAD_TIME_HOURS_MEDIAN                  -> "h";
+                 ISSUE_LEAD_TIME_HOURS_MEDIAN,
+                 WIP_OPEN_PR_AGE_HOURS_MEDIAN                  -> "h";
             case DEEP_WORK_STREAK_DAYS                         -> "d";
             case PR_SIZE_COMPLEXITY_SCORE                      -> "ln/c";
             case MERGE_TO_MAIN_FREQUENCY_PER_WEEK              -> "/wk";

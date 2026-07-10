@@ -65,6 +65,9 @@ export const metricsApi = {
   prSizeComplexity: (from: string, to: string, repoId?: number) =>
     api.get<MetricAggregateDto>('/metrics/pr-size-complexity', { params: { from, to, repoId } }),
 
+  wipOpenPrAge: (from: string, to: string, repoId?: number) =>
+    api.get<MetricAggregateDto>('/metrics/wip-open-pr-age', { params: { from, to, repoId } }),
+
   knowledgeSilo: (from: string, to: string, repoId?: number) =>
     api.get<MetricAggregateDto>('/metrics/knowledge-silo-score', { params: { from, to, repoId } }),
 

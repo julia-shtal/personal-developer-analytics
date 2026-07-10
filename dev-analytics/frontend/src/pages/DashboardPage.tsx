@@ -192,6 +192,11 @@ export function DashboardPage() {
     queryFn: () => metricsApi.prSizeComplexity(from, to, rId).then((r) => r.data),
   });
 
+  const wipOpenPrAge = useQuery({
+    queryKey: ['wip-open-pr-age', from, to, repoId],
+    queryFn: () => metricsApi.wipOpenPrAge(from, to, rId).then((r) => r.data),
+  });
+
   const knowledgeSilo = useQuery({
     queryKey: ['knowledge-silo-score', from, to, repoId],
     queryFn: () => metricsApi.knowledgeSilo(from, to, rId).then((r) => r.data),
@@ -522,6 +527,15 @@ export function DashboardPage() {
         </div>
         <div className="divider" />
         <div className="grid-kpi">
+          <KpiTile
+            label="open pr age"
+            value={numSuffix(wipOpenPrAge.data?.value, 'h')}
+            sub="median · open prs"
+            accent="amber"
+            icon={<LeadTime />}
+            tooltip="Median age of your currently open PRs. High values indicate a WIP queue building up."
+            onSetGoal={() => openGoalModal('WIP_OPEN_PR_AGE_HOURS_MEDIAN', 'open pr age')}
+          />
           <KpiTile
             label="code review participation"
             value={reviewParticipationCount > 0 ? reviewParticipationCount : '—'}

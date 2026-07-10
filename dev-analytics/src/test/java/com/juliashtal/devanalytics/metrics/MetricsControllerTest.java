@@ -298,6 +298,20 @@ class MetricsControllerTest {
 
     @Test
     @WithMockUser
+    void getWipOpenPrAge_returnsAggregate() throws Exception {
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+                any(), eq(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN), eq(FROM), eq(TO)))
+                .thenReturn(List.of(aggregateSnapshot(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, 48.0, FROM, TO)));
+
+        mvc.perform(get("/api/metrics/wip-open-pr-age")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value(48.0));
+    }
+
+    @Test
+    @WithMockUser
     void getMergeWithoutReview_returnsAggregate() throws Exception {
         when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
                 any(), eq(MetricType.MERGE_WITHOUT_REVIEW_RATIO), eq(FROM), eq(TO)))

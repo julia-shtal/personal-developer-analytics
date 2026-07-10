@@ -32,7 +32,10 @@ public enum MetricType {
     /** Average commits per ISO calendar week (DORA deployment-frequency proxy). */
     MERGE_TO_MAIN_FREQUENCY_PER_WEEK(false, false, false),
     /** Count of distinct PRs the user reviewed (excluding self-reviews) in the calculation window. */
-    REVIEW_PARTICIPATION_COUNT(true, false, true);
+    REVIEW_PARTICIPATION_COUNT(true, false, true),
+
+    /** Median age in hours of the user's currently-open PRs (WIP queue signal). Point-in-time. */
+    WIP_OPEN_PR_AGE_HOURS_MEDIAN(false, false, false);
 
     /** True when this metric is included in the AI context for summary generation. */
     public final boolean inAiContext;

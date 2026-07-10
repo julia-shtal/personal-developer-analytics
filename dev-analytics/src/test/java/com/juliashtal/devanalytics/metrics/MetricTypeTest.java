@@ -49,7 +49,7 @@ class MetricTypeTest {
     }
 
     @Test
-    void totalMetricCount_isTwenty() {
-        assertThat(MetricType.values()).hasSize(20);
+    void totalMetricCount_isTwentyOne() {
+        assertThat(MetricType.values()).hasSize(21);
     }
 }
