@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * REST controller for direct messages. Mounted at /api/messages — 1:1 messaging between team members.
+ * REST controller for direct messages.
+ * Mounted at /api/messages — 1:1 messaging between team members.
  */
 @RestController
 @RequestMapping("/api/messages")

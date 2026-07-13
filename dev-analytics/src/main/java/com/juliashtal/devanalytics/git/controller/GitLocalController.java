@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * REST controller for local Git repositories. Mounted at /api/git/local — registration and commit collection.
+ * REST controller for local Git repositories.
+ * Mounted at /api/git/local — registration and commit collection.
  */
 @RestController
 @RequestMapping("/api/git/local")

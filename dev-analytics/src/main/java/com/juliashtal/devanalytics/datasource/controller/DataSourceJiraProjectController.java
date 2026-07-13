@@ -17,7 +17,8 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * REST controller for a datasource's Jira projects. Mounted at /api/datasources/{id}/projects.
+ * REST controller for a datasource's Jira projects.
+ * Mounted at /api/datasources/{id}/projects.
  */
 @RestController
 @RequestMapping("/api/datasources/{id}/projects")

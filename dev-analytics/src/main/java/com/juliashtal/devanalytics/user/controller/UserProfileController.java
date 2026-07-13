@@ -14,7 +14,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * REST controller for the current user. Mounted at /api/users/me — profile and notification preferences.
+ * REST controller for the current user.
+ * Mounted at /api/users/me — profile and notification preferences.
  */
 @RestController
 @RequestMapping("/api/users/me")

@@ -14,7 +14,8 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * REST controller for user avatars. Mounted at /api/users — upload, preset, and removal.
+ * REST controller for user avatars.
+ * Mounted at /api/users — upload, preset, and removal.
  */
 @RestController
 @RequestMapping("/api/users")

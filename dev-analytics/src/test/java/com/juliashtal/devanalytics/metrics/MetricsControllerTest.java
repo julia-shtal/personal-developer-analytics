@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics;
 
+import com.juliashtal.devanalytics.metrics.controller.MetricsController;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;

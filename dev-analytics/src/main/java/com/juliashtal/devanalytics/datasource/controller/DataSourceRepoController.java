@@ -19,7 +19,8 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * REST controller for a datasource's repositories. Mounted at /api/datasources/{id}/repos.
+ * REST controller for a datasource's repositories.
+ * Mounted at /api/datasources/{id}/repos.
  */
 @RestController
 @RequestMapping("/api/datasources/{id}/repos")

@@ -24,7 +24,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * REST controller for Jira projects. Mounted at /api/jira-projects — subscription and repo-mapping management.
+ * REST controller for Jira projects.
+ * Mounted at /api/jira-projects — subscription and repo-mapping management.
  */
 @RestController
 @RequestMapping("/api/jira-projects")

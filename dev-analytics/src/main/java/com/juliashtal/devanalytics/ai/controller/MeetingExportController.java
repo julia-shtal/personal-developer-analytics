@@ -25,7 +25,8 @@ import java.time.LocalDate;
 import java.util.*;
 
 /**
- * REST controller for 1:1 meeting exports. Mounted at /api/teams — renders member metrics as a markdown prep document.
+ * REST controller for 1:1 meeting exports.
+ * Mounted at /api/teams — renders member metrics as a markdown prep document.
  */
 @RestController
 @RequestMapping("/api/teams")

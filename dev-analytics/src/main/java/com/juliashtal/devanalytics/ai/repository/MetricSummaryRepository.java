@@ -11,7 +11,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Spring Data repository for MetricSummaryEntity (metric_summaries). Includes the daily AI-call count and latest-summary lookups.
+ * Spring Data repository for MetricSummaryEntity (metric_summaries).
+ * Includes the daily AI-call count and latest-summary lookups.
  */
 public interface MetricSummaryRepository extends JpaRepository<MetricSummaryEntity, Long> {
 

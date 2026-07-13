@@ -13,7 +13,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * REST controller for GitHub repositories. Mounted at /api/github — registration and commit collection.
+ * REST controller for GitHub repositories.
+ * Mounted at /api/github — registration and commit collection.
  */
 @RestController
 @RequestMapping("/api/github")
