@@ -2,6 +2,9 @@ package com.juliashtal.devanalytics.messaging.dto;
 
 import java.time.Instant;
 
+/**
+ * One conversation preview in a user's inbox.
+ */
 public record InboxEntryDto(
         Long partnerId,
         String partnerUsername,

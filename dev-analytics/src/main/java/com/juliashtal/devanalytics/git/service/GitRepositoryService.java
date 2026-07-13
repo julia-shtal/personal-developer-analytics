@@ -25,6 +25,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+/**
+ * Manages local Git repositories: registration, ownership, and commit access.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

@@ -4,6 +4,9 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * JPA entity for user_notification_prefs. Per-user notification toggles keyed by user id.
+ */
 @Data
 @Entity
 @NoArgsConstructor

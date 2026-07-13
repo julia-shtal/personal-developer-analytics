@@ -15,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Issues password-reset tokens, emails reset links, and applies confirmed resets.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

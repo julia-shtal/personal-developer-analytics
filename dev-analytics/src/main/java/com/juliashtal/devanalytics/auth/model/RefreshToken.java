@@ -6,6 +6,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for refresh_tokens. Rotating refresh token bound to a user.
+ */
 @Data
 @Entity
 @Table(name = "refresh_tokens")

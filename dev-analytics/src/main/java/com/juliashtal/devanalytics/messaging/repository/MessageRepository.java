@@ -11,6 +11,9 @@ import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * Spring Data repository for MessageEntity (messages). Conversation and unread-count queries.
+ */
 public interface MessageRepository extends JpaRepository<MessageEntity, Long> {
 
     @Query("SELECT m FROM MessageEntity m WHERE " +

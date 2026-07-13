@@ -10,6 +10,9 @@ import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * Spring Data repository for GitHubPrReviewEntity (github_pr_reviews). Supplies first-review timestamps per PR.
+ */
 public interface GitHubPrReviewRepository extends JpaRepository<GitHubPrReviewEntity, Long> {
 
     void deleteAllByPullRequest(GitHubPullRequestEntity pullRequest);

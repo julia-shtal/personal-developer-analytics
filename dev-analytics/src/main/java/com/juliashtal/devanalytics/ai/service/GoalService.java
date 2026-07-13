@@ -15,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * Creates and validates per-metric user goals.
+ */
 @Service
 @RequiredArgsConstructor
 public class GoalService {

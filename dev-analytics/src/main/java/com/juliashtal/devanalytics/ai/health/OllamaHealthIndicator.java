@@ -8,6 +8,9 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+/**
+ * Actuator health indicator reporting whether the Ollama server is reachable.
+ */
 @Component("ollama")
 @Slf4j
 public class OllamaHealthIndicator implements HealthIndicator {

@@ -11,6 +11,9 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for JiraProjectEntity (jira_projects). Canonical lookups by normalized base URL and key.
+ */
 public interface JiraProjectRepository extends JpaRepository<JiraProjectEntity, Long> {
 
     // EntityGraph ensures dataSource is initialized before the transaction closes,

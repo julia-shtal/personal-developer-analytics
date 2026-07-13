@@ -10,6 +10,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Sends transactional email (password-reset links) via SMTP.
+ */
 @Service
 @RequiredArgsConstructor
 public class EmailService {

@@ -4,6 +4,9 @@ import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 
 import java.time.Instant;
 
+/**
+ * Jira project as returned to the client.
+ */
 public record JiraProjectResponseDto(
         Long id,
         Long dataSourceId,

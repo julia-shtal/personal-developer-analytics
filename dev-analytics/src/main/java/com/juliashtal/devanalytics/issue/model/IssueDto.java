@@ -2,6 +2,9 @@ package com.juliashtal.devanalytics.issue.model;
 
 import java.time.Instant;
 
+/**
+ * Issue as returned to the client.
+ */
 public record IssueDto(
         Long id,
         String sourceIssueKey,

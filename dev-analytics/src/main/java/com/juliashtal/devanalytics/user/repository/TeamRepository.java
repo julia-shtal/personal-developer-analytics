@@ -7,6 +7,9 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
+/**
+ * Spring Data repository for Team (teams). Membership and manager lookups.
+ */
 public interface TeamRepository extends JpaRepository<Team, Long> {
 
     List<Team> findByManagerId(Long managerId);

@@ -13,6 +13,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * REST controller for user avatars.
+ * Mounted at /api/users — upload, preset, and removal.
+ */
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
@@ -20,7 +24,6 @@ public class AvatarController {
 
     private final AvatarService avatarService;
 
-    /** Upload a custom avatar (JPEG / PNG / WebP, max 2 MB). Resized to 256×256 JPEG. */
     @Operation(summary = "Upload a custom avatar (JPEG/PNG/WebP, max 2MB), resized to 256x256 JPEG")
     @PostMapping("/me/avatar")
     @PreAuthorize("isAuthenticated()")
@@ -59,7 +62,6 @@ public class AvatarController {
         return ResponseEntity.noContent().build();
     }
 
-    /** List available preset IDs. */
     @Operation(summary = "List available preset avatar IDs")
     @GetMapping("/avatar/presets")
     @PreAuthorize("permitAll()")

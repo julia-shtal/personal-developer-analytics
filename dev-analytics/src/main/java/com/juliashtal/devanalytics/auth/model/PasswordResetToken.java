@@ -6,6 +6,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for password_reset_tokens. Single-use, time-limited reset token bound to a user.
+ */
 @Data
 @Entity
 @Table(name = "password_reset_tokens")

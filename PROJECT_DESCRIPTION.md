@@ -263,13 +263,13 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 **`TeamAccessGuard`** (`@Component("teamAccessGuard")`) — SpEL-callable security guard used in `@PreAuthorize` expressions.
 - `canRead(Long teamId, Authentication)` → `boolean` — returns `true` if the authenticated user is the team manager **or** a team member. Used on team metric endpoints to give DEVELOPER-role members access to the aggregate row (without per-member breakdown).
 
-**`RateLimitInterceptor`** (`HandlerInterceptor`) — Per-user request rate limiter using Bucket4j (PDA-54/T2). Two token-bucket tiers: default (`app.rate-limit.default-rpm`, default 120/min) and AI endpoints under `/api/ai/` (`app.rate-limit.ai-rpm`, default 10/min). Buckets held in in-memory `ConcurrentHashMap<Long, Bucket>` (single-instance; Redis-backed Bucket4j is the multi-instance upgrade path). Exhausted bucket throws `RateLimitExceededException` → 429 with `Retry-After` header via `GlobalExceptionHandler`.
+**`RateLimitInterceptor`** (`HandlerInterceptor`) — Per-user request rate limiter using Bucket4j. Two token-bucket tiers: default (`app.rate-limit.default-rpm`, default 120/min) and AI endpoints under `/api/ai/` (`app.rate-limit.ai-rpm`, default 10/min). Buckets held in in-memory `ConcurrentHashMap<Long, Bucket>` (single-instance; Redis-backed Bucket4j is the multi-instance upgrade path). Exhausted bucket throws `RateLimitExceededException` → 429 with `Retry-After` header via `GlobalExceptionHandler`.
 
-**Refresh Token Rotation — Single-Flight Refresh (PDA-54/T3)** — Concurrent 401 responses from multiple requests are deduplicated: the first request triggers `POST /auth/refresh`; subsequent concurrent 401s wait for the first to complete before retrying with the new token. Prevents thundering-herd refresh storms.
+**Refresh Token Rotation — Single-Flight Refresh** — Concurrent 401 responses from multiple requests are deduplicated: the first request triggers `POST /auth/refresh`; subsequent concurrent 401s wait for the first to complete before retrying with the new token. Prevents thundering-herd refresh storms.
 
-**Refresh Token in httpOnly Cookie (PDA-55/T1)** — Refresh token moved from response body to httpOnly, secure, SameSite=Strict cookie (`da_refresh`). Access token remains in JS memory (not persisted). On logout, `ClearSiteData` header removes all cookies and site data. Mitigates XSS token exfiltration.
+**Refresh Token in httpOnly Cookie** — Refresh token moved from response body to httpOnly, secure, SameSite=Strict cookie (`da_refresh`). Access token remains in JS memory (not persisted). On logout, `ClearSiteData` header removes all cookies and site data. Mitigates XSS token exfiltration.
 
-**Access Token in Memory + CORS (PDA-55/T1)** — Access token stored only in JS `useAuth()` state, never in `localStorage` or cookies. CORS allows `Authorization` header to be sent to origin. On 401, client refreshes and retries with new token from cookie.
+**Access Token in Memory + CORS** — Access token stored only in JS `useAuth()` state, never in `localStorage` or cookies. CORS allows `Authorization` header to be sent to origin. On 401, client refreshes and retries with new token from cookie.
 
 ---
 
@@ -320,11 +320,11 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | `sync_failures` | BOOLEAN DEFAULT FALSE | Datasource sync error alert toggle |
 | `after_hours` | BOOLEAN DEFAULT FALSE | After-hours activity alert toggle |
 | `new_team_member` | BOOLEAN DEFAULT FALSE | New team member notification toggle |
-| `default_contact_method` | VARCHAR(16) DEFAULT 'IN_APP' | Preferred channel (`IN_APP`/`EMAIL`) for the team member contact buttons (PDA-69) |
+| `default_contact_method` | VARCHAR(16) DEFAULT 'IN_APP' | Preferred channel (`IN_APP`/`EMAIL`) for the team member contact buttons |
 
 Created lazily on first read (`UserNotificationPrefsService.getOrCreate`). Row is shared across sessions; partial updates are not supported (all five fields are replaced on PUT).
 
-`V53__backfill_notification_prefs.sql` backfilled an all-FALSE row for every user lacking one and flipped the `ai_brief`/`sync_failures`/`after_hours` column (and entity-field) defaults from `TRUE` to `FALSE`, aligning new-row creation with an opt-out notification policy (PDA-68). `V54__add_default_contact_method.sql` added `default_contact_method` (`IN_APP`/`EMAIL`, default `IN_APP`) so users can choose which contact channel appears as primary in the team member modal (PDA-69).
+`V53__backfill_notification_prefs.sql` backfilled an all-FALSE row for every user lacking one and flipped the `ai_brief`/`sync_failures`/`after_hours` column (and entity-field) defaults from `TRUE` to `FALSE`, aligning new-row creation with an opt-out notification policy. `V54__add_default_contact_method.sql` added `default_contact_method` (`IN_APP`/`EMAIL`, default `IN_APP`) so users can choose which contact channel appears as primary in the team member modal.
 
 **`Team`** — Table `teams`
 
@@ -474,9 +474,9 @@ CHECK constraints (added V35):
 
 ---
 
-### 3.9 Jira Domain (T1.1, ADR-005 option C)
+### 3.9 Jira Domain
 
-`DataSourceConfig` is a pure credential/connection record. Jira collection targets are managed as first-class `JiraProjectEntity` rows, mirroring `GitRepositoryEntity` for GitHub. Users subscribe to individual Jira projects via `UserProjectRegistration`. ADR-005 option C also adds a repo-mapping link table so metric queries can include Jira issues alongside a Git repository's GitHub issues (implemented in T4.2).
+`DataSourceConfig` is a pure credential/connection record. Jira collection targets are managed as first-class `JiraProjectEntity` rows, mirroring `GitRepositoryEntity` for GitHub. Users subscribe to individual Jira projects via `UserProjectRegistration`. A repo-mapping link table lets metric queries include Jira issues alongside a Git repository's GitHub issues.
 
 #### Entities
 
@@ -491,7 +491,7 @@ CHECK constraints (added V35):
 | `base_url_normalized` | VARCHAR(255) NOT NULL | Lowercase, trailing-slash-stripped copy of `dataSource.baseUrl`; set by `@PrePersist`/`@PreUpdate` via `JiraUrl.normalize()` |
 | `last_scan_at` | TIMESTAMPTZ | Updated after each successful collection |
 | `created_at` / `updated_at` | TIMESTAMPTZ | `@PrePersist` / `@PreUpdate` |
-| UNIQUE | `(base_url_normalized, project_key)` — `uq_jira_project_global` | One canonical row per upstream Jira project, mirrors `git_repositories.repo_full_name UNIQUE` (ADR-004 / ADR-002) |
+| UNIQUE | `(base_url_normalized, project_key)` — `uq_jira_project_global` | One canonical row per upstream Jira project, mirrors `git_repositories.repo_full_name UNIQUE` |
 
 **`UserProjectRegistration`** — Table `user_project_registrations`
 
@@ -502,21 +502,21 @@ CHECK constraints (added V35):
 | `project_id` | FK → jira_projects CASCADE NOT NULL | |
 | UNIQUE | `(user_id, project_id)` | One registration per user per project |
 
-**`JiraProjectRepoMapping`** — Table `jira_project_repo_mappings` (ADR-005 option C)
+**`JiraProjectRepoMapping`** — Table `jira_project_repo_mappings`
 
 | Column | Type | Notes |
 |---|---|---|
 | `jira_project_id` | FK → jira_projects CASCADE NOT NULL | Composite PK |
 | `repository_id` | FK → git_repositories CASCADE NOT NULL | Composite PK |
 
-Metric queries in T4.2 join through this table to include Jira issues in repository-scoped aggregations.
+Metric queries join through this table to include Jira issues in repository-scoped aggregations.
 
 #### Repositories
 
 **`JiraProjectRepository`**
 - `findAllByDataSource(DataSourceConfig)` → `List<JiraProjectEntity>`
 - `findByDataSourceAndProjectKey(DataSourceConfig, String)` → `Optional`
-- `findByBaseUrlNormalizedAndProjectKey(String, String)` → `Optional` — global canonical-row lookup used by `addProject` cross-DS detection (ADR-002)
+- `findByBaseUrlNormalizedAndProjectKey(String, String)` → `Optional` — global canonical-row lookup used by `addProject` cross-DS detection
 - `findIdsByDataSourceIds(List<Long>)` → `List<Long>` — used by metric scoping
 
 **`UserProjectRegistrationRepository`**
@@ -530,7 +530,7 @@ Metric queries in T4.2 join through this table to include Jira issues in reposit
 - `findAllByJiraProject(JiraProjectEntity)` → `List`
 - `findAllByRepository(GitRepositoryEntity)` → `List`
 - `existsByJiraProjectAndRepository(JiraProjectEntity, GitRepositoryEntity)` → `boolean`
-- `findRepositoryIdsByJiraProjectIds(List<Long>)` → `List<Long>` — used by T4.2 metric queries
+- `findRepositoryIdsByJiraProjectIds(List<Long>)` → `List<Long>` — used by metric queries
 
 #### Services
 
@@ -596,13 +596,13 @@ Metric queries in T4.2 join through this table to include Jira issues in reposit
 | Version | File | Summary |
 |---|---|---|
 | V32 | `V32__jira_projects.sql` | Create `jira_projects` + `user_project_registrations`; backfill from `data_source_configs.project_key`; add `jira_project_id` to `issues`; replace single unique constraint on issues with two partial indexes; create `jira_project_repo_mappings`; drop `project_key` from `data_source_configs` |
-| V39 | `V39__jira_projects_canonical_row.sql` | Add `base_url_normalized` to `jira_projects`; backfill from datasource `base_url`; replace `uq_jira_project_ds_key (data_source_id, project_key)` with global `uq_jira_project_global (base_url_normalized, project_key)` (ADR-002 / ADR-004) |
+| V39 | `V39__jira_projects_canonical_row.sql` | Add `base_url_normalized` to `jira_projects`; backfill from datasource `base_url`; replace `uq_jira_project_ds_key (data_source_id, project_key)` with global `uq_jira_project_global (base_url_normalized, project_key)` |
 
 ---
 
 ### 3.8 Git Domain (Local Repositories)
 
-#### Content-Addressed Access Model (ADR-004)
+#### Content-Addressed Access Model
 
 The platform stores each upstream GitHub repository as **one canonical row** in `git_repositories`,
 identified by the globally-unique `repo_full_name` (`owner/repo`). This mirrors Git's own
@@ -633,12 +633,6 @@ storage layer.
 - Detaching the canonical row is blocked (409) while other subscriptions exist; subscribers
   must unsubscribe first.
 
-These trade-offs are discussed academically in thesis §3 (System Design) and §8.7 (Threats to
-Validity, under "data-model invariants as validity preconditions").
-
-See `docs/adr/ADR-004-cross-ds-repo-sharing.md` for the full decision record and rejected
-alternatives (independent rows per DS, explicit attachment join table).
-
 #### Entities
 
 **`GitRepositoryEntity`** — Table `git_repositories`
@@ -647,10 +641,10 @@ alternatives (independent rows per DS, explicit attachment join table).
 |---|---|---|
 | `id` | BIGSERIAL PK | |
 | `data_source_id` | FK → data_source_configs CASCADE | Canonical owner datasource |
-| `repo_type` | VARCHAR(16) NOT NULL | `LOCAL` or `GITHUB`; discriminator column (ADR-003); enforced by CHECK constraints `chk_repo_local_path` and `chk_repo_github_fullname` (V36) |
+| `repo_type` | VARCHAR(16) NOT NULL | `LOCAL` or `GITHUB`; discriminator column; enforced by CHECK constraints `chk_repo_local_path` and `chk_repo_github_fullname` (V36) |
 | `name` | VARCHAR(255) | |
 | `local_path` | VARCHAR(1024) NULLABLE | Null for GitHub repos |
-| `repo_full_name` | VARCHAR(255) UNIQUE | `owner/repo`; globally unique (see ADR-004); null for local repos |
+| `repo_full_name` | VARCHAR(255) UNIQUE | `owner/repo`; globally unique; null for local repos |
 | `last_fetched_commit_hash` | VARCHAR(64) | Watermark for incremental sync |
 | `last_scan_at` | TIMESTAMPTZ | |
 | `collect_issues` | BOOLEAN DEFAULT FALSE | When true, GITHUB-type sync also collects issues |
@@ -814,7 +808,7 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 **`GitHubPrReviewRepository`**
 - `deleteAllByPullRequest(pr)`, `deleteAllByPullRequestIn(List<pr>)`
 - `findFirstReviewTimestampsByPrIds(List<Long>)` — JPQL aggregate query: `SELECT r.pullRequest.id, MIN(r.submittedAt) ... GROUP BY r.pullRequest.id`; returns `List<Object[]>` with `(prId, firstReviewInstant)`.
-- `countDistinctPrsReviewedByUser(String reviewerLogin, List<Long> repoIds, Instant from, Instant to)` → `long` — counts distinct PRs reviewed within the time window, scoped to given repos, excluding self-reviews. Used by `ReviewParticipationCalculator` (PDA-78).
+- `countDistinctPrsReviewedByUser(String reviewerLogin, List<Long> repoIds, Instant from, Instant to)` → `long` — counts distinct PRs reviewed within the time window, scoped to given repos, excluding self-reviews. Used by `ReviewParticipationCalculator`.
 
 #### Services
 
@@ -980,7 +974,7 @@ Each value carries three boolean flags: `(inAiContext, dailySum, aggregatePeriod
 - `findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(userIds, teamId, type, from, to)` — team summary query.
 - `getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo` / `...AndRepositoryAndDateFromAndTo` — exact-period queries for aggregate metrics (lead times stored with periodFrom/periodTo).
 
-#### Metric Calculator Infrastructure (PDA-73)
+#### Metric Calculator Infrastructure
 
 The calculation layer uses a registry-based dispatch pattern instead of a monolithic service.
 
@@ -1046,7 +1040,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 
 #### Controllers
 
-**`MetricsController`** — `/api/metrics`, `@PreAuthorize("isAuthenticated()")` (class-level), injects: `MetricSnapshotService`, `MetricsService`, `MetricsAnomalyService`, `RepoService`, `CheckHelper`. Personal endpoints only (AR-3 extracted team endpoints to `MetricsTeamController`).
+**`MetricsController`** — `/api/metrics`, `@PreAuthorize("isAuthenticated()")` (class-level), injects: `MetricSnapshotService`, `MetricsService`, `MetricsAnomalyService`, `RepoService`, `CheckHelper`. Personal endpoints only (team endpoints extracted to `MetricsTeamController`).
 
 **Personal endpoints:**
 
@@ -1077,7 +1071,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 | GET | `/anomalies` | `from`, `to` | `Map<String, Boolean>` — per-metric 2σ anomaly flags |
 | GET | `/freshness` | — | `{metricsComputedThrough: date}` — latest personal snapshot date |
 
-**`MetricsTeamController`** — `/api/metrics/teams`, injects: `MetricSnapshotService`, `MetricsService`, `RepoService`, `TeamService`, `UserService`, `CheckHelper`. Extracted from `MetricsController` in AR-3 (PDA-71).
+**`MetricsTeamController`** — `/api/metrics/teams`, injects: `MetricSnapshotService`, `MetricsService`, `RepoService`, `TeamService`, `UserService`, `CheckHelper`. Extracted from `MetricsController`.
 
 **Team endpoints:**
 
@@ -1111,7 +1105,7 @@ The AI layer generates natural-language summaries and metric explanations from p
 | `period_from` / `period_to` | DATE | Summary period |
 | `scope` | VARCHAR(32) | `PERSONAL` / `REPOSITORY` / `TEAM` |
 | `context_repo_name` | VARCHAR(255) | Null unless scope = REPOSITORY |
-| `headline` | TEXT | 1–sentence summary headline (PDA-53) |
+| `headline` | TEXT | 1–sentence summary headline |
 | `overview` | TEXT | 1–2 sentence narrative |
 | `insights` | TEXT | JSON array of insight objects with kind, text, metric |
 | `recommendations` | TEXT | JSON array of strings |
@@ -1119,9 +1113,9 @@ The AI layer generates natural-language summaries and metric explanations from p
 | `raw_model_output` | TEXT | Verbatim model response |
 | `generated_at` | TIMESTAMPTZ DEFAULT now() | When the summary was generated |
 
-Unique index: `(COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,''))` — one summary per scope identity (PDA-50).
+Unique index: `(COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,''))` — one summary per scope identity.
 
-**`AiConversationEntity`** — Table `ai_conversations` (PDA-51)
+**`AiConversationEntity`** — Table `ai_conversations`
 
 | Column | Type | Notes |
 |---|---|---|
@@ -1131,7 +1125,7 @@ Unique index: `(COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_
 | `summary_context` | TEXT | JSON snapshot of the summary being discussed (for context) |
 | `created_at` | TIMESTAMP DEFAULT now() | |
 
-**`AiMessageEntity`** — Table `ai_messages` (PDA-51)
+**`AiMessageEntity`** — Table `ai_messages`
 
 | Column | Type | Notes |
 |---|---|---|
@@ -1149,7 +1143,7 @@ Index: `(conversation_id, created_at)`.
 
 #### Services
 
-**`AiContextBuilderService`** — Extracted from `MetricsAiService` in AR-4 (PDA-74). Builds the metrics context objects consumed by `MetricsAiService` and `MeetingExportService`. Deliberately free of LLM, prompt, and persistence concerns so statistical logic can be unit-tested in isolation.
+**`AiContextBuilderService`** — Extracted from `MetricsAiService`. Builds the metrics context objects consumed by `MetricsAiService` and `MeetingExportService`. Deliberately free of LLM, prompt, and persistence concerns so statistical logic can be unit-tested in isolation.
 - `buildPersonalContext(User, from, to, repoId?)` → `AggregatedMetricsContext` — fetches snapshots for all `inAiContext=true` metric types, computes `{min, max, median, total, trendPct, anomaly}` per metric.
 - `buildTeamContext(Team, members, from, to)` → `TeamMetricsContext` — per-member `{username, metrics: Map<MetricType, aggregatedValue>}`.
 - **Routing**: `dailySum=true` metrics use `dateBetween` query; `aggregatePeriod=true` metrics use exact `periodFrom/periodTo` query. Routing is driven by `MetricType` flags.
@@ -1162,25 +1156,25 @@ Index: `(conversation_id, created_at)`.
   1. Delegates to `AiContextBuilderService.buildPersonalContext()` → `AggregatedMetricsContext`.
   2. Serialises context to JSON, builds structured system + user prompt.
   3. Calls `LlmClient.complete(model, systemPrompt, userPrompt)`.
-  4. Parses JSON response into `MetricsSummaryDto` with headline, overview, insights, recommendations; strips markdown code fences if present (PDA-53).
-  5. Persists to `metric_summaries` table; result cached in `ai_summaries` by `(userId, from, to, repoId)` (PDA-53).
+  4. Parses JSON response into `MetricsSummaryDto` with headline, overview, insights, recommendations; strips markdown code fences if present.
+  5. Persists to `metric_summaries` table; result cached in `ai_summaries` by `(userId, from, to, repoId)`.
 
 - **`generateTeamSummary(User requestingUser, Long teamId, from, to)`** — team scope (MANAGER or ADMIN only):
   1. Delegates to `AiContextBuilderService.buildTeamContext()` → `TeamMetricsContext`.
-  2. Same prompt/parse flow as personal summary; generates team-scoped `metric_summaries` row with `team_id` set, `user_id = NULL` (PDA-50).
+  2. Same prompt/parse flow as personal summary; generates team-scoped `metric_summaries` row with `team_id` set, `user_id = NULL`.
   3. Cached by `("team", teamId, from, to)`.
 
-- **`generateMemberSummary(User requestingUser, Long teamId, Long memberId, from, to)`** — per-member AI summary used by the 1:1 meeting prep export (PDA-76).
+- **`generateMemberSummary(User requestingUser, Long teamId, Long memberId, from, to)`** — per-member AI summary used by the 1:1 meeting prep export.
 
 - **System prompt design**: instructs the model to return only a JSON object with fields `headline` (1-sentence), `overview`, `insights` (5–8 items with kind/text/metric), `recommendations` (3–5 items). Priority order for insights: Churn Ratio → Focus Ratio → anomalies → remaining metrics. No markdown, no extra text.
 
-**`MetricsAnomalyService`** — Anomaly detection service (PDA-58/T1).
+**`MetricsAnomalyService`** — Anomaly detection service.
 - `computeAnomalies(User, from, to)` → `Map<MetricType, Boolean>` — per metric, returns true if any value is >2σ from mean.
 - Uses same 11 context metric types as `MetricsAiService`.
 - Requires ≥3 data points per metric; fewer returns false (no anomaly signal).
 - Called by dashboard to display anomaly badges on KPI tiles.
 
-**`MetricSummaryPersistenceService`** — Manages `metric_summaries` table (PDA-53/T3).
+**`MetricSummaryPersistenceService`** — Manages `metric_summaries` table.
 - `saveSummary(User, from, to, scope, repoName, summary)` → persists `MetricSummaryEntity`.
 - `getLatestSummary(User)` → most recent personal summary.
 - `getLatestTeamSummary(Team)` → most recent team summary.
@@ -1193,15 +1187,15 @@ Index: `(conversation_id, created_at)`.
 **`MetricsSummaryScheduler`** — `@Scheduled(cron = "0 0 8 * * MON", zone = "UTC")`.
 - Runs every Monday at 08:00 UTC.
 - Iterates all users, calls `metricsAiService.generateSummary(user, lastMonday, lastSunday, null)`.
-- Saves result as `MetricSummaryEntity` via `MetricSummaryRepository` with headline, created_at set to now() (PDA-53).
-- Triggers `NotificationDispatchService.dispatchSummaries()` if user has `ai_brief=true` in `user_notification_prefs` (PDA-58).
+- Saves result as `MetricSummaryEntity` via `MetricSummaryRepository` with headline, created_at set to now().
+- Triggers `NotificationDispatchService.dispatchSummaries()` if user has `ai_brief=true` in `user_notification_prefs`.
 - Per-user failures are logged but do not abort the run.
 
-**`MeetingExportService`** — Builds a structured Markdown 1:1 meeting prep document (PDA-76).
+**`MeetingExportService`** — Builds a structured Markdown 1:1 meeting prep document.
 - `buildMarkdown(member, summary, aiSummary, anomalies, from, to, modelName)` → `String` — formats member metrics, AI insights, anomaly highlights, and recommendations into a downloadable `.md` file.
 - Called by `MeetingExportController`; consumes `MemberSummaryDto`, `MetricsSummaryDto` (from `generateMemberSummary`), and `Map<MetricType, Boolean>` anomaly flags.
 
-**`AiConversationService`** — Manages follow-up conversations on summary insights (PDA-51/T2).
+**`AiConversationService`** — Manages follow-up conversations on summary insights.
 - `startConversation(User, summaryScope, summaryContext)` → creates `AiConversationEntity`.
 - `addMessage(conversationId, role, content)` → appends to `ai_messages` table.
 - `getConversation(conversationId)` → fetches full thread with all messages.
@@ -1223,27 +1217,27 @@ Index: `(conversation_id, created_at)`.
 
 | Method | Path | Query | Description |
 |---|---|---|---|
-| GET | `/summary` | `from`, `to`, `repoId?` | Personal/repo AI summary (cached, persisted) (PDA-53) |
-| GET | `/team/{teamId}/summary` | `from`, `to` | Team AI summary (MANAGER/ADMIN, cached, persisted) (PDA-50) |
+| GET | `/summary` | `from`, `to`, `repoId?` | Personal/repo AI summary (cached, persisted) |
+| GET | `/team/{teamId}/summary` | `from`, `to` | Team AI summary (MANAGER/ADMIN, cached, persisted) |
 | GET | `/explain` | `metricLabel`, `metricDescription`, `metricValue`, `from`, `to` | Explain a single metric in context |
-| GET | `/summaries/latest` | — | Retrieve the user's most recent stored summary (PDA-53) |
-| GET | `/history` | `limit` (default 10, max 50) | List persisted personal summaries newest-first (PDA-61) |
-| GET | `/teams/{teamId}/history` | `limit` (default 10, max 50) | List persisted team summaries newest-first (MANAGER/ADMIN) (PDA-61) |
+| GET | `/summaries/latest` | — | Retrieve the user's most recent stored summary |
+| GET | `/history` | `limit` (default 10, max 50) | List persisted personal summaries newest-first |
+| GET | `/teams/{teamId}/history` | `limit` (default 10, max 50) | List persisted team summaries newest-first (MANAGER/ADMIN) |
 
 **`AiConversationController`** — `/api/ai/conversations`, `@PreAuthorize("isAuthenticated()")`
 
 | Method | Path | Response | Description |
 |---|---|---|---|
-| GET | `/` | 200 List<ConversationDto> | List follow-up conversations on summaries (PDA-51) |
-| POST | `/` | 201 ConversationDto | Start conversation on a summary `{summaryScope, summaryContext}` (PDA-51) |
-| GET | `/{conversationId}/messages` | 200 List<MessageDto> | Get messages in conversation (PDA-51) |
-| POST | `/{conversationId}/messages` | 201 MessageDto | Send follow-up message `{content}` (PDA-51) |
+| GET | `/` | 200 List<ConversationDto> | List follow-up conversations on summaries |
+| POST | `/` | 201 ConversationDto | Start conversation on a summary `{summaryScope, summaryContext}` |
+| GET | `/{conversationId}/messages` | 200 List<MessageDto> | Get messages in conversation |
+| POST | `/{conversationId}/messages` | 201 MessageDto | Send follow-up message `{content}` |
 
 **`MeetingExportController`** — `/api/teams`, `@PreAuthorize("hasAnyRole('MANAGER','ADMIN')")`
 
 | Method | Path | Query | Response | Description |
 |---|---|---|---|---|
-| GET | `/{teamId}/members/{memberId}/export` | `from`, `to` | 200 `text/markdown` | Export 1:1 meeting prep document for a team member as a downloadable Markdown file (PDA-76) |
+| GET | `/{teamId}/members/{memberId}/export` | `from`, `to` | 200 `text/markdown` | Export 1:1 meeting prep document for a team member as a downloadable Markdown file |
 
 Note: `anomalies` endpoint lives on `MetricsController` (personal) — see Section 3.11 personal endpoints table.
 
@@ -1251,12 +1245,12 @@ Note: `anomalies` endpoint lives on `MetricsController` (personal) — see Secti
 
 ### 3.13 Email Service
 
-**`EmailService`** — Dependencies: `JavaMailSender`; config: `app.mail.from-address`/`app.mail.from-name` (decoupled from `spring.mail.username`, which is SMTP-auth-only) (PDA-69).
+**`EmailService`** — Dependencies: `JavaMailSender`; config: `app.mail.from-address`/`app.mail.from-name` (decoupled from `spring.mail.username`, which is SMTP-auth-only).
 - `sendPasswordResetEmail(String toEmail, String resetLink)` — Sends an HTML `MimeMessage` via `MimeMessageHelper` over configured SMTP/STARTTLS, with `From: <from-name> <from-address>`.
 
 ---
 
-### 3.14 Messaging Domain (PDA-60)
+### 3.14 Messaging Domain
 
 #### Entities
 
@@ -1303,16 +1297,16 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 ---
 
-### 3.15 Notification Domain (PDA-58)
+### 3.15 Notification Domain
 
-**`NotificationDispatchService`** — Async notification delivery service (PDA-58/T3).
+**`NotificationDispatchService`** — Async notification delivery service.
 - `dispatchSummaries()` — Called by `MetricsSummaryScheduler` on Monday 08:00 UTC. Iterates all users with `userNotificationPrefs.aiBrief = true`, sends email with summary headline + overview.
 - `dispatchAnomalies(User)` — Detects 2σ anomalies in personal metrics; if `after_hours = true` in prefs, sends alert when after-hours metric spikes.
 - Gated by `UserNotificationPrefsEntity` toggles; failures logged but do not block metric calculation.
 
 ---
 
-### 3.16 Invitation Domain (PDA-52)
+### 3.16 Invitation Domain
 
 #### Entities
 
@@ -1332,7 +1326,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 #### Services
 
-**`InvitationService`** — Token-based team invitation (PDA-52/T1).
+**`InvitationService`** — Token-based team invitation.
 - `generateToken(User inviter, String email, Role role, Long teamId?)` → `InviteTokenEntity` with 7-day expiry.
 - `redeemToken(String token, User redeemer)` → validates not expired, not used; if `teamId` set, adds redeemer to team; marks `used_at = now()`.
 - `getPendingInvites(User inviter)` → list unused tokens created by inviter.
@@ -1390,25 +1384,25 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 | V33 | `V33__remove_github_issues_type.sql` | Eliminate `GITHUB_ISSUES` DataSourceType; migrate affected repos to `collect_issues = TRUE`; drop GITHUB_ISSUES datasource rows; GitHub issue collection is now driven exclusively by `git_repositories.collect_issues` |
 | V34 | `V34__drop_registration_datasource_id.sql` | DROP `user_repo_registrations.data_source_id` (denormalized column removed; relationship derivable via `→ git_repositories → data_source_configs`) |
 | V35 | `V35__datasource_constraints.sql` | Add CHECK constraints `chk_gitlocal_path` and `chk_remote_baseurl` to enforce type-specific NOT NULL rules at the DB level |
-| V36 | `V36__repo_type_discriminator.sql` | Add `repo_type` VARCHAR(16) discriminator to `git_repositories` with DEFAULT backfill; add CHECK constraints `chk_repo_local_path` and `chk_repo_github_fullname` (ADR-003) |
-| V37 | `V37__issues_source_column.sql` | ALTER `issues` ADD `source` VARCHAR(16) DEFAULT 'GITHUB'; rename `repo_name` → `source_context` to remove GitHub-specific naming (ADR-005 T4.2) |
-| V38 | `V38__user_accessible_repos_view.sql` | Create `user_accessible_repos` view consolidating three access paths: OWNED (user created datasource), SUBSCRIBED (via `user_repo_registrations`), TEAM (via team datasource membership) — replaces three-branch service logic (ADR-004 Option B) |
-| V39 | `V39__jira_projects_canonical_row.sql` | Add `base_url_normalized` to `jira_projects`; backfill from datasource `base_url`; replace `uq_jira_project_ds_key (data_source_id, project_key)` with global `uq_jira_project_global (base_url_normalized, project_key)` (ADR-002 / ADR-004) |
+| V36 | `V36__repo_type_discriminator.sql` | Add `repo_type` VARCHAR(16) discriminator to `git_repositories` with DEFAULT backfill; add CHECK constraints `chk_repo_local_path` and `chk_repo_github_fullname` |
+| V37 | `V37__issues_source_column.sql` | ALTER `issues` ADD `source` VARCHAR(16) DEFAULT 'GITHUB'; rename `repo_name` → `source_context` to remove GitHub-specific naming |
+| V38 | `V38__user_accessible_repos_view.sql` | Create `user_accessible_repos` view consolidating three access paths: OWNED (user created datasource), SUBSCRIBED (via `user_repo_registrations`), TEAM (via team datasource membership) — replaces three-branch service logic |
+| V39 | `V39__jira_projects_canonical_row.sql` | Add `base_url_normalized` to `jira_projects`; backfill from datasource `base_url`; replace `uq_jira_project_ds_key (data_source_id, project_key)` with global `uq_jira_project_global (base_url_normalized, project_key)` |
 | V40 | `V40__metric_snapshot_docs.sql` | Comment-only migration — adds `pg_description` entries to document the dual-shape storage model of `metric_snapshots`; no DDL changes |
-| V41 | `V41__metric_summaries_rename_repo_name.sql` | Rename `metric_summaries.repo_name` → `context_repo_name` (T5.2); old name implied GitHub-only; field stores snapshot-in-time scope label (repo, Jira project, or team) |
-| V42 | `V42__normalize_fk_naming.sql` | Rename `user_repo_registrations.repo_id` → `repository_id` (T5.3); update `user_accessible_repos` view and all dependent indexes to match the standard FK naming pattern used elsewhere in the schema |
+| V41 | `V41__metric_summaries_rename_repo_name.sql` | Rename `metric_summaries.repo_name` → `context_repo_name`; old name implied GitHub-only; field stores snapshot-in-time scope label (repo, Jira project, or team) |
+| V42 | `V42__normalize_fk_naming.sql` | Rename `user_repo_registrations.repo_id` → `repository_id`; update `user_accessible_repos` view and all dependent indexes to match the standard FK naming pattern used elsewhere in the schema |
 | V43 | `V43__user_notification_prefs.sql` | Create `user_notification_prefs` (user_id PK FK → users CASCADE, ai_brief BOOLEAN DEFAULT TRUE, sync_failures BOOLEAN DEFAULT TRUE, after_hours BOOLEAN DEFAULT TRUE, new_team_member BOOLEAN DEFAULT FALSE) — stores per-user notification toggle preferences |
-| V44 | `V44__delete_account_cascades.sql` | Add `ON DELETE CASCADE` to all FK references to `users(id)` that were missing it; enables safe self-delete without orphaned rows (PDA-48/T3) |
-| V45 | `V45__user_last_active_at.sql` | ALTER `users` ADD `last_active_at` TIMESTAMP — populated by `ActivityInterceptor` at most once per 5 min; used for `active 24h` admin KPI (PDA-49/B1) |
-| V46 | `V46__last_active_at_timestamptz.sql` | Fix timezone mismatch: convert `last_active_at` from `TIMESTAMP WITHOUT TIME ZONE` to `TIMESTAMPTZ`; V45 stored PostgreSQL session-local time, but Hibernate read it as UTC, producing a future instant that made `timeAgo()` always return "just now" (PDA-49 bugfix) |
-| V47 | `V47__team_archive_config.sql` | ALTER `teams` ADD `archived_at` TIMESTAMPTZ, `visibility` VARCHAR(16) CHECK (visibility IN ('PRIVATE','WORKSPACE','PUBLIC')), `ai_brief_schedule` VARCHAR(64) — archive teams, visibility control, custom summary schedule (PDA-50/T1) |
-| V48 | `V48__ai_conversations.sql` | Create `ai_conversations` (id, user_id FK, summary_scope, summary_context, created_at) and `ai_messages` (id, conversation_id FK, role, content, created_at) — support follow-up conversations on summaries (PDA-51/T2) |
-| V49 | `V49__invite_tokens.sql` | Create `invite_tokens` (id, token UNIQUE, email, role, team_id FK nullable, created_by FK, expires_at, used_at, created_at) — token-based team invitations (PDA-52/T1) |
-| V50 | `V50__metric_summaries_headline_team.sql` | ALTER `metric_summaries` ADD `headline` TEXT, ADD `team_id` FK → teams, ALTER user_id DROP NOT NULL; add unique index on (COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,'')); add index on (team_id, generated_at DESC) — persist team summaries (PDA-53/T3) |
-| V51 | `V51__sync_jobs.sql` | Create `sync_jobs` (id, data_source_id FK, status, phase, total_processed, started_at, completed_at, result, error); indexes on (data_source_id) and partial on (status='RUNNING') — persistent job state for backfill detection (PDA-56/T2) |
-| V52 | `V52__direct_messages.sql` | Create `messages` (id, sender_id FK, recipient_id FK, body, created_at, read_at); indexes on (sender_id, recipient_id, created_at) and (recipient_id, read_at) — 1:1 direct messaging (PDA-60/T1) |
-| V53 | `V53__backfill_notification_prefs.sql` | Backfill an all-FALSE `user_notification_prefs` row for every user lacking one (idempotent `INSERT ... WHERE NOT EXISTS` guard preserves existing custom rows); ALTER COLUMN `ai_brief`/`sync_failures`/`after_hours` SET DEFAULT FALSE — aligns new-row defaults with the opt-out notification policy (PDA-68/T7) |
-| V54 | `V54__add_default_contact_method.sql` | ALTER `user_notification_prefs` ADD `default_contact_method` VARCHAR(16) NOT NULL DEFAULT 'IN_APP' CHECK IN ('IN_APP','EMAIL') — user preference for in-app vs. email contact in `MemberDetailModal` (PDA-69/T8) |
+| V44 | `V44__delete_account_cascades.sql` | Add `ON DELETE CASCADE` to all FK references to `users(id)` that were missing it; enables safe self-delete without orphaned rows |
+| V45 | `V45__user_last_active_at.sql` | ALTER `users` ADD `last_active_at` TIMESTAMP — populated by `ActivityInterceptor` at most once per 5 min; used for `active 24h` admin KPI |
+| V46 | `V46__last_active_at_timestamptz.sql` | Fix timezone mismatch: convert `last_active_at` from `TIMESTAMP WITHOUT TIME ZONE` to `TIMESTAMPTZ`; V45 stored PostgreSQL session-local time, but Hibernate read it as UTC, producing a future instant that made `timeAgo()` always return "just now" |
+| V47 | `V47__team_archive_config.sql` | ALTER `teams` ADD `archived_at` TIMESTAMPTZ, `visibility` VARCHAR(16) CHECK (visibility IN ('PRIVATE','WORKSPACE','PUBLIC')), `ai_brief_schedule` VARCHAR(64) — archive teams, visibility control, custom summary schedule |
+| V48 | `V48__ai_conversations.sql` | Create `ai_conversations` (id, user_id FK, summary_scope, summary_context, created_at) and `ai_messages` (id, conversation_id FK, role, content, created_at) — support follow-up conversations on summaries |
+| V49 | `V49__invite_tokens.sql` | Create `invite_tokens` (id, token UNIQUE, email, role, team_id FK nullable, created_by FK, expires_at, used_at, created_at) — token-based team invitations |
+| V50 | `V50__metric_summaries_headline_team.sql` | ALTER `metric_summaries` ADD `headline` TEXT, ADD `team_id` FK → teams, ALTER user_id DROP NOT NULL; add unique index on (COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,'')); add index on (team_id, generated_at DESC) — persist team summaries |
+| V51 | `V51__sync_jobs.sql` | Create `sync_jobs` (id, data_source_id FK, status, phase, total_processed, started_at, completed_at, result, error); indexes on (data_source_id) and partial on (status='RUNNING') — persistent job state for backfill detection |
+| V52 | `V52__direct_messages.sql` | Create `messages` (id, sender_id FK, recipient_id FK, body, created_at, read_at); indexes on (sender_id, recipient_id, created_at) and (recipient_id, read_at) — 1:1 direct messaging |
+| V53 | `V53__backfill_notification_prefs.sql` | Backfill an all-FALSE `user_notification_prefs` row for every user lacking one (idempotent `INSERT ... WHERE NOT EXISTS` guard preserves existing custom rows); ALTER COLUMN `ai_brief`/`sync_failures`/`after_hours` SET DEFAULT FALSE — aligns new-row defaults with the opt-out notification policy |
+| V54 | `V54__add_default_contact_method.sql` | ALTER `user_notification_prefs` ADD `default_contact_method` VARCHAR(16) NOT NULL DEFAULT 'IN_APP' CHECK IN ('IN_APP','EMAIL') — user preference for in-app vs. email contact in `MemberDetailModal` |
 | V55 | `V55__timestamps_to_timestamptz.sql` | Convert `data_source_configs.(last_success_sync, created_at, updated_at)` and `git_repositories.last_scan_at` from `TIMESTAMP` to `TIMESTAMPTZ` (QF-3) — Instant-based Java fields require `TIMESTAMPTZ` so Postgres preserves timezone context and comparisons are unambiguous |
 
 ### 4.2 Entity-Relationship Overview
@@ -1452,34 +1446,34 @@ All secured endpoints require `Authorization: Bearer {accessToken}`.
 | Metrics (team) | `/api/metrics/teams` | MANAGER / ADMIN (DEVELOPER for read-only aggregate endpoints) |
 | AI Summaries | `/api/ai` | Authenticated |
 
-Selected notable endpoints (PDA-48 through PDA-78):
+Selected notable endpoints:
 
 | Method | Path | Status | Description |
 |---|---|---|---|
-| DELETE | `/api/teams/{id}` | 204 / 403 / 409 | Delete team; 409 if datasources attached (PDA-50) |
-| PATCH | `/api/teams/{id}/archive` | 200 | Archive team (soft delete); team disappears from list (PDA-50) |
-| PUT | `/api/teams/{id}/config` | 200 | Update team `visibility` + `ai_brief_schedule` (PDA-50) |
-| POST | `/api/teams/{id}/duplicate` | 201 | Create a duplicate team with same members, name + "(copy)" (PDA-50) |
-| GET | `/api/teams/{teamId}/export` | 200 text/csv | Export team metrics to CSV (PDA-50) |
-| GET | `/api/users/me/notifications` | 200 | Get or create notification prefs with defaults (ai_brief, sync_failures, after_hours, new_team_member) (PDA-58) |
-| PUT | `/api/users/me/notifications` | 200 | Update all four notification toggles (PDA-58) |
-| DELETE | `/api/users/me` | 204 / 409 | Self-delete account and all associated data; 409 if last admin (PDA-48) |
-| GET | `/api/admin/stats` | 200 | Admin stats: active users (24h), DB size (MB), AI calls today (PDA-49) |
-| GET | `/api/admin/users?q=` | 200 | List users; optional case-insensitive email/username filter (PDA-49) |
-| POST | `/api/messages` | 200 | Send 1:1 direct message `{recipientId, body}` (PDA-60) |
-| GET | `/api/messages/conversations` | 200 | Inbox: list all conversations with latest message + unread count (PDA-60) |
-| GET | `/api/messages/conversations/{userId}` | 200 | Thread with specific user; marks incoming messages as read (PDA-60) |
-| GET | `/api/messages/unread-count` | 200 | Total unread message count (PDA-60) |
-| GET | `/api/ai/conversations` | 200 | List summary follow-up conversations (PDA-51) |
-| POST | `/api/ai/conversations` | 201 | Start a follow-up conversation on a summary (PDA-51) |
-| GET | `/api/ai/conversations/{conversationId}/messages` | 200 | Get messages in a conversation (PDA-51) |
-| POST | `/api/ai/conversations/{conversationId}/messages` | 201 | Send a follow-up message in a conversation (PDA-51) |
-| GET | `/api/metrics/anomalies` | 200 | Per-metric anomaly flags using 2σ rule (PDA-58) |
-| GET | `/api/metrics/review-participation` | 200 | Code review participation (distinct PRs reviewed, cross-repo) (PDA-78) |
-| GET | `/api/teams/{teamId}/members/{memberId}/export` | 200 text/markdown | 1:1 meeting prep document for a team member with AI insights and anomaly highlights (PDA-76) |
-| GET | `/api/invitations/generate` | 200 | Generate invite token with optional email (PDA-52) |
-| POST | `/api/invitations/redeem` | 201 | Redeem invite token to join team (PDA-52) |
-| GET | `/api/invitations/pending` | 200 | List pending invites sent by current user (PDA-52) |
+| DELETE | `/api/teams/{id}` | 204 / 403 / 409 | Delete team; 409 if datasources attached |
+| PATCH | `/api/teams/{id}/archive` | 200 | Archive team (soft delete); team disappears from list |
+| PUT | `/api/teams/{id}/config` | 200 | Update team `visibility` + `ai_brief_schedule` |
+| POST | `/api/teams/{id}/duplicate` | 201 | Create a duplicate team with same members, name + "(copy)" |
+| GET | `/api/teams/{teamId}/export` | 200 text/csv | Export team metrics to CSV |
+| GET | `/api/users/me/notifications` | 200 | Get or create notification prefs with defaults (ai_brief, sync_failures, after_hours, new_team_member) |
+| PUT | `/api/users/me/notifications` | 200 | Update all four notification toggles |
+| DELETE | `/api/users/me` | 204 / 409 | Self-delete account and all associated data; 409 if last admin |
+| GET | `/api/admin/stats` | 200 | Admin stats: active users (24h), DB size (MB), AI calls today |
+| GET | `/api/admin/users?q=` | 200 | List users; optional case-insensitive email/username filter |
+| POST | `/api/messages` | 200 | Send 1:1 direct message `{recipientId, body}` |
+| GET | `/api/messages/conversations` | 200 | Inbox: list all conversations with latest message + unread count |
+| GET | `/api/messages/conversations/{userId}` | 200 | Thread with specific user; marks incoming messages as read |
+| GET | `/api/messages/unread-count` | 200 | Total unread message count |
+| GET | `/api/ai/conversations` | 200 | List summary follow-up conversations |
+| POST | `/api/ai/conversations` | 201 | Start a follow-up conversation on a summary |
+| GET | `/api/ai/conversations/{conversationId}/messages` | 200 | Get messages in a conversation |
+| POST | `/api/ai/conversations/{conversationId}/messages` | 201 | Send a follow-up message in a conversation |
+| GET | `/api/metrics/anomalies` | 200 | Per-metric anomaly flags using 2σ rule |
+| GET | `/api/metrics/review-participation` | 200 | Code review participation (distinct PRs reviewed, cross-repo) |
+| GET | `/api/teams/{teamId}/members/{memberId}/export` | 200 text/markdown | 1:1 meeting prep document for a team member with AI insights and anomaly highlights |
+| GET | `/api/invitations/generate` | 200 | Generate invite token with optional email |
+| POST | `/api/invitations/redeem` | 201 | Redeem invite token to join team |
+| GET | `/api/invitations/pending` | 200 | List pending invites sent by current user |
 
 *(Full endpoint tables are in Section 3 per domain.)*
 
@@ -1620,7 +1614,7 @@ AiSummaryController / MeetingExportController
 
 ### 9.2 Context Building
 
-Context building is handled by `AiContextBuilderService` (extracted in AR-4/PDA-74). It uses 11 of the 20 metric types as AI context — those with `inAiContext=true`: the 6 daily-count metrics, `DAILY_CHURN_RATIO`, the 4 aggregate lead/review time metrics, and `FOCUS_RATIO_DAYS_TASKS`. For each metric it computes:
+Context building is handled by `AiContextBuilderService`. It uses 11 of the 20 metric types as AI context — those with `inAiContext=true`: the 6 daily-count metrics, `DAILY_CHURN_RATIO`, the 4 aggregate lead/review time metrics, and `FOCUS_RATIO_DAYS_TASKS`. For each metric it computes:
 
 | Aggregate | How |
 |---|---|
@@ -1679,13 +1673,13 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 **`ForgotPasswordPage`** — Single-column, left-column treatment (Logo top, `── reset password` eyebrow, form, version footer). Email input → `POST /auth/forgot-password`. Success state renders a `.card` with `── link sent` eyebrow in emerald and instructions.
 
-**`WelcomePage`** — Post-login splash. Background: `radial-gradient(ellipse at top, var(--violet-bg) 0%, var(--bg) 60%)`. `Logo` with `wel-float` keyframe animation (translateY 0 → −8 px → 0, 2.4 s). "── welcome back" eyebrow, "Hi, {firstName}." heading with firstName in `var(--violet-strong)`, "Spinning up your workspace." body. Step list with check / pulse-dot / idle-dot indicators cycling at 900 ms. Three progress dots with pulse on active step. Skip button. Auto-redirects to `/dashboard` after 3.5 s (bumped from 2.8 s in PDA-47/T9.2 to match animation timing).
+**`WelcomePage`** — Post-login splash. Background: `radial-gradient(ellipse at top, var(--violet-bg) 0%, var(--bg) 60%)`. `Logo` with `wel-float` keyframe animation (translateY 0 → −8 px → 0, 2.4 s). "── welcome back" eyebrow, "Hi, {firstName}." heading with firstName in `var(--violet-strong)`, "Spinning up your workspace." body. Step list with check / pulse-dot / idle-dot indicators cycling at 900 ms. Three progress dots with pulse on active step. Skip button. Auto-redirects to `/dashboard` after 3.5 s (bumped from 2.8 s to match animation timing).
 
 **`DashboardPage`** — Personal metrics. Editorial layout. Date range via `TopBar` (`useDateRange()`). Repo filter via `RepoSelector` (reads/writes `RepoScopeContext`; all metric fetch calls pass the selected `repoId`). Recalculate via `da:recalculate` CustomEvent.
 - **Hero block**: `t-h1` headline interpolates live totals (commits, PRs merged, deep-work streak); appended with `aiSummary.headline` when a summary is available. `t-body` overview paragraph from `aiSummary.overview` (placeholder when none).
 - **Commits hero card**: total count + `<Sparkline>` of daily commit activity.
-- **Velocity group** (`hr-label velocity`): 8 `<KpiTile>` in 2 rows of 4 with a `.divider` between rows — commits, prs merged, pr lead time, focus ratio, prs created, issues closed, review response, 1st commit→merge. Each tile shows a red anomaly badge if the current metric value deviates >2σ from the historical mean (PDA-58/T1).
-- **Wellness · Quality group** (`hr-label wellness · quality`): 9 `<KpiTile>` in 3 rows — after-hours, refactor ratio, merge w/o review, merge frequency; then deep work streak, avg churn, knowledge silo, pr size · median; then code review participation (`REVIEW_PARTICIPATION_COUNT`, "prs reviewed", cyan accent, cross-repo, self-reviews excluded). Anomaly badges shown per metric (PDA-58/T1).
+- **Velocity group** (`hr-label velocity`): 8 `<KpiTile>` in 2 rows of 4 with a `.divider` between rows — commits, prs merged, pr lead time, focus ratio, prs created, issues closed, review response, 1st commit→merge. Each tile shows a red anomaly badge if the current metric value deviates >2σ from the historical mean.
+- **Wellness · Quality group** (`hr-label wellness · quality`): 9 `<KpiTile>` in 3 rows — after-hours, refactor ratio, merge w/o review, merge frequency; then deep work streak, avg churn, knowledge silo, pr size · median; then code review participation (`REVIEW_PARTICIPATION_COUNT`, "prs reviewed", cyan accent, cross-repo, self-reviews excluded). Anomaly badges shown per metric.
 - **AI Summary** (`hr-label ai summary`): `<AiSummaryCard>` for the selected date range; passes summary up via `onSummaryGenerated` to drive the hero block.
 - **Activity over time** (`hr-label activity · over time`): full-width commits bar chart; `.charts-grid` with PR flow (created/merged sparklines) and Code churn sparkline; Issues card (closed + created bar charts, shown only when data present).
 
@@ -1696,23 +1690,23 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 - **Repos panel**: subscribe/unsubscribe per repo, external link, collect-issues toggle. The "── repositories" expand panel is hidden for Jira data sources — Jira never owns Git repos; linking is per-project.
 - **Jira panel**: tracked projects with subscribe/unsubscribe. Each project shows dismissible linked-repo chips for repos mapped via `jira_project_repo_mappings`. A `LinkRepoModal` (triggered per project) lets the user select any subscribed repo from a dropdown and call `POST /api/jira-projects/{id}/repositories/{repoId}`; chips with `×` call `DELETE` to unlink.
 
-**`TeamDashboardPage`** — Team selector dropdown (hidden when only one team). Per-repo filter dropdown scoped to the active team's data sources (fetched via `GET /api/repos?teamId=X`); resets to "all repos" on team switch. Team KPI strip: 4 `KpiTile` (team commits, PRs merged, issues closed, active members) each with a descriptive `tooltip`. PRs merged, issues closed, and member count are now populated for DEVELOPER-role members via the `@teamAccessGuard.canRead`-guarded aggregate endpoints (previously showed "—"). `MultiLineChart` for per-member daily commits. Member summary table with per-row click → `MemberDetailModal`; each row has a "message" button that navigates to `/messages` pre-filled with that member's ID (PDA-60/T1). `AiTeamInsightCard` shows AI-generated team summary. Recalculate wired via `da:recalculate` CustomEvent; `onError` surfaces backend errors in a coral banner; `onSuccess` calls `qc.invalidateQueries()` (no-arg) to refetch all active queries.
+**`TeamDashboardPage`** — Team selector dropdown (hidden when only one team). Per-repo filter dropdown scoped to the active team's data sources (fetched via `GET /api/repos?teamId=X`); resets to "all repos" on team switch. Team KPI strip: 4 `KpiTile` (team commits, PRs merged, issues closed, active members) each with a descriptive `tooltip`. PRs merged, issues closed, and member count are now populated for DEVELOPER-role members via the `@teamAccessGuard.canRead`-guarded aggregate endpoints (previously showed "—"). `MultiLineChart` for per-member daily commits. Member summary table with per-row click → `MemberDetailModal`; each row has a "message" button that navigates to `/messages` pre-filled with that member's ID. `AiTeamInsightCard` shows AI-generated team summary. Recalculate wired via `da:recalculate` CustomEvent; `onError` surfaces backend errors in a coral banner; `onSuccess` calls `qc.invalidateQueries()` (no-arg) to refetch all active queries.
 
-**`MemberDetailModal`** (inner component of `TeamDashboardPage`) — `Modal` (620 px). Title: `{username} — {formatDate(from)} – {formatDate(to)}` (concrete date range). Header shows `<span class="dot dot-live" />active {timeAgo(lastActiveAt)}` if `lastActiveAt` is present, otherwise "no activity recorded". 3 × 2 KPI grid with 6 metrics; each icon wrapped in `Tooltip` showing metric description. Daily commits rendered as `MetricBarChart` (last 60 data points, `var(--violet)` bars, 140 px height). `MemberSummaryDto` carries `lastActiveAt?: string` (ISO timestamp) populated by `MetricsController.getTeamSummary` from `User.lastActiveAt`. Footer renders **Message** and **Email** buttons (Email hidden when the member has no `email`); their primary/secondary order follows the viewer's `defaultContactMethod` preference fetched from `GET /api/users/me/notifications` (PDA-69/T8).
+**`MemberDetailModal`** (inner component of `TeamDashboardPage`) — `Modal` (620 px). Title: `{username} — {formatDate(from)} – {formatDate(to)}` (concrete date range). Header shows `<span class="dot dot-live" />active {timeAgo(lastActiveAt)}` if `lastActiveAt` is present, otherwise "no activity recorded". 3 × 2 KPI grid with 6 metrics; each icon wrapped in `Tooltip` showing metric description. Daily commits rendered as `MetricBarChart` (last 60 data points, `var(--violet)` bars, 140 px height). `MemberSummaryDto` carries `lastActiveAt?: string` (ISO timestamp) populated by `MetricsController.getTeamSummary` from `User.lastActiveAt`. Footer renders **Message** and **Email** buttons (Email hidden when the member has no `email`); their primary/secondary order follows the viewer's `defaultContactMethod` preference fetched from `GET /api/users/me/notifications`.
 
 **`TeamManagePage`** — Create team form. Team cards with expandable member list. Add-member modal (searches all users, excludes existing members). Remove member with confirmation. `activeTeam` is derived reactively from the `teams` query result using a stored `activeTeamId` pointer, so the member list updates immediately after add/remove mutations complete without requiring a modal close/reopen.
 
-**`MessagesPage`** — 1:1 direct messaging interface (PDA-60/T1). Two-column layout: left sidebar with inbox (conversation list with latest message preview, unread badge, recipient avatar). Right column with message thread. Thread header shows recipient name + "active" status badge via `lastActiveAt`. Message list with sender/recipient attribution. Input area at bottom with text field and send button. Loads message thread on mount (`GET /api/messages/conversations/{userId}`); marks incoming messages as read. Inbox fetched from `GET /api/messages/conversations`; unread count via `GET /api/messages/unread-count` (badge on sidebar). Send message: `POST /api/messages` with `{recipientId, body}`.
+**`MessagesPage`** — 1:1 direct messaging interface. Two-column layout: left sidebar with inbox (conversation list with latest message preview, unread badge, recipient avatar). Right column with message thread. Thread header shows recipient name + "active" status badge via `lastActiveAt`. Message list with sender/recipient attribution. Input area at bottom with text field and send button. Loads message thread on mount (`GET /api/messages/conversations/{userId}`); marks incoming messages as read. Inbox fetched from `GET /api/messages/conversations`; unread count via `GET /api/messages/unread-count` (badge on sidebar). Send message: `POST /api/messages` with `{recipientId, body}`.
 
-**`SettingsPage`** — Editorial `.page.narrow` layout. **Appearance card**: theme toggle (light/dark), `AccentSwatches` + hex input, live preview strip, **logo picker** (T8.2 — 4 clickable cards calling `setTheme({ logo })` from `useTheme()`; "reset to default" reverts to `ACTIVE_LOGO`). **Avatar card**: upload via `avatarApi.upload`, preset grid via `avatarApi.setPreset`, remove via `avatarApi.delete`. **Profile card**: username, email, GitHub login, timezone picker with `Chip(emerald, dot) "auto"` badge when tz matches browser tz, role chip. Save → `PUT /users/me`. **Security card**: session JWT info, collapsible password change form; refresh token now in httpOnly cookie, access token in JS memory (PDA-55/T1). **Notifications card**: four toggle switches plus a "default contact method" (in-app/email) selector, all wired to `GET/PUT /api/users/me/notifications` (ai_brief, sync_failures, after_hours, new_team_member, default_contact_method); toggles fire `notifMutation` on change and update React Query cache optimistically (PDA-58/T3, PDA-69/T8). **Team invitations card**: button to generate invite link with optional email input (PDA-52/T1); generated link expires in 7 days; shows list of pending invites with copy-to-clipboard button. **Danger zone**: "delete account" button opens a confirmation `Modal` requiring the user to type their email exactly; on confirm calls `DELETE /api/users/me`, then `logout()`, then redirects to `/login`; 409 last-admin guard surfaces as an inline error in the modal (PDA-48/T3).
+**`SettingsPage`** — Editorial `.page.narrow` layout. **Appearance card**: theme toggle (light/dark), `AccentSwatches` + hex input, live preview strip, **logo picker** (4 clickable cards calling `setTheme({ logo })` from `useTheme()`; "reset to default" reverts to `ACTIVE_LOGO`). **Avatar card**: upload via `avatarApi.upload`, preset grid via `avatarApi.setPreset`, remove via `avatarApi.delete`. **Profile card**: username, email, GitHub login, timezone picker with `Chip(emerald, dot) "auto"` badge when tz matches browser tz, role chip. Save → `PUT /users/me`. **Security card**: session JWT info, collapsible password change form; refresh token now in httpOnly cookie, access token in JS memory. **Notifications card**: four toggle switches plus a "default contact method" (in-app/email) selector, all wired to `GET/PUT /api/users/me/notifications` (ai_brief, sync_failures, after_hours, new_team_member, default_contact_method); toggles fire `notifMutation` on change and update React Query cache optimistically. **Team invitations card**: button to generate invite link with optional email input; generated link expires in 7 days; shows list of pending invites with copy-to-clipboard button. **Danger zone**: "delete account" button opens a confirmation `Modal` requiring the user to type their email exactly; on confirm calls `DELETE /api/users/me`, then `logout()`, then redirects to `/login`; 409 last-admin guard surfaces as an inline error in the modal.
 
 **`AdminPage`** — ADMIN only (redirects to `/dashboard` if not admin). Hero `N users` headline. KPI strip: `users` count (from `/admin/users`); `active 24h`, `db size` (formatted as MB), `ai calls today` — all live from `GET /admin/stats` via `useQuery(['admin-stats'])`. Users table: email, role dropdown (`RoleDropdown` — inline `useMutation` per row), delete button. **Invite modal**: visual placeholder, `TODO(admin-invites-backend)`. **Promote-to-admin modal**: search input calls `GET /admin/users?q=` (B5.2) with `enabled: adminOpen`; results list shows non-admin users; selecting one highlights it; "promote" button calls `PUT /admin/users/{id}/role` with ADMIN. Current user cannot be deleted.
 
 ### 10.3 Components
 
-**`AppShell`** — Auth guard (`useAuth().user` → redirect to `/login` if null). Composes `Sidebar`, `TopBar`, `<Outlet>`, and `StatusBar` in a full-height flex layout. Listens for `da:open-palette` CustomEvent and global `Ctrl+K` / `⌘K` keydown to open `CommandPalette` (PDA-48/T1). Sidebar now displays unread message count badge (PDA-60/T1). While `isLoading && isOffline`, renders `PageSpinner` with a "reconnecting to server…" monospace label underneath instead of redirecting to `/login`.
+**`AppShell`** — Auth guard (`useAuth().user` → redirect to `/login` if null). Composes `Sidebar`, `TopBar`, `<Outlet>`, and `StatusBar` in a full-height flex layout. Listens for `da:open-palette` CustomEvent and global `Ctrl+K` / `⌘K` keydown to open `CommandPalette`. Sidebar now displays unread message count badge. While `isLoading && isOffline`, renders `PageSpinner` with a "reconnecting to server…" monospace label underneath instead of redirecting to `/login`.
 
-**`CommandPalette`** (`src/components/ui/CommandPalette.tsx`) — Keyboard-navigable command palette rendered as an overlay (not a `Modal`). Opens on `da:open-palette` event or `Ctrl+K`/`⌘K`. Commands list (8 entries): Go to Dashboard, Go to Team (MANAGER+), Go to Manage Teams (MANAGER+), Go to Data Sources, Go to Settings, Go to Admin (ADMIN), Toggle dark mode, Open date range picker. Text input filters by `label.toLowerCase().includes(query)`. `↑`/`↓` moves selection (accent left border on selected row); `Enter` fires the action; `Escape` closes (PDA-48/T1).
+**`CommandPalette`** (`src/components/ui/CommandPalette.tsx`) — Keyboard-navigable command palette rendered as an overlay (not a `Modal`). Opens on `da:open-palette` event or `Ctrl+K`/`⌘K`. Commands list (8 entries): Go to Dashboard, Go to Team (MANAGER+), Go to Manage Teams (MANAGER+), Go to Data Sources, Go to Settings, Go to Admin (ADMIN), Toggle dark mode, Open date range picker. Text input filters by `label.toLowerCase().includes(query)`. `↑`/`↓` moves selection (accent left border on selected row); `Enter` fires the action; `Escape` closes.
 
 **`Sidebar`** — Fixed 240 px (`--sidebar-w`). Brand block: `Logo` + `APP_VERSION` pill + `.dot-live` eyebrow. `⌘K` search button dispatches `da:open-palette`. Workspace nav: Personal (`/dashboard`), Team (`/team`, MANAGER+), Manage (`/team-manage`, MANAGER+), Messages (`/messages` with unread badge), Sources (`/datasources`). Account nav: Settings, Admin (ADMIN+). Active item: `var(--bg-2)` background + 2 px accent left-bar. User card footer: Avatar + **username** + role badge → navigates `/settings`. Theme toggle and logout buttons.
 
@@ -1740,7 +1734,7 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 **`Modal`** — Focus-trapped overlay. Escape closes, backdrop closes, body scroll locked. `@keyframes mfade` / `mpop` injected inline. Props: `open`, `onClose`, `eyebrow?`, `title`, `width?`, `footer?`.
 
-**`ProseWithNumbers`** (`src/components/ui/ProseWithNumbers.tsx`) — Renders a paragraph with numeric tokens wrapped in `<strong>` using `var(--font-mono)` so numbers stand out editorially from prose. Backed by `tokeniseNumbers` from `src/lib/prose.ts` which splits text on the pattern `\d[\d,.]*(×|%|h|d|\/wk)?`. Used in `AiSummaryCard` overview (PDA-48/T2).
+**`ProseWithNumbers`** (`src/components/ui/ProseWithNumbers.tsx`) — Renders a paragraph with numeric tokens wrapped in `<strong>` using `var(--font-mono)` so numbers stand out editorially from prose. Backed by `tokeniseNumbers` from `src/lib/prose.ts` which splits text on the pattern `\d[\d,.]*(×|%|h|d|\/wk)?`. Used in `AiSummaryCard` overview.
 
 **`AccentSwatches`** — Row of clickable colour swatches (the `ACCENT_PRESETS` list). `onChange` fires once per valid 6-char hex, including manual hex input.
 
@@ -1754,15 +1748,15 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 **`MultiLineChart`** — Multi-series for team data. Pivots by (date, username). 7-color palette.
 
-**`AiSummaryCard`** — Fetches personal AI summary for the current date range. Editorial layout: `AI SUMMARY` eyebrow, italic `t-h2` headline, `Fresh / Outdated` chip, an export `<details>` menu (replacing the old standalone copy button), and a Regenerate button that is visibly disabled (`is-disabled`, `aria-disabled`, greyed/`cursor:not-allowed`) while generating, paired with a Stop button to abort. Insight rows use `+/!/~` symbols coloured by `insight.kind` (`positive → emerald`, `risk → coral`, `note → amber`) with a `Chip` for the linked metric name. Footer: `Shield` icon + "Generated locally" + model name + `timeAgo` + "History" button (opens `SummaryHistoryDrawer`) + "Ask follow-up" button (opens `FollowUpDrawer`). `onSummaryGenerated` callback drives the Dashboard hero block. Falls back to DB-persisted latest summary when no in-memory entry exists (PDA-61). The Stop button cancels an in-flight generation via `AbortController`, and the export menu offers Copy to clipboard, Markdown (.md), HTML (.html), Save-as-PDF (browser print), Plain text (.txt), and JSON (.json) using pure helpers in `src/lib/export.ts` (`summaryToText`, `summaryToMarkdown`, `summaryToHtml`, `downloadFile`) (PDA-68/T6).
+**`AiSummaryCard`** — Fetches personal AI summary for the current date range. Editorial layout: `AI SUMMARY` eyebrow, italic `t-h2` headline, `Fresh / Outdated` chip, an export `<details>` menu (replacing the old standalone copy button), and a Regenerate button that is visibly disabled (`is-disabled`, `aria-disabled`, greyed/`cursor:not-allowed`) while generating, paired with a Stop button to abort. Insight rows use `+/!/~` symbols coloured by `insight.kind` (`positive → emerald`, `risk → coral`, `note → amber`) with a `Chip` for the linked metric name. Footer: `Shield` icon + "Generated locally" + model name + `timeAgo` + "History" button (opens `SummaryHistoryDrawer`) + "Ask follow-up" button (opens `FollowUpDrawer`). `onSummaryGenerated` callback drives the Dashboard hero block. Falls back to DB-persisted latest summary when no in-memory entry exists. The Stop button cancels an in-flight generation via `AbortController`, and the export menu offers Copy to clipboard, Markdown (.md), HTML (.html), Save-as-PDF (browser print), Plain text (.txt), and JSON (.json) using pure helpers in `src/lib/export.ts` (`summaryToText`, `summaryToMarkdown`, `summaryToHtml`, `downloadFile`).
 
-**`SummaryHistoryDrawer`** (`src/components/ai/SummaryHistoryDrawer.tsx`) — Slide-in 520 px panel listing the last 20 persisted personal AI summaries newest-first (PDA-61). Each entry is an accordion row: collapsed shows date range + headline; expanded adds overview, insight rows, and recommendations. Fetches from `GET /api/ai/history` with `{ enabled: open, staleTime: 5 min }` so the list is only loaded on first open per navigation.
+**`SummaryHistoryDrawer`** (`src/components/ai/SummaryHistoryDrawer.tsx`) — Slide-in 520 px panel listing the last 20 persisted personal AI summaries newest-first. Each entry is an accordion row: collapsed shows date range + headline; expanded adds overview, insight rows, and recommendations. Fetches from `GET /api/ai/history` with `{ enabled: open, staleTime: 5 min }` so the list is only loaded on first open per navigation.
 
 **`AiMetricExplainDrawer`** — Slide-in panel. Receives `metricLabel`, `metricDescription`, `metricValue`, and the current `MetricsSummaryDto`. Shows metric description, current value, and up to 3 matching AI insights from the summary.
 
 **`AiTeamInsightCard`** — Team equivalent of `AiSummaryCard`. Shows team overview + per-member insights.
 
-**`ErrorBoundary`** (`src/components/ErrorBoundary.tsx`) — React class component using `getDerivedStateFromError` + `componentDidCatch` (PDA-61/T16). Catches any render-phase exception in its subtree and shows a centred "Something went wrong" screen with the error message and a "Reload" button (`window.location.reload()`). Accepts an optional `fallback` prop for custom fallback UI. Mounted at two levels: top-level in `App.tsx` (catches infrastructure failures) and inner in `AppShell.tsx` wrapping `<Outlet />` (isolates page crashes from the shell).
+**`ErrorBoundary`** (`src/components/ErrorBoundary.tsx`) — React class component using `getDerivedStateFromError` + `componentDidCatch`. Catches any render-phase exception in its subtree and shows a centred "Something went wrong" screen with the error message and a "Reload" button (`window.location.reload()`). Accepts an optional `fallback` prop for custom fallback UI. Mounted at two levels: top-level in `App.tsx` (catches infrastructure failures) and inner in `AppShell.tsx` wrapping `<Outlet />` (isolates page crashes from the shell).
 
 **UI primitives (retained)**: `Avatar` (image / preset / initials fallback, deterministic colour), `Button` (primary/secondary/ghost/danger, sm/md/lg, loading spinner), `Input` (forwardRef, label, error), `Select` (forwardRef, label, options), `Badge` (6 colors, used for role pills in dropdowns), `Spinner` / `PageSpinner`.
 
@@ -1790,7 +1784,7 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 | `api/teams.ts` | CRUD, add/remove member, rename, delete, `getMyMemberships()` → `TeamMembershipDto[]` |
 | `api/ai.ts` | `/summary`, `/team/{id}/summary`, `/explain`, `/summaries/latest`, `/history`, `/teams/{id}/history` |
 | `api/issues.ts` | Issue listing |
-| `api/messaging.ts` | `send`, `inbox`, `conversation`, `unreadCount` (PDA-60) |
+| `api/messaging.ts` | `send`, `inbox`, `conversation`, `unreadCount` |
 | `api/users.ts` | Profile update, avatar, `notifications.get()`, `notifications.update(dto)` |
 
 ---
@@ -1820,10 +1814,10 @@ The editorial design system lives in `frontend/src/index.css` (`@theme` block re
 |---|---|---|
 | `TokenCleanupScheduler` | Daily 02:00 UTC | Deletes expired `refresh_tokens`; deletes used or expired `password_reset_tokens` |
 | `MetricsScheduler` | Daily 01:00 UTC | For every user: `calculateDailyMetrics(userId, yesterday, yesterday)`. Per-user failures logged, do not abort run |
-| `MetricsSummaryScheduler` | Every Monday 08:00 UTC | Generates a personal AI summary for every user for the previous week (Mon–Sun); persists to `metric_summaries` with headline; triggers `NotificationDispatchService.dispatchSummaries()` if email prefs enabled (PDA-53/T3, PDA-58/T3) |
+| `MetricsSummaryScheduler` | Every Monday 08:00 UTC | Generates a personal AI summary for every user for the previous week (Mon–Sun); persists to `metric_summaries` with headline; triggers `NotificationDispatchService.dispatchSummaries()` if email prefs enabled |
 | `CommitStatsEnrichmentScheduler` | Every 2 minutes | Finds repos with PENDING commits or PRs; processes up to 50 per repo per run. Respects GitHub rate limits. Continues until all enriched |
-| `MetricsBackfillScheduler` | Daily 03:00 UTC | Detects gaps in `metric_snapshots` relative to `sync_jobs` completion dates; triggers backfill calculations for users with stale data (PDA-56/T2) |
-| `InviteTokenCleanupScheduler` | Daily 05:00 UTC | Deletes expired or already-used `invite_tokens` (PDA-52/T1) |
+| `MetricsBackfillScheduler` | Daily 03:00 UTC | Detects gaps in `metric_snapshots` relative to `sync_jobs` completion dates; triggers backfill calculations for users with stale data |
+| `InviteTokenCleanupScheduler` | Daily 05:00 UTC | Deletes expired or already-used `invite_tokens` |
 
 ---
 
@@ -1876,15 +1870,15 @@ The editorial design system lives in `frontend/src/index.css` (`@theme` block re
 |---|---|---|---|
 | `JWT_SECRET` | (dev hex value) | **Yes in prod** | 256-bit hex; HMAC-SHA256 signing key |
 | `APP_BASE_URL` | `http://localhost:8080` | No | Used in password reset email links |
-| `ENCRYPTION_KEY` | (dev base64) | **Yes for AES-GCM token encryption** | 32-byte base64-encoded AES-256 key (PDA-54) |
-| `ENCRYPTION_MIGRATE` | `false` | No | Set to `true` to re-encrypt legacy tokens on startup (PDA-54) |
+| `ENCRYPTION_KEY` | (dev base64) | **Yes for AES-GCM token encryption** | 32-byte base64-encoded AES-256 key |
+| `ENCRYPTION_MIGRATE` | `false` | No | Set to `true` to re-encrypt legacy tokens on startup |
 | `SMTP_HOST` | `smtp.gmail.com` | No | SMTP hostname |
 | `SMTP_PORT` | `587` | No | SMTP port (STARTTLS) |
 | `SMTP_USERNAME` | — | Yes (for email) | SMTP auth username |
 | `SMTP_PASSWORD` | — | Yes (for email) | SMTP app password |
-| `RATE_LIMIT_DEFAULT_RPM` | `120` | No | Default request rate limit (requests per minute) (PDA-54) |
-| `RATE_LIMIT_AI_RPM` | `10` | No | AI endpoint rate limit (requests per minute) (PDA-54) |
-| `COOKIE_SECURE` | `false` | No | Set `true` in production for httpOnly, secure cookies (PDA-55) |
+| `RATE_LIMIT_DEFAULT_RPM` | `120` | No | Default request rate limit (requests per minute) |
+| `RATE_LIMIT_AI_RPM` | `10` | No | AI endpoint rate limit (requests per minute) |
+| `COOKIE_SECURE` | `false` | No | Set `true` in production for httpOnly, secure cookies |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | No | Ollama server base URL |
 | `OLLAMA_MODEL` | `llama3.2` | No | LLM model name |
 | `OLLAMA_NUM_PREDICT` | `1024` | No | Max tokens per completion |

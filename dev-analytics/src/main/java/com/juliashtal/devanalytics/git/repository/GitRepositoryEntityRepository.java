@@ -10,6 +10,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for GitRepositoryEntity (git_repositories). Canonical-row lookups by full name.
+ */
 public interface GitRepositoryEntityRepository extends JpaRepository<GitRepositoryEntity, Long> {
     List<GitRepositoryEntity> findAllByDataSourceConfig(DataSourceConfig dataSourceConfig);
     long countByDataSourceConfig(DataSourceConfig dataSourceConfig);

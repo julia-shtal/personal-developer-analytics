@@ -4,6 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+/**
+ * Request to start tracking a Jira project.
+ */
 @Data
 public class CreateTrackedJiraProjectRequest {
 

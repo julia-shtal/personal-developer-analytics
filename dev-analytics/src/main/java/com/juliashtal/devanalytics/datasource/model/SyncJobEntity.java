@@ -5,6 +5,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for sync_jobs. Records the outcome of one collection run for a data source.
+ */
 @Data
 @Entity
 @Table(name = "sync_jobs")

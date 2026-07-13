@@ -12,6 +12,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Calculates the focus-ratio metric (days worked vs. distinct tasks).
+ */
 @Component
 @RequiredArgsConstructor
 public class FocusRatioCalculator implements MetricCalculator {

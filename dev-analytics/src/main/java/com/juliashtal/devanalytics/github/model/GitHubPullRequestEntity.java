@@ -18,6 +18,9 @@ import java.time.Instant;
                 )
         }
 )
+/**
+ * JPA entity for github_pull_requests. One pull request with its enrichment stats.
+ */
 public class GitHubPullRequestEntity {
 
     @Id

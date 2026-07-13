@@ -5,6 +5,9 @@ import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+/**
+ * Resolves the current authenticated user for request-scoped authorization checks.
+ */
 @Service
 @RequiredArgsConstructor
 public class CheckHelper {

@@ -25,6 +25,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * REST controller for data sources.
+ * Mounted at /api/datasources — CRUD plus async collection orchestration.
+ */
 @RestController
 @RequestMapping("/api/datasources")
 @PreAuthorize("isAuthenticated()")

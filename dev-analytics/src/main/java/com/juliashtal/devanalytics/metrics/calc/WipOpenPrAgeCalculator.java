@@ -19,7 +19,6 @@ import java.util.Set;
 /**
  * WIP Open PR Age — median age in hours of the user's currently-open PRs, per repository.
  * Point-in-time: age is measured from each PR's createdAt to Instant.now() at calculation time.
- * See docs/metrics/wip-open-pr-age.md.
  */
 @Component
 @RequiredArgsConstructor

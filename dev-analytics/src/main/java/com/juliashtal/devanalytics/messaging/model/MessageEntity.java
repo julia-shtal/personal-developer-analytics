@@ -6,6 +6,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for messages. One direct message between two users.
+ */
 @Data
 @Entity
 @Table(name = "messages")

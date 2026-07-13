@@ -41,6 +41,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
+/**
+ * Collects commits from a local Git working copy via JGit, batching diffs across worker threads.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

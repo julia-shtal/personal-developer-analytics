@@ -8,6 +8,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for data_source_configs. Credential/connection record for a Git, GitHub, or Jira source.
+ */
 @Data
 @Entity
 @Table(name = "data_source_configs")

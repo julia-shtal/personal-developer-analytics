@@ -32,6 +32,9 @@ public class SyncJobTracker {
     /** Summary of a completed phase, stored for the final result display. */
     public record PhaseSummary(String name, int itemsSaved, long durationSeconds) {}
 
+    /**
+     * Mutable in-memory progress state for one running sync job.
+     */
     public static class JobState {
         public volatile boolean running = true;
         public final Instant startedAt = Instant.now();

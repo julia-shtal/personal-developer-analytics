@@ -27,6 +27,9 @@ public class JiraProjectRepoMapping {
     @JoinColumn(name = "repository_id")
     private GitRepositoryEntity repository;
 
+    /**
+     * Composite primary key (jira project id + repository id).
+     */
     @Data
     public static class PK implements Serializable {
         private Long jiraProject;

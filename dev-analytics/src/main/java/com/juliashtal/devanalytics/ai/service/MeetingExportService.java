@@ -14,8 +14,7 @@ import java.util.*;
 
 /**
  * Renders a GitHub-flavoured markdown 1:1 meeting prep document.
- * Follows the canonical template (docs/superpowers/1on1-template.md):
- * header box → shields.io badge row → AI overview blockquote →
+ * Output structure: header box → shields.io badge row → AI overview blockquote →
  * diff-fence signals → HTML signal table → checkbox talking points →
  * collapsible next-steps → footer box.
  *

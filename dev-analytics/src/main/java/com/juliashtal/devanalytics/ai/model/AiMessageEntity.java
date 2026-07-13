@@ -5,6 +5,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for ai_messages. A single user or assistant turn within a conversation.
+ */
 @Data
 @Entity
 @Table(name = "ai_messages")

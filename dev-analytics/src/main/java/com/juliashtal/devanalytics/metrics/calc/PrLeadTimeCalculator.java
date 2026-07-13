@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates pull-request lead time (creation to merge).
+ */
 @Component
 @RequiredArgsConstructor
 public class PrLeadTimeCalculator implements MetricCalculator {

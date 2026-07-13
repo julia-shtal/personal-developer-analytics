@@ -11,6 +11,9 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for UserProjectRegistration (user_project_registrations).
+ */
 public interface UserProjectRegistrationRepository extends JpaRepository<UserProjectRegistration, Long> {
     boolean existsByUserAndProject(User user, JiraProjectEntity project);
     Optional<UserProjectRegistration> findByUserAndProject(User user, JiraProjectEntity project);

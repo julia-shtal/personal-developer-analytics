@@ -11,6 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Creates, validates, and rotates refresh tokens.
+ */
 @Service
 @RequiredArgsConstructor
 public class RefreshTokenService {

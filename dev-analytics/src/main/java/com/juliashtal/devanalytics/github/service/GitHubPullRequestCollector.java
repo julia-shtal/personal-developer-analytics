@@ -33,6 +33,9 @@ import java.util.stream.Collectors;
 
 import static com.juliashtal.devanalytics.helper.ParsingHelper.resolveApiBase;
 
+/**
+ * Queries stored pull requests and paginates the GitHub PR API.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

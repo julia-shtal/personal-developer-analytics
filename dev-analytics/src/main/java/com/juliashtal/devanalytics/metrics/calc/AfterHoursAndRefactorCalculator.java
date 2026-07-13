@@ -15,6 +15,9 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Calculates the after-hours-commit and refactor-ratio metrics (working hours 09–18).
+ */
 @Component
 @RequiredArgsConstructor
 public class AfterHoursAndRefactorCalculator implements MetricCalculator {

@@ -2,6 +2,9 @@ package com.juliashtal.devanalytics.user.model;
 
 import lombok.Data;
 
+/**
+ * Lightweight user projection for listings and team membership.
+ */
 @Data
 public class UserSummary {
     private Long id;

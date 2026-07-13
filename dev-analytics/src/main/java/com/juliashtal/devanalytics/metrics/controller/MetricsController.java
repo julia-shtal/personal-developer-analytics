@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.metrics;
+package com.juliashtal.devanalytics.metrics.controller;
 
 import com.juliashtal.devanalytics.exception.BadRequestException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
@@ -23,6 +23,10 @@ import java.util.stream.Collectors;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 
+/**
+ * REST controller for personal metrics.
+ * Mounted at /api/metrics — snapshots, aggregates, and recalculation.
+ */
 @RestController
 @RequestMapping("/api/metrics")
 @PreAuthorize("isAuthenticated()")

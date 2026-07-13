@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Issues and validates access-token JWTs.
+ */
 @Service
 public class JwtService {
 

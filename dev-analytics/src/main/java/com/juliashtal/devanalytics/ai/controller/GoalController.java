@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * REST controller for metric goals. Mounted at /api/goals — CRUD for a user's per-metric targets.
+ */
 @RestController
 @RequestMapping("/api/goals")
 @PreAuthorize("isAuthenticated()")

@@ -6,6 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
+/**
+ * Spring Data repository for JiraProjectRepoMapping (jira_project_repo_mappings).
+ */
 public interface JiraProjectRepoMappingRepository
         extends JpaRepository<JiraProjectRepoMapping, JiraProjectRepoMapping.PK> {
 

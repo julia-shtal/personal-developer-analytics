@@ -22,6 +22,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/**
+ * REST controller for issues.
+ * Mounted at /api/issues — unified GitHub and Jira issue collection and listing.
+ */
 @RestController
 @RequestMapping("/api/issues")
 @PreAuthorize("isAuthenticated()")

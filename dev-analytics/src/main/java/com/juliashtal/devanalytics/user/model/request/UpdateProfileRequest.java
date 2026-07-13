@@ -2,6 +2,9 @@ package com.juliashtal.devanalytics.user.model.request;
 
 import lombok.Data;
 
+/**
+ * Request to update the current user's profile.
+ */
 @Data
 public class UpdateProfileRequest {
     private String username;

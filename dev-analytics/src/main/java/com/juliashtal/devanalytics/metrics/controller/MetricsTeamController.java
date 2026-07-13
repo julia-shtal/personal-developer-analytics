@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.metrics;
+package com.juliashtal.devanalytics.metrics.controller;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
@@ -23,6 +23,10 @@ import java.util.*;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 
+/**
+ * REST controller for team metrics.
+ * Mounted at /api/metrics/teams — team-scoped snapshots and aggregates.
+ */
 @RestController
 @RequestMapping("/api/metrics/teams")
 @RequiredArgsConstructor

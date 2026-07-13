@@ -6,6 +6,9 @@ import com.juliashtal.devanalytics.user.model.Role;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+/**
+ * Static accessors for the current user's id and role from the security context.
+ */
 public class SecurityUtils {
 
     public static Long getCurrentUserId() {

@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates the daily commit count and average commit size.
+ */
 @Component
 @RequiredArgsConstructor
 public class DailyCommitsCalculator implements MetricCalculator {

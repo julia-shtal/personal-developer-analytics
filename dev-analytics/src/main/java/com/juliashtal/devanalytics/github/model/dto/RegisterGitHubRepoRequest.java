@@ -3,6 +3,9 @@ package com.juliashtal.devanalytics.github.model.dto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+/**
+ * Request to register or subscribe to a GitHub repository.
+ */
 @Data
 public class RegisterGitHubRepoRequest {
     // Required only when the repo has never been registered before.

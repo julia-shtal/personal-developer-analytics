@@ -11,6 +11,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates the knowledge-silo metric per repository.
+ */
 @Component
 @RequiredArgsConstructor
 public class KnowledgeSiloCalculator implements MetricCalculator {

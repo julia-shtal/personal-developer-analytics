@@ -12,6 +12,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * REST controller for GitHub pull requests.
+ * Mounted at /api/github — PR collection and queries.
+ */
 @RestController
 @RequestMapping("/api/github")
 @PreAuthorize("isAuthenticated()")

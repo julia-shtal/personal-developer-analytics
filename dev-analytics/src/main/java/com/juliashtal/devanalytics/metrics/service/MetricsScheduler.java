@@ -9,6 +9,9 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 
+/**
+ * Scheduled job that recalculates metrics daily, backfilling up to 30 days.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j

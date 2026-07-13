@@ -22,6 +22,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
 
+/**
+ * REST controller for authentication.
+ * Mounted at /api/auth — register, login, token refresh, logout, and password reset.
+ */
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor

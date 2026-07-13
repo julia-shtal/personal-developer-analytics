@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates pull-request size and complexity metrics.
+ */
 @Component
 @RequiredArgsConstructor
 public class PrSizeComplexityCalculator implements MetricCalculator {

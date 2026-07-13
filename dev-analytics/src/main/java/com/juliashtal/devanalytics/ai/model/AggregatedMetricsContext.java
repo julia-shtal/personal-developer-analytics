@@ -12,6 +12,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Per-metric aggregates handed to the AI prompt builder for a personal or repo scope.
+ */
 @Data
 public class AggregatedMetricsContext {
 
@@ -23,6 +26,9 @@ public class AggregatedMetricsContext {
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<GoalSummary> activeGoals = new ArrayList<>();
 
+    /**
+     * Pre-formatted aggregate values for a single metric.
+     */
     @Data
     @Builder
     @NoArgsConstructor

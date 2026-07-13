@@ -18,6 +18,9 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+/**
+ * Orchestrates metric calculation across the registered calculators for a user or team scope.
+ */
 @Service
 @RequiredArgsConstructor
 public class MetricsService {

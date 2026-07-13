@@ -18,6 +18,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates the first-commit-to-merge duration per pull request.
+ */
 @Component
 @RequiredArgsConstructor
 public class FirstCommitToMergeCalculator implements MetricCalculator {

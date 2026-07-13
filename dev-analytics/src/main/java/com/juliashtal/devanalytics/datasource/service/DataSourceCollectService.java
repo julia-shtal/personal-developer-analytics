@@ -9,6 +9,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 
+/**
+ * Runs a data source's collection by dispatching to the registered collector and tracking job progress.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

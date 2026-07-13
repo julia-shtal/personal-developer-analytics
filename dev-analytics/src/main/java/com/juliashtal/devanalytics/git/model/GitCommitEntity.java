@@ -5,6 +5,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for git_commits. One commit ingested from a local or GitHub repository.
+ */
 @Data
 @Entity
 @Table(name = "git_commits")

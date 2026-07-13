@@ -1,5 +1,8 @@
 package com.juliashtal.devanalytics.git.model.dto;
 
+/**
+ * Repository list entry, including whether the current user is a subscriber.
+ */
 public record RepoDto(
         Long id,
         String name,

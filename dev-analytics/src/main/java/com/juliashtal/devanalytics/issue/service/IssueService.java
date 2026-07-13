@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+/**
+ * Reads unified issues by id.
+ */
 @Service
 @RequiredArgsConstructor
 public class IssueService {

@@ -7,6 +7,9 @@ import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GitHubBuilder;
 import org.springframework.stereotype.Component;
 
+/**
+ * Builds authenticated GitHub API clients, decrypting the stored token per data source.
+ */
 @Component
 public class GitHubClientFactory {
 

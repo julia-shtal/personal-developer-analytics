@@ -4,6 +4,9 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 
 import java.time.Instant;
 
+/**
+ * Local Git repository as returned to the client.
+ */
 public record GitRepositoryDto(
         Long id,
         Long dataSourceId,

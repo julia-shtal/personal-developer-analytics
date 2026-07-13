@@ -25,6 +25,9 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Orchestrates AI metric-summary generation: builds context, prompts the LLM, and parses the JSON response.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

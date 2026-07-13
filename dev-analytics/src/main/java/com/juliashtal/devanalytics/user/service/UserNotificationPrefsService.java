@@ -10,6 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.NoSuchElementException;
 
+/**
+ * Reads and updates a user's notification preferences.
+ */
 @Service
 @RequiredArgsConstructor
 public class UserNotificationPrefsService {

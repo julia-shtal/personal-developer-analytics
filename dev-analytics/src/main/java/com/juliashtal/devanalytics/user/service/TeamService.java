@@ -23,6 +23,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+/**
+ * Manages teams and membership and resolves team-scoped access.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

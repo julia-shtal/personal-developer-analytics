@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates issue lead time (creation to close).
+ */
 @Component
 @RequiredArgsConstructor
 public class IssueLeadTimeCalculator implements MetricCalculator {

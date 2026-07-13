@@ -2,6 +2,9 @@ package com.juliashtal.devanalytics.auth.model.request;
 
 import lombok.Data;
 
+/**
+ * New-user registration request.
+ */
 @Data
 public class RegisterRequest {
     private String username;

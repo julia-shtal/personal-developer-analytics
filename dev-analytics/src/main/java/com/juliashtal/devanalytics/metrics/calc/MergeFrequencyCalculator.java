@@ -13,6 +13,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+/**
+ * Calculates merge frequency from commit history.
+ */
 @Component
 @RequiredArgsConstructor
 public class MergeFrequencyCalculator implements MetricCalculator {
