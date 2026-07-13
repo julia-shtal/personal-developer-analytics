@@ -8,6 +8,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for issues. Unified GitHub or Jira issue record.
+ */
 @Data
 @Entity
 @Table(name = "issues")

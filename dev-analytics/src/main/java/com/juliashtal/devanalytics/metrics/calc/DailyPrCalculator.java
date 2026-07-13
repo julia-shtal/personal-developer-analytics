@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates daily pull requests created and merged.
+ */
 @Component
 @RequiredArgsConstructor
 public class DailyPrCalculator implements MetricCalculator {

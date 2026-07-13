@@ -15,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+/**
+ * Manages user profiles, roles, timezone, and account lifecycle.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

@@ -15,6 +15,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for GitHubPullRequestEntity (github_pull_requests). Per-repo lookups and metric projections.
+ */
 public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullRequestEntity, Long> {
     Optional<GitHubPullRequestEntity> findByRepositoryAndNumber(GitRepositoryEntity repository, int number);
     List<GitHubPullRequestEntity> findByRepository(GitRepositoryEntity repository);

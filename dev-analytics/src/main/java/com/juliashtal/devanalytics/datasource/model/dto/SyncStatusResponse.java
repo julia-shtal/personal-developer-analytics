@@ -34,5 +34,8 @@ public record SyncStatusResponse(
         String result,
         String error
 ) {
+    /**
+     * A finished collection phase (name, items saved, duration).
+     */
     public record CompletedPhase(String name, int itemsSaved, long durationSeconds) {}
 }

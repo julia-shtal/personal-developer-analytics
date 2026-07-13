@@ -30,6 +30,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Collects Jira issues for tracked projects via the Jira REST API.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

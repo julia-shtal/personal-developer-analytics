@@ -5,6 +5,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for github_pr_reviews. One review submitted on a pull request.
+ */
 @Data
 @Entity
 @Table(name = "github_pr_reviews")

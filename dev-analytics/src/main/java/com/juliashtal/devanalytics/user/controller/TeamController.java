@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * REST controller for teams. Mounted at /api/teams — team and membership management (MANAGER/ADMIN).
+ */
 @RestController
 @RequestMapping("/api/teams")
 @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")

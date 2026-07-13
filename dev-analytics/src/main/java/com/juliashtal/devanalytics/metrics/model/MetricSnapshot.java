@@ -63,6 +63,9 @@ import java.time.LocalDate;
                 @Index(name = "ix_metric_user_repo_date_type", columnList = "user_id, repository_id, date, metricType")
         }
 )
+/**
+ * JPA entity for metric_snapshots. One computed metric value for a user/team/scope on a day.
+ */
 public class MetricSnapshot {
 
     @Id

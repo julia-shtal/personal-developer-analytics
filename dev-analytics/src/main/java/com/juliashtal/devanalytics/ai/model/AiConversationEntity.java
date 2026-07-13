@@ -6,6 +6,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for ai_conversations. One AI chat session owned by a user.
+ */
 @Data
 @Entity
 @Table(name = "ai_conversations")

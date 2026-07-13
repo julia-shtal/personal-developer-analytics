@@ -10,6 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
+/**
+ * Scheduled job that deletes expired refresh and password-reset tokens nightly.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

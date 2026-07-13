@@ -6,6 +6,9 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+/**
+ * Computes admin KPIs (active users, database size, AI-call counts).
+ */
 @Service
 @RequiredArgsConstructor
 public class AdminService {

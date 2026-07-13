@@ -8,6 +8,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for invite_tokens. A single-use invitation to join a team with a role.
+ */
 @Entity
 @Table(name = "invite_tokens")
 @Data

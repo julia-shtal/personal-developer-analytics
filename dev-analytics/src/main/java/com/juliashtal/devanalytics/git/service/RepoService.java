@@ -15,6 +15,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 
+/**
+ * Resolves repositories and the current user's access to them.
+ */
 @Service
 @RequiredArgsConstructor
 public class RepoService {

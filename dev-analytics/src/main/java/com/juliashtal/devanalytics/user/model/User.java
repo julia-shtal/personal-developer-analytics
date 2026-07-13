@@ -5,6 +5,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * JPA entity for users. Platform account with role, timezone, and GitHub login.
+ */
 @Data
 @Entity
 @Table(name = "users")

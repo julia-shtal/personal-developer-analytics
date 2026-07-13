@@ -7,6 +7,9 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
 
+/**
+ * Configures the dedicated thread pool for asynchronous data-source collection.
+ */
 @Configuration
 @EnableAsync
 public class AsyncConfig {

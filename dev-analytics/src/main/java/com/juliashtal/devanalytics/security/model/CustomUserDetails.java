@@ -8,6 +8,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.util.Collection;
 import java.util.List;
 
+/**
+ * Spring Security UserDetails adapter over the domain User.
+ */
 public class CustomUserDetails implements UserDetails {
 
     private final User user;

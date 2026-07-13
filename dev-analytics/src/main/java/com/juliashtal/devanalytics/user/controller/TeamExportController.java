@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * REST controller for team metric exports. Mounted at /api/teams — CSV export (MANAGER/ADMIN).
+ */
 @RestController
 @RequestMapping("/api/teams")
 @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")

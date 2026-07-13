@@ -1,5 +1,8 @@
 package com.juliashtal.devanalytics.metrics.model;
 
+/**
+ * The supported metric types and their scope and aggregation flags.
+ */
 public enum MetricType {
     DAILY_COMMITS_COUNT(true, true, false),
     DAILY_COMMITS_AVG_SIZE(false, false, false),

@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Calculates the share of pull requests merged without a review.
+ */
 @Component
 @RequiredArgsConstructor
 public class MergeWithoutReviewCalculator implements MetricCalculator {

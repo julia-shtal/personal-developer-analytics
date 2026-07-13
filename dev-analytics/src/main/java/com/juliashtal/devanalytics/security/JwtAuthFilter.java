@@ -18,6 +18,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * Per-request filter that authenticates the JWT and validates its token-version claim.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j

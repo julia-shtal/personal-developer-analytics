@@ -44,6 +44,9 @@ import java.time.Instant;
                 columnNames = {"base_url_normalized", "project_key"}
         )
 )
+/**
+ * JPA entity for jira_projects. Canonical row per upstream Jira project.
+ */
 public class JiraProjectEntity {
 
     @Id

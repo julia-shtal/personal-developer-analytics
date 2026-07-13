@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.*;
 
+/**
+ * Reads persisted metric snapshots by user, type, and date range.
+ */
 @Service
 @RequiredArgsConstructor
 public class MetricSnapshotService {

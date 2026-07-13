@@ -4,6 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 import java.util.List;
 
+/**
+ * Deserialized Jira issue-search API response.
+ */
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class JiraSearchResponse {
@@ -11,6 +14,9 @@ public class JiraSearchResponse {
     private List<JiraIssue> issues;
     private Boolean isLast;
 
+    /**
+     * A single issue in a Jira search response.
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class JiraIssue {
@@ -19,6 +25,9 @@ public class JiraSearchResponse {
         private Fields fields;
     }
 
+    /**
+     * Issue fields returned by the Jira search API.
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Fields {
@@ -33,6 +42,9 @@ public class JiraSearchResponse {
         private List<String> labels;
     }
 
+    /**
+     * A Jira user (display name and email).
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class JiraUser {
@@ -40,6 +52,9 @@ public class JiraSearchResponse {
         private String emailAddress;
     }
 
+    /**
+     * A Jira issue status.
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class JiraStatus {

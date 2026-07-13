@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates daily issues created and closed.
+ */
 @Component
 @RequiredArgsConstructor
 public class DailyIssuesCalculator implements MetricCalculator {

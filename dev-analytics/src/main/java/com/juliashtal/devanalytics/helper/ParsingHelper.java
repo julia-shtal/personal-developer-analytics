@@ -1,5 +1,8 @@
 package com.juliashtal.devanalytics.helper;
 
+/**
+ * Static helpers for normalizing API base URLs and parsing source values.
+ */
 public class ParsingHelper {
 
     public static String resolveApiBase(String configuredBaseUrl) {

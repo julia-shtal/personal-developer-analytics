@@ -6,6 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
+/**
+ * Spring Data repository for AiMessageEntity (ai_messages). Loads a conversation's messages in chronological order.
+ */
 public interface AiMessageRepository extends JpaRepository<AiMessageEntity, Long> {
     List<AiMessageEntity> findByConversationOrderByCreatedAtAsc(AiConversationEntity conversation);
 }

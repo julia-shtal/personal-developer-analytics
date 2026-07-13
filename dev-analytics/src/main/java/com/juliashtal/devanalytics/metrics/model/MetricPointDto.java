@@ -2,6 +2,9 @@ package com.juliashtal.devanalytics.metrics.model;
 
 import java.time.LocalDate;
 
+/**
+ * A single dated metric value in a personal series.
+ */
 public record MetricPointDto(
         LocalDate date,
         double value,

@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * REST controller for users. Mounted at /api/users — user listing for team selection.
+ */
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor

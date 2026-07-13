@@ -7,6 +7,9 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * JPA entity for teams. A team with a manager and members.
+ */
 @Data
 @Entity
 @Table(name = "teams")

@@ -12,6 +12,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
+/**
+ * LlmClient backed by a local Ollama server over its HTTP API.
+ */
 @Service
 @Slf4j
 public class OllamaLlmClient implements LlmClient {

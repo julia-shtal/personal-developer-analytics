@@ -39,6 +39,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Manages tracked Jira projects: discovery, subscription, and canonical reuse.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -378,6 +381,9 @@ public class JiraProjectService {
 
     private record Page(int total, List<JiraProjectDto> values) {}
 
+    /**
+     * Deserialized Jira project from the Jira API.
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class JiraProjectDto {

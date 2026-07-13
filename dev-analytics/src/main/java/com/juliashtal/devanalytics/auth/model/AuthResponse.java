@@ -3,6 +3,9 @@ package com.juliashtal.devanalytics.auth.model;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
+/**
+ * Authentication response carrying the access token and its metadata.
+ */
 @Data
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AuthResponse {

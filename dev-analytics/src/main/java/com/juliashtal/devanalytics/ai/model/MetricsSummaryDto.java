@@ -9,6 +9,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Parsed AI summary (headline, overview, insights) for a metric scope and period.
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -29,6 +32,9 @@ public class MetricsSummaryDto {
     private String modelName;
     private Instant generatedAt;
 
+    /**
+     * A single AI insight within a summary.
+     */
     @Data
     @Builder
     @NoArgsConstructor

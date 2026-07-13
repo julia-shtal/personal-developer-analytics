@@ -26,6 +26,9 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Configures HTTP security: the JWT filter chain, public paths, and method-level security.
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity

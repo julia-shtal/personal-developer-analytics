@@ -11,6 +11,9 @@ import org.springframework.context.annotation.Configuration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Configures the Caffeine caches, including the ai_summaries cache.
+ */
 @Configuration
 @EnableCaching
 public class CacheConfig {

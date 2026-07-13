@@ -1,5 +1,8 @@
 package com.juliashtal.devanalytics.user.model;
 
+/**
+ * A user's notification toggle preferences and default contact method.
+ */
 public record NotificationPrefsDto(
         boolean aiBrief,
         boolean syncFailures,

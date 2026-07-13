@@ -1,5 +1,8 @@
 package com.juliashtal.devanalytics.exception;
 
+/**
+ * Thrown when a caller exceeds the request rate limit (HTTP 429); carries the retry-after delay.
+ */
 public class RateLimitExceededException extends RuntimeException {
 
     private final long retryAfterSeconds;

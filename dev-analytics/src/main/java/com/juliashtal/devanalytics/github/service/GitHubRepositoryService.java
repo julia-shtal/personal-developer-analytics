@@ -33,6 +33,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Manages GitHub repositories: registration, subscription, and discovery under a token.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

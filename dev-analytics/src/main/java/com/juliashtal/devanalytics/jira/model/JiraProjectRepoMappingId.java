@@ -3,6 +3,9 @@ package com.juliashtal.devanalytics.jira.model;
 import java.io.Serializable;
 import java.util.Objects;
 
+/**
+ * Composite key for JiraProjectRepoMapping (jira project id + repository id).
+ */
 public class JiraProjectRepoMappingId implements Serializable {
     private Long jiraProject;
     private Long repository;

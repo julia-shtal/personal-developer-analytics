@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+/**
+ * Manages AI chat conversations: persistence, history windowing, and LLM turns.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

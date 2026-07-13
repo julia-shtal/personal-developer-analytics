@@ -13,6 +13,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for MetricSnapshot (metric_snapshots). Personal and team metric queries plus the upsert guard.
+ */
 public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, Long> {
 
     // -------------------------------------------------------------------------

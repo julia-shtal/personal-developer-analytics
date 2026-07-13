@@ -4,6 +4,9 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 
 import java.time.Instant;
 
+/**
+ * Data source as returned to the client.
+ */
 public record DataSourceResponseDto(
         Long id,
         DataSourceType type,

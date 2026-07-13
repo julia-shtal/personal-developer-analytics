@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates review response time (PR opened to first review).
+ */
 @Component
 @RequiredArgsConstructor
 public class ReviewResponseTimeCalculator implements MetricCalculator {

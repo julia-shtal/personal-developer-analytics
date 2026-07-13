@@ -17,6 +17,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for GitCommitEntity (git_commits). Hash lookups and per-repo commit queries.
+ */
 public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity, Long> {
     Optional<GitCommitEntity> findByHash(String hash);
     long countByRepositoryId(Long repositoryId);

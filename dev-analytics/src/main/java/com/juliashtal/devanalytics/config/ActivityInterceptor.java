@@ -12,6 +12,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Records each authenticated user's last-active time, debounced to at most once per 5 minutes.
+ */
 @Component
 @RequiredArgsConstructor
 public class ActivityInterceptor implements HandlerInterceptor {

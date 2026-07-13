@@ -8,6 +8,9 @@ import lombok.Data;
 
 import java.time.Instant;
 
+/**
+ * Error response body carrying status, message, and timestamp.
+ */
 @Data
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)

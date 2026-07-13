@@ -4,6 +4,9 @@ import com.juliashtal.devanalytics.datasource.model.SyncJobStatus;
 
 import java.time.Instant;
 
+/**
+ * Summary of a single sync job for status displays.
+ */
 public record SyncJobSummaryDto(
         Long id,
         SyncJobStatus status,

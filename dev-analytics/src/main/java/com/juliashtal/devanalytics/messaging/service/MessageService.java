@@ -21,6 +21,9 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * Sends direct messages and reads conversations and inbox state.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

@@ -13,6 +13,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for SyncJobEntity (sync_jobs). Fetches the latest job(s) per data source.
+ */
 public interface SyncJobRepository extends JpaRepository<SyncJobEntity, Long> {
 
     /** Returns the most recent job record for a given data source, regardless of status. */

@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
+/**
+ * Stores and serves user avatars, validating and resizing uploads.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

@@ -4,6 +4,9 @@ import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 
 import java.time.Instant;
 
+/**
+ * Git commit as returned to the client.
+ */
 public record GitCommitDto(
         Long id,
         String hash,

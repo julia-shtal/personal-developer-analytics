@@ -13,6 +13,9 @@ import lombok.Data;
                 columnNames = {"user_id", "project_id"}
         )
 )
+/**
+ * JPA entity for user_project_registrations. Links a user to a subscribed Jira project.
+ */
 public class UserProjectRegistration {
 
     @Id

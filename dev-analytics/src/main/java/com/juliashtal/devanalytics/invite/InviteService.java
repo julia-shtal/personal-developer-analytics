@@ -15,6 +15,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Creates and validates time-limited team invitations (7-day TTL).
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

@@ -4,6 +4,9 @@ import java.time.Instant;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Team as returned to the client, with manager and members.
+ */
 public record TeamDto(
         Long id,
         String name,

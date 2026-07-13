@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Calculates the daily code-churn ratio per repository.
+ */
 @Component
 @RequiredArgsConstructor
 public class DailyChurnCalculator implements MetricCalculator {

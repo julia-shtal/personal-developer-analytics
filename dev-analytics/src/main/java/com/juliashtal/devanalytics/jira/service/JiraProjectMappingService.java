@@ -15,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * Manages links between Jira projects and Git repositories for repo-scoped metrics.
+ */
 @Service
 @RequiredArgsConstructor
 public class JiraProjectMappingService {

@@ -27,6 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.Random;
 
+/**
+ * Seeds demo users, data sources, and metrics when the 'demo' profile is active.
+ */
 @Component
 @Profile("demo")
 @RequiredArgsConstructor

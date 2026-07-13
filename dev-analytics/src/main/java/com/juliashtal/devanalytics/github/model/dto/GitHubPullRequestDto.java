@@ -4,6 +4,9 @@ import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 
 import java.time.Instant;
 
+/**
+ * Pull request as returned to the client.
+ */
 public record GitHubPullRequestDto(
         Long id,
         int number,

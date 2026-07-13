@@ -10,6 +10,9 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for DataSourceConfig (data_source_configs). Scopes datasources per user.
+ */
 public interface DataSourceConfigRepository extends JpaRepository<DataSourceConfig, Long> {
     List<DataSourceConfig> findAllByUser(User user);
     List<DataSourceConfig> findAllByUserAndTeamIsNull(User user);

@@ -11,6 +11,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
+/**
+ * Calculates the deep-work streak metric.
+ */
 @Component
 @RequiredArgsConstructor
 public class DeepWorkStreakCalculator implements MetricCalculator {

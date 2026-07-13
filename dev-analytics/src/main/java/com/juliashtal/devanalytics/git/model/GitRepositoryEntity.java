@@ -26,6 +26,9 @@ import java.time.Instant;
                 )
         }
 )
+/**
+ * JPA entity for git_repositories. Canonical row per local or GitHub repository.
+ */
 public class GitRepositoryEntity {
 
     @Id

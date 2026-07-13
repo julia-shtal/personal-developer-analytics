@@ -16,6 +16,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for IssueEntity (issues). Unified GitHub and Jira issue lookups.
+ */
 public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
 
     // GitHub issue lookups (data_source_id not null)

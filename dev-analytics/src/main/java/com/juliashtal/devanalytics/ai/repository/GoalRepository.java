@@ -6,6 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Spring Data repository for GoalEntity (goals). Finds a user's still-active goals for AI context.
+ */
 public interface GoalRepository extends JpaRepository<GoalEntity, Long> {
 
     /**

@@ -4,6 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+/**
+ * Request to register a local Git repository by filesystem path.
+ */
 @Data
 public class RegisterLocalRepoRequest {
     @NotNull

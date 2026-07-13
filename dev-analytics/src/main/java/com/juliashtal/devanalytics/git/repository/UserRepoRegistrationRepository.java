@@ -7,6 +7,9 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
+/**
+ * Spring Data repository for UserRepoRegistration (user_repo_registrations). Subscription checks and counts.
+ */
 public interface UserRepoRegistrationRepository extends JpaRepository<UserRepoRegistration, Long> {
 
     boolean existsByUserIdAndRepositoryId(Long userId, Long repositoryId);

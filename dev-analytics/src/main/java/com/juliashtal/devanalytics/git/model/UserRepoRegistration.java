@@ -22,6 +22,9 @@ import lombok.Data;
         name = "user_repo_registrations",
         uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "repository_id"})
 )
+/**
+ * JPA entity for user_repo_registrations. Links a subscriber to a canonical repository.
+ */
 public class UserRepoRegistration {
 
     @Id

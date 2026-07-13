@@ -17,6 +17,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Persists generated AI summaries for personal and team scopes.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

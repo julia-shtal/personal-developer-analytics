@@ -43,6 +43,9 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * CRUD for data sources plus repo/project attachment and cross-source canonical reuse.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -69,7 +72,7 @@ public class DataSourceService {
      * Creates a new datasource for the user. Repo / project attachment is optional:
      * <ul>
      *   <li>GITHUB with {@code repoFullName} present → auto-attaches the repo (or subscribes if it already exists).</li>
-     *   <li>GITHUB without {@code repoFullName} → datasource saved with {@code repoCount = 0}; repos attached later via T2.2 endpoints.</li>
+     *   <li>GITHUB without {@code repoFullName} → datasource saved with {@code repoCount = 0}; repos attached later via the repo attach endpoints.</li>
      *   <li>JIRA with {@code projectKey} present → auto-creates/subscribes the initial Jira project.</li>
      *   <li>JIRA without {@code projectKey} → datasource saved with no tracked projects.</li>
      * </ul>

@@ -24,6 +24,9 @@ public class TeamMetricsContext {
     private int memberCount;
     private List<MemberMetrics> members;
 
+    /**
+     * Per-member metric aggregates within a team AI context.
+     */
     @Data
     public static class MemberMetrics {
         private String username;

@@ -22,6 +22,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Handles registration, login, and logout; issues access tokens and rotates refresh tokens.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

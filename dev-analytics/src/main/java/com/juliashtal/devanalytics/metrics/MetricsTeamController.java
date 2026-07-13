@@ -23,6 +23,9 @@ import java.util.*;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 
+/**
+ * REST controller for team metrics. Mounted at /api/metrics/teams — team-scoped snapshots and aggregates.
+ */
 @RestController
 @RequestMapping("/api/metrics/teams")
 @RequiredArgsConstructor

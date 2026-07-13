@@ -19,6 +19,9 @@ import java.time.LocalDate;
                         columnList = "team_id, generated_at DESC")
         }
 )
+/**
+ * JPA entity for metric_summaries. Persisted AI summary for a personal or team scope.
+ */
 public class MetricSummaryEntity {
 
     @Id

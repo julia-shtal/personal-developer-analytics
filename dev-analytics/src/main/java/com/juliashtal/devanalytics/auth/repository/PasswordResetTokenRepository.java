@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.Query;
 import java.time.Instant;
 import java.util.Optional;
 
+/**
+ * Spring Data repository for PasswordResetToken (password_reset_tokens). Purges expired or used tokens.
+ */
 public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
 
     Optional<PasswordResetToken> findByToken(String token);
