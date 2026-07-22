@@ -34,6 +34,8 @@ spring:
             enable: ${SMTP_STARTTLS:false}
 
 app:
+  # Filtered from the Maven build at package time (see resource filtering in the parent POM).
+  version: @project.version@
   jwt:
     secret: ${JWT_SECRET:}
     access-expiration: 900000      # 15 minutes
