@@ -49,6 +49,10 @@ public class SecurityConfig {
             "/api/users/*/avatar",   // avatar images served unauthenticated
             "/api/users/avatar/presets",
             "/actuator/health",
+            // OpenAPI spec + Swagger UI
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html",
             // SPA static assets and entry points
             "/",
             "/index.html",
