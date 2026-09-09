@@ -36,7 +36,7 @@ pr_first_commit_to_merge_lead_time =
 - `findCommitsForPr(repository, prNumber)` joins `git_commits` to the PR via commit hash associations stored during collection. If no commits are linked to the PR, the PR is skipped.
 - Duration: `Duration.between(commits.get(0).getAuthorDate(), pr.getMergedAt()).toHours()` — `commits` is ordered by `authorDate` ascending; index 0 is the earliest.
 - The computed `leadTimeHours` is also persisted on the `GitHubPullRequestEntity` row (`pr.setLeadTimeHours(hours)`) as a denormalized cache.
-- Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`.
+- Saved as aggregate shape: `periodFrom` = the ISO week Monday, `periodTo` = that week Sunday.
 - Bot exclusion: `author_login NOT LIKE '%[bot]'`.
 
 ## Edge cases
@@ -57,3 +57,25 @@ pr_first_commit_to_merge_lead_time =
 ## References
 
 Forsgren, N., Humble, J., & Kim, G. (2018). *Accelerate: The Science of Lean Software and DevOps*. IT Revolution. (DORA Lead Time for Changes — extended code-path definition.)
+
+## Calculation grain and window resolution
+
+Computed on a fixed grain: **one ISO calendar week**, `periodFrom` = that week's Monday
+and `periodTo` = that week's Sunday. A calculation request covering any part of a week
+computes that week in full, so a stored period never claims narrower coverage than was
+actually measured, and recomputing over a differently-framed range updates the same rows
+rather than adding a second window over the same days.
+
+The ISO week is the canonical grain because it matches the weekly summary job and
+`COMMITS_PER_WEEK_AVG`, and because it is the smallest window over which a median is not
+usually a median of one observation.
+
+Reads do not require the requested window to match a stored one. A request resolves to
+every stored week it fully contains; where it contains none — a request narrower than one
+week — it resolves to the week that contains it. The response reports the window actually
+covered, not the window requested.
+
+Where a request spans several weeks, the reported figure is the **median of the per-week
+medians**. Combining sub-window medians is an approximation of the median over the whole
+range — the underlying observations are not stored per window — but it is bounded by the
+weekly values and is labelled with the window it covers.

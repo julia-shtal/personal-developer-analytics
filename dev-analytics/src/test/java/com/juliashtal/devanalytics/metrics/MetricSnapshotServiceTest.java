@@ -19,6 +19,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,14 +71,14 @@ class MetricSnapshotServiceTest {
     }
 
     @Test
-    void getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo_delegatesToRepository() {
+    void getMetricSnapshotsByUserAndMetricTypeInWindow_delegatesToRepository() {
         User user = new User();
         user.setId(1L);
         List<MetricSnapshot> expected = List.of(snapshot(MetricType.PR_LEAD_TIME_HOURS_MEDIAN, 12.0));
-        when(repository.findPersonalAggregateByPeriod(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO))
+        when(repository.findPersonalInWindow(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO))
                 .thenReturn(expected);
 
-        List<MetricSnapshot> result = service.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO);
+        List<MetricSnapshot> result = service.getMetricSnapshotsByUserAndMetricTypeInWindow(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO);
 
         assertThat(result).isEqualTo(expected);
     }
@@ -96,18 +99,67 @@ class MetricSnapshotServiceTest {
     }
 
     @Test
-    void getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo_delegatesToRepository() {
+    void getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow_delegatesToRepository() {
         User user = new User();
         user.setId(1L);
         GitRepositoryEntity repo = new GitRepositoryEntity();
         repo.setId(2L);
         List<MetricSnapshot> expected = List.of(snapshot(MetricType.REFACTOR_RATIO, 0.4));
-        when(repository.findPersonalAggregateByRepositoryAndPeriod(user, MetricType.REFACTOR_RATIO, repo, FROM, TO))
+        when(repository.findPersonalByRepositoryInWindow(user, MetricType.REFACTOR_RATIO, repo, FROM, TO))
                 .thenReturn(expected);
 
-        List<MetricSnapshot> result = service.getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(user, MetricType.REFACTOR_RATIO, repo, FROM, TO);
+        List<MetricSnapshot> result = service.getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(user, MetricType.REFACTOR_RATIO, repo, FROM, TO);
 
         assertThat(result).isEqualTo(expected);
+    }
+
+    @Test
+    void getMetricSnapshotsByUserAndMetricTypeInWindow_nothingContained_fallsBackToCoveringWindow() {
+        // A request narrower than the grain the metric was computed on contains no stored
+        // window. Rather than report no data, resolve to the window that covers the request;
+        // the caller labels the figure with that wider window.
+        User user = new User();
+        user.setId(1L);
+        List<MetricSnapshot> covering = List.of(snapshot(MetricType.PR_LEAD_TIME_HOURS_MEDIAN, 30.0));
+        when(repository.findPersonalInWindow(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO))
+                .thenReturn(List.of());
+        when(repository.findPersonalAggregateCovering(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO))
+                .thenReturn(covering);
+
+        List<MetricSnapshot> result =
+                service.getMetricSnapshotsByUserAndMetricTypeInWindow(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO);
+
+        assertThat(result).isEqualTo(covering);
+    }
+
+    @Test
+    void getMetricSnapshotsByUserAndMetricTypeInWindow_somethingContained_doesNotQueryCovering() {
+        User user = new User();
+        user.setId(1L);
+        when(repository.findPersonalInWindow(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO))
+                .thenReturn(List.of(snapshot(MetricType.PR_LEAD_TIME_HOURS_MEDIAN, 12.0)));
+
+        service.getMetricSnapshotsByUserAndMetricTypeInWindow(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO);
+
+        verify(repository, never()).findPersonalAggregateCovering(any(), any(), any(), any());
+    }
+
+    @Test
+    void getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow_nothingContained_fallsBackToCoveringWindow() {
+        User user = new User();
+        user.setId(1L);
+        GitRepositoryEntity repo = new GitRepositoryEntity();
+        repo.setId(2L);
+        List<MetricSnapshot> covering = List.of(snapshot(MetricType.REFACTOR_RATIO, 0.6));
+        when(repository.findPersonalByRepositoryInWindow(user, MetricType.REFACTOR_RATIO, repo, FROM, TO))
+                .thenReturn(List.of());
+        when(repository.findPersonalAggregateCoveringByRepository(user, MetricType.REFACTOR_RATIO, repo, FROM, TO))
+                .thenReturn(covering);
+
+        List<MetricSnapshot> result = service
+                .getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(user, MetricType.REFACTOR_RATIO, repo, FROM, TO);
+
+        assertThat(result).isEqualTo(covering);
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.exception.BadRequestException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.model.*;
+import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
@@ -36,6 +37,7 @@ public class MetricsController {
     private final MetricSnapshotService metricSnapshotService;
     private final MetricsService metricsService;
     private final MetricsAnomalyService metricsAnomalyService;
+    private final AggregateWindowResolver aggregateWindowResolver;
     private final RepoService repoService;
     private final CheckHelper checkHelper;
 
@@ -369,33 +371,34 @@ public class MetricsController {
                 .toList();
     }
 
+    /**
+     * Resolves a period-stored metric over the requested window.
+     *
+     * <p>The stored windows are whatever the calculation grain produced, which is almost
+     * never the window a dashboard asks for. Rather than demand an exact match — which
+     * returned zero for every window not previously passed verbatim to
+     * {@code POST /api/metrics/calculate} — this reads every stored window the request
+     * contains, combines them the way that metric permits, and reports the window that
+     * was actually covered. The returned {@code periodFrom}/{@code periodTo} therefore
+     * come from the resolved rows, never from the request: a figure is never labelled
+     * with a window it was not computed over.
+     */
     private MetricAggregateDto getPersonalLeadTimeAggregate(MetricType type, LocalDate from, LocalDate to, Long repoId) {
         User user = checkHelper.currentUser();
-        List<MetricSnapshot> list;
+        List<MetricSnapshot> rows;
 
         if (repoId == null) {
-            list = metricSnapshotService
-                    .getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(user, type, from, to);
+            rows = metricSnapshotService
+                    .getMetricSnapshotsByUserAndMetricTypeInWindow(user, type, from, to);
         } else {
             GitRepositoryEntity repo = repoService.getById(repoId);
-            list = metricSnapshotService
-                    .getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(user, type, repo, from, to);
+            rows = metricSnapshotService
+                    .getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(user, type, repo, from, to);
         }
 
-        if (list.isEmpty()) return new MetricAggregateDto(type, 0.0, null, null);
-
-        if (repoId == null && list.size() > 1) {
-            // Cross-repo: compute median of per-repo values rather than picking an arbitrary snapshot.
-            List<Double> sorted = list.stream().mapToDouble(MetricSnapshot::getValue).sorted().boxed().toList();
-            int n = sorted.size();
-            double median = (n % 2 == 0)
-                    ? (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0
-                    : sorted.get(n / 2);
-            return new MetricAggregateDto(type, median, from, to);
-        }
-
-        MetricSnapshot last = list.stream().max(Comparator.comparing(MetricSnapshot::getDate)).orElseThrow();
-        return new MetricAggregateDto(last.getMetricType(), last.getValue(), last.getPeriodFrom(), last.getPeriodTo());
+        return aggregateWindowResolver.resolve(AggregateWindowResolver.aggregateRows(rows), type)
+                .map(r -> new MetricAggregateDto(type, r.value(), r.periodFrom(), r.periodTo()))
+                .orElseGet(() -> new MetricAggregateDto(type, 0.0, null, null));
     }
 
 }

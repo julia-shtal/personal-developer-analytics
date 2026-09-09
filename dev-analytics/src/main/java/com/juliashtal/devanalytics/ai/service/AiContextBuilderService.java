@@ -8,6 +8,7 @@ import com.juliashtal.devanalytics.ai.repository.GoalRepository;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
@@ -62,18 +63,13 @@ public class AiContextBuilderService {
     private static final Set<MetricType> DAILY_SUM_METRICS = Arrays.stream(MetricType.values())
             .filter(t -> t.dailySum).collect(Collectors.toUnmodifiableSet());
 
-    // FOCUS_RATIO_DAYS_TASKS is excluded: stored as per-day markers (periodFrom/To = null);
-    // its aggregate is computed on the read side by counting markers in the date range.
-    // Metrics stored with periodFrom/periodTo (not date-series) — must use exact-period query.
-    private static final Set<MetricType> AGGREGATE_METRICS = Arrays.stream(MetricType.values())
-            .filter(t -> t.aggregatePeriod).collect(Collectors.toUnmodifiableSet());
-
     /** Minimum observations required before an anomaly check is meaningful. */
     private static final int ANOMALY_MIN_SAMPLE_SIZE = 3;
     /** A value more than this many standard deviations from the mean is anomalous. */
     private static final double ANOMALY_STD_DEV_THRESHOLD = 2.0;
 
     private final MetricSnapshotService metricSnapshotService;
+    private final AggregateWindowResolver aggregateWindowResolver;
     private final GoalRepository goalRepository;
 
     public AggregatedMetricsContext buildPersonalContext(User user, LocalDate from, LocalDate to,
@@ -81,24 +77,19 @@ public class AiContextBuilderService {
         Map<String, AggregatedMetricsContext.MetricAggregate> aggregates = new LinkedHashMap<>();
 
         for (MetricType type : CONTEXT_METRIC_TYPES) {
-            List<MetricSnapshot> snapshots;
-            boolean isAggregate = AGGREGATE_METRICS.contains(type);
-            if (repo != null) {
-                snapshots = isAggregate
-                        ? metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(user, type, repo, from, to)
-                        : metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to);
-            } else {
-                snapshots = isAggregate
-                        ? metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(user, type, from, to)
-                        : metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to);
-            }
+            // One query per type, routed by the shape of the rows it comes back with rather
+            // than by a list of which types are period-stored. The exact-period query this
+            // replaced matched only windows that had been passed verbatim to the calculation
+            // endpoint, so the weekly summary job — which computes nothing itself — found no
+            // rows for any period-stored metric and dropped it from the context silently.
+            List<MetricSnapshot> rows = repo != null
+                    ? metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(user, type, repo, from, to)
+                    : metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(user, type, from, to);
 
-            if (!snapshots.isEmpty()) {
-                List<Double> values = snapshots.stream()
-                        .sorted(Comparator.comparing(MetricSnapshot::getDate))
-                        .map(MetricSnapshot::getValue)
-                        .toList();
-                aggregates.put(type.name(), computeAggregate(values, DAILY_SUM_METRICS.contains(type)));
+            List<Double> values = valuesForContext(rows, type);
+            if (!values.isEmpty()) {
+                boolean isSum = DAILY_SUM_METRICS.contains(type) || aggregateWindowResolver.isCount(type);
+                aggregates.put(type.name(), computeAggregate(values, isSum));
             }
         }
 
@@ -135,19 +126,21 @@ public class AiContextBuilderService {
             mm.setUsername(member.getUsername());
 
             Map<String, Double> aggregated = new LinkedHashMap<>();
-            // NOTE: aggregate-period metrics (aggregatePeriod=true) are not supported here —
-            // MetricSnapshotService has no team-scoped period-exact query. Those four types
-            // (PR_LEAD_TIME_HOURS_MEDIAN, ISSUE_LEAD_TIME_HOURS_MEDIAN, etc.) return no data.
-            // This is a pre-existing limitation carried over from MetricsAiService unchanged.
             for (MetricType type : CONTEXT_METRIC_TYPES) {
-                List<MetricSnapshot> snapshots = metricSnapshotService
-                        .getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(member, team, type, from, to);
-                if (!snapshots.isEmpty()) {
+                List<MetricSnapshot> rows = metricSnapshotService
+                        .getMetricSnapshotsByUserAndTeamAndMetricTypeInWindow(member, team, type, from, to);
+
+                // Daily rows sum or average as before; period rows now resolve through the
+                // window resolver instead of being dropped for want of a team-scoped query.
+                List<MetricSnapshot> dailyRows = AggregateWindowResolver.dailyRows(rows);
+                if (!dailyRows.isEmpty()) {
                     double value = DAILY_SUM_METRICS.contains(type)
-                            ? snapshots.stream().mapToDouble(MetricSnapshot::getValue).sum()
-                            : snapshots.stream().mapToDouble(MetricSnapshot::getValue).average().orElse(0.0);
+                            ? dailyRows.stream().mapToDouble(MetricSnapshot::getValue).sum()
+                            : dailyRows.stream().mapToDouble(MetricSnapshot::getValue).average().orElse(0.0);
                     aggregated.put(type.name(), value);
                 }
+                aggregateWindowResolver.resolve(AggregateWindowResolver.aggregateRows(rows), type)
+                        .ifPresent(r -> aggregated.put(type.name(), r.value()));
             }
             mm.setMetrics(aggregated);
             memberMetricsList.add(mm);
@@ -160,6 +153,28 @@ public class AiContextBuilderService {
         ctx.setMemberCount(team.getMembers().size());
         ctx.setMembers(memberMetricsList);
         return ctx;
+    }
+
+    /**
+     * The chronological series the statistics are computed over.
+     *
+     * <p>DAILY rows contribute one value per day, ordered by date. AGGREGATE rows
+     * contribute one value per stored window, ordered by window start, with
+     * cross-repository rows already combined — so min, max, median, trend and anomaly
+     * describe variation across weeks rather than across repositories. A type only ever
+     * writes one shape, so exactly one branch contributes.
+     */
+    private List<Double> valuesForContext(List<MetricSnapshot> rows, MetricType type) {
+        List<MetricSnapshot> aggregateRows = AggregateWindowResolver.aggregateRows(rows);
+        if (!aggregateRows.isEmpty()) {
+            return aggregateWindowResolver.perWindow(aggregateRows, type).stream()
+                    .map(AggregateWindowResolver.WindowValue::value)
+                    .toList();
+        }
+        return AggregateWindowResolver.dailyRows(rows).stream()
+                .sorted(Comparator.comparing(MetricSnapshot::getDate))
+                .map(MetricSnapshot::getValue)
+                .toList();
     }
 
     private AggregatedMetricsContext.MetricAggregate computeAggregate(List<Double> values, boolean isSumMetric) {

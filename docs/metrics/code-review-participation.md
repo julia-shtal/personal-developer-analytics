@@ -41,3 +41,24 @@ by capturing the reciprocal behaviour.
 Defined by `submittedAt >= from AND submittedAt < to` on the `github_pr_reviews` table.
 The `to` boundary is exclusive so adjacent windows do not double-count reviews submitted
 exactly at midnight.
+
+## Calculation grain and window resolution
+
+Computed on a fixed grain: **one ISO calendar week**, `periodFrom` = that week's Monday
+and `periodTo` = that week's Sunday. A calculation request covering any part of a week
+computes that week in full, so a stored period never claims narrower coverage than was
+actually measured, and recomputing over a differently-framed range updates the same rows
+rather than adding a second window over the same days.
+
+The ISO week is the canonical grain because it matches the weekly summary job and
+`COMMITS_PER_WEEK_AVG`, and because it is the smallest window over which a median is not
+usually a median of one observation.
+
+Reads do not require the requested window to match a stored one. A request resolves to
+every stored week it fully contains; where it contains none — a request narrower than one
+week — it resolves to the week that contains it. The response reports the window actually
+covered, not the window requested.
+
+Where a request spans several weeks, the reported figure is the **sum of the per-week
+counts**. Weekly windows are disjoint and a pull request is counted at most once per
+window, so the counts add up exactly.

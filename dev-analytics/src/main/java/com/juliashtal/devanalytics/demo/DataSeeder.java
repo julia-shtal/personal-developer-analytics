@@ -24,6 +24,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.Random;
 
@@ -117,12 +118,23 @@ public class DataSeeder implements ApplicationRunner {
         registrationRepo.save(reg);
     }
 
+    /**
+     * Seeds {@link #WEEKS} whole ISO calendar weeks ending with the last complete week
+     * before today.
+     *
+     * <p>The windows are anchored on an ISO Monday rather than on yesterday, so the seeded
+     * aggregate rows carry the same grain {@code MetricsService} writes. A rolling window
+     * anchored on yesterday would produce periods no ISO-week read resolves cleanly, and
+     * V58 — which deletes non-week-aligned rows for the five {@code aggregatePeriod} types
+     * — would delete them on the next upgrade of an already-seeded demo database, with no
+     * way to regenerate them: the seeder skips entirely once the demo user exists.
+     */
     private void seedMetrics(User user, User teammate, Team team, GitRepositoryEntity repo) {
-        LocalDate yesterday = LocalDate.now().minusDays(1);
+        LocalDate lastCompleteWeekStart = LocalDate.now().with(DayOfWeek.MONDAY).minusWeeks(1);
 
         for (int w = 0; w < WEEKS; w++) {
-            LocalDate weekEnd   = yesterday.minusWeeks(WEEKS - 1 - w);
-            LocalDate weekStart = weekEnd.minusDays(6);
+            LocalDate weekStart = lastCompleteWeekStart.minusWeeks(WEEKS - 1 - w);
+            LocalDate weekEnd   = weekStart.plusDays(6);
 
             seedUserDailyMetrics(user, repo, weekStart, w);
             seedTeammateDailyMetrics(teammate, repo, weekStart, w);

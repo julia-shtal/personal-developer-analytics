@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.ai.scheduler;
 
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
+import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.notification.NotificationDispatchService;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
 public class MetricsSummaryScheduler {
 
     private final UserRepository userRepository;
+    private final MetricsService metricsService;
     private final MetricsAiService metricsAiService;
     private final NotificationDispatchService notificationDispatch;
 
@@ -34,6 +36,12 @@ public class MetricsSummaryScheduler {
 
         userRepository.findAll().forEach(user -> {
             try {
+                // Compute the week before summarising it. The nightly job only guarantees rows
+                // up to yesterday at its own grain; without this pass the aggregate calculators
+                // may never have been run over the ISO week this summary is about, and the
+                // context would be built from a partial catalogue.
+                metricsService.calculateDailyMetrics(user.getId(), from, to);
+
                 MetricsSummaryDto summary = metricsAiService.generateSummary(user, from, to, null);
                 log.debug("Generated weekly summary for userId={}", user.getId());
                 notificationDispatch.sendAiBriefIfEnabled(user, summary.getHeadline(), from, to);

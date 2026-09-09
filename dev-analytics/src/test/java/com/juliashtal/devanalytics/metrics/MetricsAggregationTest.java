@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.metrics;
 import com.juliashtal.devanalytics.metrics.controller.MetricsController;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
@@ -20,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -38,6 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   - Median metrics (PR_LEAD_TIME_HOURS_MEDIAN): median of per-repo values, not arbitrary pick.
  */
 @WebMvcTest(MetricsController.class)
+@Import(AggregateWindowResolver.class)   // pure computation — a mock would defeat the assertions
 @AutoConfigureMockMvc(addFilters = false)
 class MetricsAggregationTest {
 
@@ -124,7 +127,7 @@ class MetricsAggregationTest {
     @WithMockUser
     void prLeadTime_crossRepo_computesMedian() throws Exception {
         // Repo A: 10h, Repo B: 20h → cross-repo median = 15h, NOT 20h (arbitrary last pick).
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.PR_LEAD_TIME_HOURS_MEDIAN), eq(FROM), eq(TO)))
                 .thenReturn(List.of(
                         aggregateSnapshot(MetricType.PR_LEAD_TIME_HOURS_MEDIAN, 20.0, FROM, TO),

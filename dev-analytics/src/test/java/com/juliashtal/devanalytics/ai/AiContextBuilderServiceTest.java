@@ -4,12 +4,12 @@ import com.juliashtal.devanalytics.ai.model.AggregatedMetricsContext;
 import com.juliashtal.devanalytics.ai.model.GoalEntity;
 import com.juliashtal.devanalytics.ai.repository.GoalRepository;
 import com.juliashtal.devanalytics.ai.service.AiContextBuilderService;
+import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.user.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -19,6 +19,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,21 +27,26 @@ class AiContextBuilderServiceTest {
 
     @Mock MetricSnapshotService metricSnapshotService;
     @Mock GoalRepository goalRepository;
-    @InjectMocks AiContextBuilderService contextBuilder;
+
+    AiContextBuilderService contextBuilder;
 
     private User user;
 
     @BeforeEach
     void setUp() {
+        // The resolver is pure computation, so the real one is used rather than a mock.
+        contextBuilder = new AiContextBuilderService(
+                metricSnapshotService, new AggregateWindowResolver(), goalRepository);
+
         user = new User();
         user.setId(1L);
         user.setUsername("alice");
         user.setTimezone("UTC");
 
-        // Stub all metricSnapshotService calls to return empty by default
-        when(metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(
+        // Empty by default. Lenient: the goal-progress lookup only fires for an active goal.
+        lenient().when(metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(
                 any(), any(), any(), any())).thenReturn(List.of());
-        when(metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        lenient().when(metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), any(), any(), any())).thenReturn(List.of());
     }
 
