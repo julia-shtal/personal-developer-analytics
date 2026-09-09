@@ -31,8 +31,33 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AiContextBuilderService {
 
-    private static final List<MetricType> CONTEXT_METRIC_TYPES = Arrays.stream(MetricType.values())
-            .filter(t -> t.inAiContext).toList();
+    /**
+     * Metric types supplied to the model, in a fixed presentation order:
+     * activity, flow and lead time, collaboration, wellness. The order reaches
+     * the prompt (LinkedHashMap -> JSON -> prompt text), so it is declared here
+     * rather than derived from MetricType.values(), whose order is a property of
+     * the enum declaration and not a decision about what the model reads.
+     *
+     * <p>Package-private so {@code AiContextBuilderServiceTest} can assert that this
+     * list and the {@code inAiContext} flag never drift apart.
+     */
+    static final List<MetricType> CONTEXT_METRIC_TYPES = List.of(
+            // Activity
+            MetricType.DAILY_COMMITS_COUNT,
+            MetricType.DAILY_PR_CREATED,
+            MetricType.DAILY_PR_MERGED,
+            MetricType.DAILY_ISSUES_CREATED,
+            MetricType.DAILY_ISSUES_CLOSED,
+            MetricType.DAILY_CHURN_RATIO,
+            // Flow and lead time
+            MetricType.PR_LEAD_TIME_HOURS_MEDIAN,
+            MetricType.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
+            MetricType.ISSUE_LEAD_TIME_HOURS_MEDIAN,
+            MetricType.REVIEW_RESPONSE_TIME_HOURS_MEDIAN,
+            // Collaboration
+            MetricType.REVIEW_PARTICIPATION_COUNT,
+            // Wellness
+            MetricType.FOCUS_RATIO_DAYS_TASKS);
 
     private static final Set<MetricType> DAILY_SUM_METRICS = Arrays.stream(MetricType.values())
             .filter(t -> t.dailySum).collect(Collectors.toUnmodifiableSet());
