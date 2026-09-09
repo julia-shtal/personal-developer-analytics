@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.model.*;
 import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
+import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
@@ -40,6 +41,7 @@ public class MetricsController {
     private final AggregateWindowResolver aggregateWindowResolver;
     private final RepoService repoService;
     private final CheckHelper checkHelper;
+    private final MetricBackfillService metricBackfillService;
 
     // =========================================================================
     // Personal endpoints — team IS NULL snapshots only
@@ -320,16 +322,23 @@ public class MetricsController {
     }
 
     /**
-     * Returns the latest date for which personal metrics have been computed.
-     * Used by the dashboard to show a "metrics current through {date}" freshness indicator.
+     * Returns how far the current user's personal metrics have been computed: the latest
+     * computed day, the range the backfill targets, and how many days inside it are still
+     * outstanding.
+     *
+     * <p>Read-only. The backfill itself never runs in a request thread — this calls
+     * {@code describeCoverage}, not {@code backfillUser}.
      */
-    @Operation(summary = "Latest date through which the current user's personal metrics have been computed")
+    @Operation(summary = "Coverage of the current user's computed personal metrics")
     @GetMapping("/freshness")
-    public ResponseEntity<Map<String, String>> getFreshness() {
+    public MetricsFreshnessDto getFreshness() {
         User user = checkHelper.currentUser();
-        return metricSnapshotService.findMaxPersonalDate(user.getId())
-                .map(date -> ResponseEntity.ok(Map.of("metricsComputedThrough", date.toString())))
-                .orElse(ResponseEntity.ok(Map.of()));
+        BackfillResult coverage = metricBackfillService.describeCoverage(user.getId());
+        return new MetricsFreshnessDto(
+                metricSnapshotService.findMaxPersonalDate(user.getId()).orElse(null),
+                coverage.coverageFrom(),
+                coverage.coverageTo(),
+                coverage.daysRemaining());
     }
 
     // =========================================================================

@@ -28,6 +28,14 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     List<String> findHashesByRepositoryId(@Param("repositoryId") Long repositoryId);
     Page<GitCommitEntity> findByRepositoryIdOrderByAuthorDateDesc(Long repositoryId, Pageable pageable);
 
+    /**
+     * Oldest commit in the given repository scope. The backfill uses this — not sync_jobs —
+     * as its coverage reference, because it is the same table the calculators read: history
+     * that was collected but never calculated is exactly what the backfill has to find.
+     */
+    @Query("SELECT MIN(c.authorDate) FROM GitCommitEntity c WHERE c.repository.id IN :repoIds")
+    Optional<Instant> findEarliestAuthorDate(@Param("repoIds") List<Long> repoIds);
+
     @Query("""
     select date(c.authorDate) as day,
            r.id               as repoId,

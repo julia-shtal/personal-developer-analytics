@@ -93,4 +93,19 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);
+
+    /**
+     * Oldest issue in the given repository scope. Native for the same reason as the other
+     * issue queries here: COALESCE over the nullable repository_id / jira_project_id FKs is
+     * what routes GitHub issues and Jira issues through one repo-scoped filter, and JPQL
+     * cannot express the LEFT JOIN cleanly.
+     */
+    @Query(value = """
+    SELECT MIN(i.created_at)
+    FROM   issues i
+    LEFT   JOIN jira_project_repo_mappings rm ON rm.jira_project_id = i.jira_project_id
+    WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
+      AND  i.created_at IS NOT NULL
+    """, nativeQuery = true)
+    Optional<Instant> findEarliestCreatedAt(@Param("repoIds") List<Long> repoIds);
 }
