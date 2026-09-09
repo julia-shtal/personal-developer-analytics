@@ -33,7 +33,7 @@ import java.time.LocalDate;
  * {@code REVIEW_RESPONSE_TIME_HOURS_MEDIAN}, {@code AFTER_HOURS_COMMIT_RATIO},
  * {@code DEEP_WORK_STREAK_DAYS}, {@code KNOWLEDGE_SILO_SCORE}, {@code REFACTOR_RATIO},
  * {@code PR_SIZE_COMPLEXITY_SCORE}, {@code MERGE_WITHOUT_REVIEW_RATIO},
- * {@code MERGE_TO_MAIN_FREQUENCY_PER_WEEK}.</p>
+ * {@code COMMITS_PER_WEEK_AVG}.</p>
  * <ul>
  *   <li>{@link #date} — the snapshot capture date (when the calculation ran), not the
  *       start or end of the window.</li>

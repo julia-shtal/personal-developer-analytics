@@ -1,7 +1,7 @@
-# Merge Frequency
+# Commits per Week (avg)
 
-**Framework:** DORA
-**Category:** Performance (Deployment Frequency proxy)
+**Framework:** SPACE
+**Category:** Activity
 **Unit:** commits per ISO calendar week (average)
 **Data source(s):** git_commits
 **Privacy class:** individual
@@ -9,7 +9,7 @@
 
 ## Definition
 
-The average number of commits authored by the user per ISO calendar week within the selected date window. This metric is used as a DORA Deployment Frequency proxy in the absence of CI/CD pipeline data. A higher average indicates more frequent integration of work into the shared codebase. Because the platform does not distinguish commits on main vs. feature branches, this metric counts all commits, making it a commit-frequency signal rather than a strict deployment-frequency signal. (Forsgren, Humble & Kim, 2018.)
+The average number of commits authored by the user per ISO calendar week within the selected date window. A higher average indicates a higher sustained rate of committed work. The metric counts every commit authored by the user regardless of the branch it was made on: the platform does not distinguish commits on the default branch from commits on feature branches, so this is a direct commit-activity signal and is not interpreted as a deployment or integration measure. (Forsgren et al., 2021.)
 
 ## Formula
 
@@ -30,7 +30,7 @@ commits_per_week = MAP(week_key → SUM(commits on that day))
     GROUP BY day
   )
 
-merge_to_main_frequency_per_week =
+commits_per_week_avg =
   AVG(commits_per_week.values())
 ```
 
@@ -63,10 +63,10 @@ double avgPerWeek = byWeek.values().stream().mapToLong(Long::longValue).average(
 
 ## Validation (thesis §8.3)
 
-- **Expected range**: 5–25 commits/week for an active developer (high DORA performers in Accelerate commit multiple times per day); <3/week may indicate infrequent integration habits.
+- **Expected range**: 5–25 commits/week for an active developer; <3/week may indicate a low or intermittent commit rate.
 - **Comparison baseline**: `git log --author=<email> --after=<from> --before=<to> --format="%ad" --date=format:"%G-W%V"` — group by ISO week and count.
 - **Controlled-change test**: make 10 commits in week 1 and 20 commits in week 2 of a 2-week window → metric must equal 15.0.
 
 ## References
 
-Forsgren, N., Humble, J., & Kim, G. (2018). *Accelerate: The Science of Lean Software and DevOps*. IT Revolution. (DORA Deployment Frequency definition and elite performer benchmarks.)
+Forsgren, N., et al. (2021). The SPACE of developer productivity. *Queue*, 19(1), 20–48. (Activity dimension.)

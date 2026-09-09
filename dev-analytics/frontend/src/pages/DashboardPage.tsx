@@ -172,9 +172,9 @@ export function DashboardPage() {
     queryFn: () => metricsApi.dailyRefactorRatio(from, to).then((r) => r.data),
   });
 
-  const mergeToMain = useQuery({
-    queryKey: ['merge-to-main', from, to],
-    queryFn: () => metricsApi.mergeToMain(from, to).then((r) => r.data),
+  const commitsPerWeekAvg = useQuery({
+    queryKey: ['commits-per-week-avg', from, to],
+    queryFn: () => metricsApi.commitsPerWeekAvg(from, to).then((r) => r.data),
   });
 
   const deepWorkStreak = useQuery({
@@ -470,13 +470,13 @@ export function DashboardPage() {
             onSetGoal={() => openGoalModal('MERGE_WITHOUT_REVIEW_RATIO', 'merge w/o review')}
           />
           <KpiTile
-            label="merge frequency"
-            value={numSuffix(mergeToMain.data?.value, '/wk')}
-            sub="dora proxy"
+            label="commits per week"
+            value={numSuffix(commitsPerWeekAvg.data?.value, '/wk')}
+            sub="avg per iso week"
             accent="accent"
             icon={<MergeFreq />}
-            tooltip="Merges to the default branch per week."
-            onSetGoal={() => openGoalModal('MERGE_TO_MAIN_FREQUENCY_PER_WEEK', 'merge frequency')}
+            tooltip="Average number of commits you authored per ISO calendar week in the selected window."
+            onSetGoal={() => openGoalModal('COMMITS_PER_WEEK_AVG', 'commits per week')}
           />
         </div>
         <div className="divider" />

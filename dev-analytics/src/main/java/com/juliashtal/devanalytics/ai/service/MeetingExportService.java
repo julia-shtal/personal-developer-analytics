@@ -47,7 +47,7 @@ public class MeetingExportService {
             Map.entry("REFACTOR_RATIO",                                   "Refactor Ratio"),
             Map.entry("PR_SIZE_COMPLEXITY_SCORE",                         "PR Complexity"),
             Map.entry("MERGE_WITHOUT_REVIEW_RATIO",                       "Merge Without Review"),
-            Map.entry("MERGE_TO_MAIN_FREQUENCY_PER_WEEK",                 "Deploy Frequency")
+            Map.entry("COMMITS_PER_WEEK_AVG",                             "Commits per Week")
     );
 
     // Action prefix per insight kind for the talking-points checkboxes.

@@ -38,7 +38,7 @@
 | Multi-source collection | Local Git (JGit), GitHub commits + PRs + Issues (Kohsuke), Jira Issues (REST) |
 | Two-phase async enrichment | Fast ingest → immediate enrich top 150 → background scheduler for the rest |
 | Incremental sync | Resumes from last fetched commit hash; no full re-scans |
-| 20 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, merge frequency, code review participation |
+| 20 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, commits per week, code review participation |
 | Dual-scope metrics | Personal (`team = NULL`) and team-scoped (per-member attribution on shared repos) |
 | AI insights | On-demand and weekly scheduled summaries via local Ollama (llama3.2); personal and team scopes; Spring Cache backed |
 | Stateless JWT auth | HS256 access tokens (15 min), rotating refresh tokens (7 days), token-version logout invalidation; single-flight concurrent 401 refresh (one `POST /auth/refresh` per burst) |
@@ -960,7 +960,7 @@ Each value carries three boolean flags: `(inAiContext, dailySum, aggregatePeriod
 | `AFTER_HOURS_COMMIT_RATIO` | `(false, false, true)` | Share of commits outside 09:00–18:00 Mon–Fri in user's timezone |
 | `REFACTOR_RATIO` | `(false, false, true)` | Share of commits where deletions > additions |
 | `DEEP_WORK_STREAK_DAYS` | `(false, false, true)` | Longest consecutive run of commit days |
-| `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` | `(false, false, true)` | Average merges to main per ISO week (DORA proxy) |
+| `COMMITS_PER_WEEK_AVG` | `(false, false, true)` | Average commits per ISO calendar week |
 | `KNOWLEDGE_SILO_SCORE` | `(false, false, true)` | Max commit share across repos — bus-factor risk indicator |
 | `PR_SIZE_COMPLEXITY_SCORE` | `(false, false, true)` | Median `(additions + deletions) / max(commitsCount, 1)` per PR |
 | `MERGE_WITHOUT_REVIEW_RATIO` | `(false, false, true)` | Share of merged PRs with zero reviews |
@@ -1003,7 +1003,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 | `FocusRatioCalculator` | `FOCUS_RATIO_DAYS_TASKS` (saves 1.0 only for active weekdays) |
 | `AfterHoursAndRefactorCalculator` | `AFTER_HOURS_COMMIT_RATIO`, `REFACTOR_RATIO` (one DB call) |
 | `DeepWorkStreakCalculator` | `DEEP_WORK_STREAK_DAYS` (TreeSet → longest consecutive run) |
-| `MergeFrequencyCalculator` | `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` (ISO week grouping) |
+| `CommitsPerWeekCalculator` | `COMMITS_PER_WEEK_AVG` (ISO week grouping) |
 | `KnowledgeSiloCalculator` | `KNOWLEDGE_SILO_SCORE` (max user-share across repos) |
 | `PrSizeComplexityCalculator` | `PR_SIZE_COMPLEXITY_SCORE` (sorted median) |
 | `MergeWithoutReviewCalculator` | `MERGE_WITHOUT_REVIEW_RATIO` (PRs with no review events) |
@@ -1063,7 +1063,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 | GET | `/after-hours-commit-ratio` | `from`, `to` | `MetricAggregateDto` |
 | GET | `/refactor-ratio` | `from`, `to` | `MetricAggregateDto` |
 | GET | `/deep-work-streak` | `from`, `to` | `MetricAggregateDto` |
-| GET | `/merge-to-main-frequency-per-week` | `from`, `to` | `MetricAggregateDto` |
+| GET | `/commits-per-week-avg` | `from`, `to` | `MetricAggregateDto` |
 | GET | `/knowledge-silo-score` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/pr-size-complexity` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/merge-without-review-ratio` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
@@ -1588,7 +1588,7 @@ Phase C — Background sweep (every 2 minutes, 50 items/run)
 | `AFTER_HOURS_COMMIT_RATIO` | `AfterHoursAndRefactorCalculator` | Converts `authorDate` to `ZoneId.of(user.timezone)`; counts commits where `hour < 9` or `hour >= 18` or `dayOfWeek in {SAT, SUN}`. |
 | `REFACTOR_RATIO` | `AfterHoursAndRefactorCalculator` | Computed in the same DB call as `AFTER_HOURS_COMMIT_RATIO`. |
 | `DEEP_WORK_STREAK_DAYS` | `DeepWorkStreakCalculator` | Collects unique commit dates into `TreeSet<LocalDate>`, walks to find max consecutive run. |
-| `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` | `MergeFrequencyCalculator` | Groups daily commit counts by ISO week key `"YYYY-WWnn"`, averages counts per week. |
+| `COMMITS_PER_WEEK_AVG` | `CommitsPerWeekCalculator` | Groups daily commit counts by ISO week key `"YYYY-WWnn"`, averages counts per week. |
 | `KNOWLEDGE_SILO_SCORE` | `KnowledgeSiloCalculator` | `max(userCommitsInRepo / totalCommitsInRepo)` across all repos in window. |
 | `PR_SIZE_COMPLEXITY_SCORE` | `PrSizeComplexityCalculator` | Per PR: `(additions + deletions) / max(commitsCount, 1)`. Groups by repo, takes sorted median. |
 | `MERGE_WITHOUT_REVIEW_RATIO` | `MergeWithoutReviewCalculator` | `findFirstReviewTimestampsByPrIds()` gives PRs WITH reviews. Ratio = `(merged PRs − PRs with reviews) / merged PRs`. |
@@ -1679,7 +1679,7 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 - **Hero block**: `t-h1` headline interpolates live totals (commits, PRs merged, deep-work streak); appended with `aiSummary.headline` when a summary is available. `t-body` overview paragraph from `aiSummary.overview` (placeholder when none).
 - **Commits hero card**: total count + `<Sparkline>` of daily commit activity.
 - **Velocity group** (`hr-label velocity`): 8 `<KpiTile>` in 2 rows of 4 with a `.divider` between rows — commits, prs merged, pr lead time, focus ratio, prs created, issues closed, review response, 1st commit→merge. Each tile shows a red anomaly badge if the current metric value deviates >2σ from the historical mean.
-- **Wellness · Quality group** (`hr-label wellness · quality`): 9 `<KpiTile>` in 3 rows — after-hours, refactor ratio, merge w/o review, merge frequency; then deep work streak, avg churn, knowledge silo, pr size · median; then code review participation (`REVIEW_PARTICIPATION_COUNT`, "prs reviewed", cyan accent, cross-repo, self-reviews excluded). Anomaly badges shown per metric.
+- **Wellness · Quality group** (`hr-label wellness · quality`): 9 `<KpiTile>` in 3 rows — after-hours, refactor ratio, merge w/o review, commits per week; then deep work streak, avg churn, knowledge silo, pr size · median; then code review participation (`REVIEW_PARTICIPATION_COUNT`, "prs reviewed", cyan accent, cross-repo, self-reviews excluded). Anomaly badges shown per metric.
 - **AI Summary** (`hr-label ai summary`): `<AiSummaryCard>` for the selected date range; passes summary up via `onSummaryGenerated` to drive the hero block.
 - **Activity over time** (`hr-label activity · over time`): full-width commits bar chart; `.charts-grid` with PR flow (created/merged sparklines) and Code churn sparkline; Issues card (closed + created bar charts, shown only when data present).
 

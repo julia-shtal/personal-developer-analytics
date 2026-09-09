@@ -32,8 +32,8 @@ public enum MetricType {
     PR_SIZE_COMPLEXITY_SCORE(false, false, false),
     /** Fraction of merged PRs that had zero reviews. */
     MERGE_WITHOUT_REVIEW_RATIO(false, false, false),
-    /** Average commits per ISO calendar week (DORA deployment-frequency proxy). */
-    MERGE_TO_MAIN_FREQUENCY_PER_WEEK(false, false, false),
+    /** Average commits per ISO calendar week. */
+    COMMITS_PER_WEEK_AVG(false, false, false),
     /** Count of distinct PRs the user reviewed (excluding self-reviews) in the calculation window. */
     REVIEW_PARTICIPATION_COUNT(true, false, true),
 

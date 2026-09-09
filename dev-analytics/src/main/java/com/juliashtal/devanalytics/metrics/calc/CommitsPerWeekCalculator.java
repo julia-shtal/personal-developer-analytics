@@ -14,18 +14,18 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Calculates merge frequency from commit history.
+ * Calculates the average number of commits per ISO calendar week from commit history.
  */
 @Component
 @RequiredArgsConstructor
-public class MergeFrequencyCalculator implements MetricCalculator {
+public class CommitsPerWeekCalculator implements MetricCalculator {
 
     private final GitCommitEntityRepository commitRepository;
     private final MetricSnapshotWriter writer;
 
     @Override
     public Set<MetricType> produces() {
-        return Set.of(MetricType.MERGE_TO_MAIN_FREQUENCY_PER_WEEK);
+        return Set.of(MetricType.COMMITS_PER_WEEK_AVG);
     }
 
     @Override
@@ -49,7 +49,7 @@ public class MergeFrequencyCalculator implements MetricCalculator {
         if (byWeek.isEmpty()) return;
 
         double avgPerWeek = byWeek.values().stream().mapToLong(Long::longValue).average().orElse(0.0);
-        writer.save(ctx.user(), ctx.team(), ctx.fromDate(), MetricType.MERGE_TO_MAIN_FREQUENCY_PER_WEEK,
+        writer.save(ctx.user(), ctx.team(), ctx.fromDate(), MetricType.COMMITS_PER_WEEK_AVG,
                 avgPerWeek, null, ctx.fromDate(), ctx.toDate());
     }
 }

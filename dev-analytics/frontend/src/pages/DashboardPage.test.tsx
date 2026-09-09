@@ -23,7 +23,7 @@ vi.mock('@/api/metrics', () => ({
     prFirstCommitLeadTime: vi.fn().mockResolvedValue({ data: null }),
     dailyAfterHours: vi.fn().mockResolvedValue({ data: [] }),
     dailyRefactorRatio: vi.fn().mockResolvedValue({ data: [] }),
-    mergeToMain: vi.fn().mockResolvedValue({ data: null }),
+    commitsPerWeekAvg: vi.fn().mockResolvedValue({ data: null }),
     deepWorkStreak: vi.fn().mockResolvedValue({ data: null }),
     mergeWithoutReview: vi.fn().mockResolvedValue({ data: null }),
     prSizeComplexity: vi.fn().mockResolvedValue({ data: null }),

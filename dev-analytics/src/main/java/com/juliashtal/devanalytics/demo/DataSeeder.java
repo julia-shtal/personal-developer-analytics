@@ -182,7 +182,7 @@ public class DataSeeder implements ApplicationRunner {
         snap(user, null, repo, weekStart, MetricType.REFACTOR_RATIO,                                  ra.nextDouble() * 0.4,        weekStart, weekEnd);
         snap(user, null, repo, weekStart, MetricType.PR_SIZE_COMPLEXITY_SCORE,                        1 + ra.nextInt(500),          weekStart, weekEnd);
         snap(user, null, repo, weekStart, MetricType.MERGE_WITHOUT_REVIEW_RATIO,                      ra.nextDouble() * 0.3,        weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.MERGE_TO_MAIN_FREQUENCY_PER_WEEK,                ra.nextInt(6),                weekStart, weekEnd);
+        snap(user, null, repo, weekStart, MetricType.COMMITS_PER_WEEK_AVG,                            ra.nextInt(6),                weekStart, weekEnd);
     }
 
     /**

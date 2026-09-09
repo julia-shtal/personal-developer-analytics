@@ -257,12 +257,12 @@ class MetricsControllerTest {
 
     @Test
     @WithMockUser
-    void getMergeFrequency_returnsAggregate() throws Exception {
+    void getCommitsPerWeekAvg_returnsAggregate() throws Exception {
         when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
-                any(), eq(MetricType.MERGE_TO_MAIN_FREQUENCY_PER_WEEK), eq(FROM), eq(TO)))
-                .thenReturn(List.of(aggregateSnapshot(MetricType.MERGE_TO_MAIN_FREQUENCY_PER_WEEK, 3.0, FROM, TO)));
+                any(), eq(MetricType.COMMITS_PER_WEEK_AVG), eq(FROM), eq(TO)))
+                .thenReturn(List.of(aggregateSnapshot(MetricType.COMMITS_PER_WEEK_AVG, 3.0, FROM, TO)));
 
-        mvc.perform(get("/api/metrics/merge-to-main-frequency-per-week")
+        mvc.perform(get("/api/metrics/commits-per-week-avg")
                         .param("from", FROM.toString())
                         .param("to", TO.toString()))
                 .andExpect(status().isOk())
