@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.metrics;
 import com.juliashtal.devanalytics.metrics.controller.MetricsController;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
@@ -18,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -39,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * /daily-commits-count, /daily-churn-ratio and /pr-lead-time).
  */
 @WebMvcTest(MetricsController.class)
+@Import(AggregateWindowResolver.class)   // pure computation — a mock would defeat the assertions
 @AutoConfigureMockMvc(addFilters = false)
 class MetricsControllerTest {
 
@@ -171,7 +174,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getPrFirstCommitLeadTimeMedian_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN, 12.0, FROM, TO)));
 
@@ -186,7 +189,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getReviewResponseTimeMedian_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.REVIEW_RESPONSE_TIME_HOURS_MEDIAN), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.REVIEW_RESPONSE_TIME_HOURS_MEDIAN, 4.5, FROM, TO)));
 
@@ -201,7 +204,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getIssueLeadTimeMedian_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.ISSUE_LEAD_TIME_HOURS_MEDIAN), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.ISSUE_LEAD_TIME_HOURS_MEDIAN, 36.0, FROM, TO)));
 
@@ -216,7 +219,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getAfterHoursRatio_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.AFTER_HOURS_COMMIT_RATIO), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.AFTER_HOURS_COMMIT_RATIO, 0.2, FROM, TO)));
 
@@ -230,7 +233,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getRefactorRatio_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.REFACTOR_RATIO), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.REFACTOR_RATIO, 0.3, FROM, TO)));
 
@@ -244,7 +247,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getDeepWorkStreak_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.DEEP_WORK_STREAK_DAYS), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.DEEP_WORK_STREAK_DAYS, 5.0, FROM, TO)));
 
@@ -258,7 +261,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getCommitsPerWeekAvg_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.COMMITS_PER_WEEK_AVG), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.COMMITS_PER_WEEK_AVG, 3.0, FROM, TO)));
 
@@ -272,7 +275,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getKnowledgeSilo_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.KNOWLEDGE_SILO_SCORE), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.KNOWLEDGE_SILO_SCORE, 0.6, FROM, TO)));
 
@@ -286,7 +289,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getPrSizeComplexity_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.PR_SIZE_COMPLEXITY_SCORE), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.PR_SIZE_COMPLEXITY_SCORE, 120.0, FROM, TO)));
 
@@ -300,7 +303,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getWipOpenPrAge_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, 48.0, FROM, TO)));
 
@@ -314,7 +317,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getMergeWithoutReview_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.MERGE_WITHOUT_REVIEW_RATIO), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.MERGE_WITHOUT_REVIEW_RATIO, 0.1, FROM, TO)));
 

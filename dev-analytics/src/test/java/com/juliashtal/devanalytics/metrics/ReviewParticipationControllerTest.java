@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.controller.MetricsController;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
@@ -18,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -30,6 +32,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(MetricsController.class)
+@Import(AggregateWindowResolver.class)   // pure computation — a mock would defeat the assertions
 @AutoConfigureMockMvc(addFilters = false)
 class ReviewParticipationControllerTest {
 
@@ -71,7 +74,7 @@ class ReviewParticipationControllerTest {
     @Test
     @WithMockUser
     void getReviewParticipation_authenticated_returns200() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.REVIEW_PARTICIPATION_COUNT), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.REVIEW_PARTICIPATION_COUNT, 5.0, FROM, TO)));
 

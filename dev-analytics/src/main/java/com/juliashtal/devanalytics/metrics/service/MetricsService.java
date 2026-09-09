@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.metrics.service;
 
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
+import com.juliashtal.devanalytics.metrics.calc.MetricCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
@@ -12,9 +13,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -57,13 +60,72 @@ public class MetricsService {
         }
     }
 
+    /**
+     * Runs the registry in two shapes, because the table stores two.
+     *
+     * <p>Series calculators write one row per calendar day and take a single pass over
+     * the whole range. Aggregate calculators write one row carrying
+     * {@code periodFrom}/{@code periodTo}, and run once per ISO calendar week the range
+     * touches — each pass windowed on that week's Monday to Sunday. The ISO week is the
+     * canonical grain: it matches the weekly summary job and {@code COMMITS_PER_WEEK_AVG},
+     * and is the smallest window over which a median of PR lead times is not usually a
+     * median of one observation.
+     *
+     * <p>Before this split, an aggregate row's period was whatever range the caller
+     * happened to pass, so the nightly job stored one-day windows that no weekly read
+     * could resolve. The branch lives here rather than inside individual calculators so
+     * each calculator still sees one window and does not know about the grain.
+     */
     private void calculateDailyMetricsForUser(User user, Team team, LocalDate fromDate, LocalDate toDate) {
+        List<Long> repoIds = repoScopeResolver.resolve(user, team);
+
+        List<MetricCalculator> seriesCalculators = new ArrayList<>();
+        List<MetricCalculator> aggregateCalculators = new ArrayList<>();
+        for (MetricCalculator calculator : metricCalculatorRegistry.all()) {
+            if (writesAggregatePeriod(calculator)) {
+                aggregateCalculators.add(calculator);
+            } else {
+                seriesCalculators.add(calculator);
+            }
+        }
+
+        if (!seriesCalculators.isEmpty()) {
+            MetricCalcContext fullRange = context(user, team, repoIds, fromDate, toDate);
+            seriesCalculators.forEach(c -> c.calculate(fullRange));
+        }
+
+        if (!aggregateCalculators.isEmpty()) {
+            for (LocalDate weekStart : isoWeeksOverlapping(fromDate, toDate)) {
+                MetricCalcContext week = context(user, team, repoIds, weekStart, weekStart.plusDays(6));
+                aggregateCalculators.forEach(c -> c.calculate(week));
+            }
+        }
+    }
+
+    private static boolean writesAggregatePeriod(MetricCalculator calculator) {
+        return calculator.produces().stream().anyMatch(t -> t.aggregatePeriod);
+    }
+
+    private static MetricCalcContext context(User user, Team team, List<Long> repoIds,
+                                             LocalDate fromDate, LocalDate toDate) {
         Instant from = fromDate.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant to   = toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        return new MetricCalcContext(user, team, repoIds, from, to, fromDate, toDate);
+    }
 
-        List<Long> repoIds = repoScopeResolver.resolve(user, team);
-        MetricCalcContext ctx = new MetricCalcContext(user, team, repoIds, from, to, fromDate, toDate);
-
-        metricCalculatorRegistry.all().forEach(c -> c.calculate(ctx));
+    /**
+     * The Monday of every ISO week the inclusive range touches. Weeks are always whole,
+     * so a partial request still produces a full-week window and the stored period never
+     * claims a narrower coverage than was computed.
+     */
+    private static List<LocalDate> isoWeeksOverlapping(LocalDate fromDate, LocalDate toDate) {
+        List<LocalDate> weeks = new ArrayList<>();
+        LocalDate weekStart = fromDate.with(DayOfWeek.MONDAY);
+        LocalDate lastWeekStart = toDate.with(DayOfWeek.MONDAY);
+        while (!weekStart.isAfter(lastWeekStart)) {
+            weeks.add(weekStart);
+            weekStart = weekStart.plusWeeks(1);
+        }
+        return weeks;
     }
 }

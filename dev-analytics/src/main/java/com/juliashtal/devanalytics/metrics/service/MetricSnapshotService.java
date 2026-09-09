@@ -28,13 +28,6 @@ public class MetricSnapshotService {
         return repository.findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, metricType, from, to);
     }
 
-    public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(User user,
-                                                                                    MetricType metricType,
-                                                                                    LocalDate from,
-                                                                                    LocalDate to) {
-        return repository.findPersonalAggregateByPeriod(user, metricType, from, to);
-    }
-
     public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(User user,
                                                                                           MetricType metricType,
                                                                                           GitRepositoryEntity repo,
@@ -43,12 +36,33 @@ public class MetricSnapshotService {
         return repository.findByUserAndTeamIsNullAndMetricTypeAndRepositoryAndDateBetween(user, metricType, repo, from, to);
     }
 
-    public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateFromAndTo(User user,
-                                                                                                 MetricType metricType,
-                                                                                                 GitRepositoryEntity repo,
-                                                                                                 LocalDate from,
-                                                                                                 LocalDate to) {
-        return repository.findPersonalAggregateByRepositoryAndPeriod(user, metricType, repo, from, to);
+    /**
+     * Every row this window can honestly answer with: DAILY rows dated inside it plus
+     * AGGREGATE rows whose window it fully contains. When nothing is contained and the
+     * request is narrower than the grain the metric was computed on, falls back to the
+     * AGGREGATE row whose window covers the request. Callers partition the result by
+     * shape via {@link AggregateWindowResolver} — no caller needs a list of which
+     * metric types are period-stored.
+     */
+    public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeInWindow(User user,
+                                                                             MetricType metricType,
+                                                                             LocalDate from,
+                                                                             LocalDate to) {
+        List<MetricSnapshot> contained = repository.findPersonalInWindow(user, metricType, from, to);
+        if (!contained.isEmpty()) return contained;
+        return repository.findPersonalAggregateCovering(user, metricType, from, to);
+    }
+
+    /** Repository-scoped variant of {@link #getMetricSnapshotsByUserAndMetricTypeInWindow}. */
+    public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(User user,
+                                                                                          MetricType metricType,
+                                                                                          GitRepositoryEntity repo,
+                                                                                          LocalDate from,
+                                                                                          LocalDate to) {
+        List<MetricSnapshot> contained =
+                repository.findPersonalByRepositoryInWindow(user, metricType, repo, from, to);
+        if (!contained.isEmpty()) return contained;
+        return repository.findPersonalAggregateCoveringByRepository(user, metricType, repo, from, to);
     }
 
     public List<MetricSnapshot> getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(
@@ -63,6 +77,30 @@ public class MetricSnapshotService {
             LocalDate from,
             LocalDate to) {
         return repository.findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(userIds, teamId, metricType, from, to);
+    }
+
+    /**
+     * Team-scoped equivalent of {@link #getMetricSnapshotsByUserAndMetricTypeInWindow},
+     * for the manager summary views. No covering fallback: a team summary states what is
+     * stored inside the requested range rather than borrowing a wider window.
+     */
+    public List<MetricSnapshot> getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(
+            List<Long> userIds,
+            Long teamId,
+            MetricType metricType,
+            LocalDate from,
+            LocalDate to) {
+        return repository.findByUserIdsAndTeamIdAndMetricTypeInWindow(userIds, teamId, metricType, from, to);
+    }
+
+    /** Single-member variant of {@link #getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow}. */
+    public List<MetricSnapshot> getMetricSnapshotsByUserAndTeamAndMetricTypeInWindow(
+            User user,
+            Team team,
+            MetricType metricType,
+            LocalDate from,
+            LocalDate to) {
+        return repository.findByUserAndTeamAndMetricTypeInWindow(user, team, metricType, from, to);
     }
 
     public List<MetricSnapshot> getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndRepositoryAndDateBetween(

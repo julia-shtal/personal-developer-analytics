@@ -21,19 +21,17 @@ import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 @RequiredArgsConstructor
 public class MetricsAnomalyService {
 
-    // Mirrors MetricsAiService.CONTEXT_METRIC_TYPES — keep in sync if AI context changes.
+    /**
+     * Mirrors {@code AiContextBuilderService.CONTEXT_METRIC_TYPES}. Declared here rather
+     * than imported because {@code ai} depends on {@code metrics} and not the reverse;
+     * {@code MetricTypeTest} asserts the two lists agree.
+     */
     private static final List<MetricType> CONTEXT_METRIC_TYPES = List.of(
             DAILY_COMMITS_COUNT, DAILY_PR_CREATED, DAILY_PR_MERGED,
             DAILY_ISSUES_CREATED, DAILY_ISSUES_CLOSED, DAILY_CHURN_RATIO,
             PR_LEAD_TIME_HOURS_MEDIAN, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
             ISSUE_LEAD_TIME_HOURS_MEDIAN, REVIEW_RESPONSE_TIME_HOURS_MEDIAN,
-            FOCUS_RATIO_DAYS_TASKS
-    );
-
-    // Aggregate metrics use periodFrom/periodTo queries instead of date-series queries.
-    private static final Set<MetricType> AGGREGATE_METRICS = Set.of(
-            PR_LEAD_TIME_HOURS_MEDIAN, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
-            ISSUE_LEAD_TIME_HOURS_MEDIAN, REVIEW_RESPONSE_TIME_HOURS_MEDIAN
+            REVIEW_PARTICIPATION_COUNT, FOCUS_RATIO_DAYS_TASKS
     );
 
     /** Minimum number of observations required before an anomaly check is meaningful. */
@@ -42,18 +40,31 @@ public class MetricsAnomalyService {
     private static final double ANOMALY_STD_DEV_THRESHOLD = 2.0;
 
     private final MetricSnapshotService metricSnapshotService;
+    private final AggregateWindowResolver aggregateWindowResolver;
 
+    /**
+     * One flag per context metric. Period-stored metrics contribute one observation per
+     * stored window rather than one per day, so the deviation being tested is week-to-week
+     * variation. Which shape a metric is stored in is read off the rows, not off a list of
+     * types — the list this class used to keep named four of the five aggregate types, and
+     * the fifth was scored against an empty series.
+     */
     public Map<MetricType, Boolean> computeAnomalies(User user, LocalDate from, LocalDate to) {
         Map<MetricType, Boolean> result = new LinkedHashMap<>();
         for (MetricType type : CONTEXT_METRIC_TYPES) {
-            List<MetricSnapshot> snapshots = AGGREGATE_METRICS.contains(type)
-                    ? metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateFromAndTo(user, type, from, to)
-                    : metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to);
+            List<MetricSnapshot> rows =
+                    metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(user, type, from, to);
 
-            List<Double> values = snapshots.stream()
-                    .sorted(Comparator.comparing(MetricSnapshot::getDate))
-                    .map(MetricSnapshot::getValue)
-                    .collect(Collectors.toList());
+            List<MetricSnapshot> aggregateRows = AggregateWindowResolver.aggregateRows(rows);
+            List<Double> values = aggregateRows.isEmpty()
+                    ? AggregateWindowResolver.dailyRows(rows).stream()
+                            .sorted(Comparator.comparing(MetricSnapshot::getDate))
+                            .map(MetricSnapshot::getValue)
+                            .collect(Collectors.toList())
+                    : aggregateWindowResolver.perWindow(aggregateRows, type).stream()
+                            .map(AggregateWindowResolver.WindowValue::value)
+                            .collect(Collectors.toList());
+
             result.put(type, hasAnomaly(values));
         }
         return result;

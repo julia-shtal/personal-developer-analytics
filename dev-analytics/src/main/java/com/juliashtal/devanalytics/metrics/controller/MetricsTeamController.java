@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.metrics.controller;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.model.*;
+import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.security.CheckHelper;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 
@@ -34,6 +36,7 @@ public class MetricsTeamController {
 
     private final MetricSnapshotService metricSnapshotService;
     private final MetricsService metricsService;
+    private final AggregateWindowResolver aggregateWindowResolver;
     private final RepoService repoService;
     private final TeamService teamService;
     private final UserService userService;
@@ -130,9 +133,19 @@ public class MetricsTeamController {
         for (User m : members) byUser.put(m.getId(), new EnumMap<>(MetricType.class));
 
         for (MetricType type : MetricType.values()) {
-            metricSnapshotService
-                    .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(memberIds, teamId, type, from, to)
+            List<MetricSnapshot> rows = metricSnapshotService
+                    .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(memberIds, teamId, type, from, to);
+
+            // Summing is only correct for DAILY rows, whose dates are disjoint. AGGREGATE rows
+            // carry a period, so summing them adds up overlapping windows — the error the
+            // storage-shape distinction exists to prevent. Route each shape to its own reduction.
+            AggregateWindowResolver.dailyRows(rows)
                     .forEach(s -> byUser.get(s.getUser().getId()).merge(type, s.getValue(), Double::sum));
+
+            AggregateWindowResolver.aggregateRows(rows).stream()
+                    .collect(Collectors.groupingBy(s -> s.getUser().getId()))
+                    .forEach((userId, userRows) -> aggregateWindowResolver.resolve(userRows, type)
+                            .ifPresent(r -> byUser.get(userId).put(type, r.value())));
         }
 
         return members.stream()
@@ -161,9 +174,15 @@ public class MetricsTeamController {
 
         Map<MetricType, Double> metrics = new EnumMap<>(MetricType.class);
         for (MetricType type : MetricType.values()) {
-            metricSnapshotService
-                    .getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(member, team, type, from, to)
+            List<MetricSnapshot> rows = metricSnapshotService
+                    .getMetricSnapshotsByUserAndTeamAndMetricTypeInWindow(member, team, type, from, to);
+
+            // Same shape split as getTeamSummary: daily rows sum, period rows resolve.
+            AggregateWindowResolver.dailyRows(rows)
                     .forEach(s -> metrics.merge(type, s.getValue(), Double::sum));
+
+            aggregateWindowResolver.resolve(AggregateWindowResolver.aggregateRows(rows), type)
+                    .ifPresent(r -> metrics.put(type, r.value()));
         }
 
         return new MemberSummaryDto(

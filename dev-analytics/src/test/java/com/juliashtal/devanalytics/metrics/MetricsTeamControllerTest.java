@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.controller.MetricsTeamController;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.security.CheckHelper;
@@ -24,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -43,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Slice tests for {@link MetricsTeamController} — all team-scoped and member-scoped endpoints.
  */
 @WebMvcTest(MetricsTeamController.class)
+@Import(AggregateWindowResolver.class)   // pure computation — a mock would defeat the assertions
 @AutoConfigureMockMvc(addFilters = false)
 class MetricsTeamControllerTest {
 
@@ -80,6 +83,15 @@ class MetricsTeamControllerTest {
         s.setMetricType(type);
         s.setDate(date);
         s.setValue(value);
+        return s;
+    }
+
+    /** AGGREGATE shape: carries the window it covers, so the read side must not sum it. */
+    private MetricSnapshot weekSnapshot(User user, MetricType type,
+                                        LocalDate periodFrom, LocalDate periodTo, double value) {
+        MetricSnapshot s = teamSnapshot(user, type, periodFrom, value);
+        s.setPeriodFrom(periodFrom);
+        s.setPeriodTo(periodTo);
         return s;
     }
 
@@ -223,10 +235,10 @@ class MetricsTeamControllerTest {
         Team team = teamWithMember(member);
         when(teamService.getById(TEAM_ID)).thenReturn(team);
 
-        when(snapshotService.getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(
+        when(snapshotService.getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(
                 anyList(), eq(TEAM_ID), any(MetricType.class), eq(FROM), eq(TO)))
                 .thenReturn(List.of());
-        when(snapshotService.getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndDateBetween(
+        when(snapshotService.getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(
                 eq(List.of(MEMBER_ID)), eq(TEAM_ID), eq(MetricType.DAILY_COMMITS_COUNT), eq(FROM), eq(TO)))
                 .thenReturn(List.of(teamSnapshot(member, MetricType.DAILY_COMMITS_COUNT, DAY, 9)));
 
@@ -237,6 +249,100 @@ class MetricsTeamControllerTest {
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].userId").value(MEMBER_ID))
                 .andExpect(jsonPath("$[0].username").value("alice"))
+                .andExpect(jsonPath("$[0].metrics.DAILY_COMMITS_COUNT").value(9.0));
+    }
+
+    /**
+     * The team summary used to iterate every MetricType and sum whatever a date-between
+     * query returned. For period-stored metrics that adds up overlapping windows: three
+     * weekly lead-time medians of 20, 30 and 40 hours became 90 hours, a figure describing
+     * nothing. Route by stored shape and the answer is the median of the three, 30.
+     */
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void getTeamSummary_threeWeeksOfLeadTimeWindows_doesNotSumTheOverlappingWindows() throws Exception {
+        User member = new User();
+        member.setId(MEMBER_ID);
+        member.setUsername("alice");
+        member.setEmail("alice@example.com");
+        Team team = teamWithMember(member);
+        when(teamService.getById(TEAM_ID)).thenReturn(team);
+
+        when(snapshotService.getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(
+                anyList(), eq(TEAM_ID), any(MetricType.class), eq(FROM), eq(TO)))
+                .thenReturn(List.of());
+        when(snapshotService.getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(
+                eq(List.of(MEMBER_ID)), eq(TEAM_ID), eq(MetricType.PR_LEAD_TIME_HOURS_MEDIAN), eq(FROM), eq(TO)))
+                .thenReturn(List.of(
+                        weekSnapshot(member, MetricType.PR_LEAD_TIME_HOURS_MEDIAN,
+                                LocalDate.of(2024, 1, 1),  LocalDate.of(2024, 1, 7),  20.0),
+                        weekSnapshot(member, MetricType.PR_LEAD_TIME_HOURS_MEDIAN,
+                                LocalDate.of(2024, 1, 8),  LocalDate.of(2024, 1, 14), 30.0),
+                        weekSnapshot(member, MetricType.PR_LEAD_TIME_HOURS_MEDIAN,
+                                LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 21), 40.0)));
+
+        mvc.perform(get("/api/metrics/teams/{teamId}/summary", TEAM_ID)
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].metrics.PR_LEAD_TIME_HOURS_MEDIAN").value(30.0));
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void getMemberSummary_threeWeeksOfLeadTimeWindows_doesNotSumTheOverlappingWindows() throws Exception {
+        User member = new User();
+        member.setId(MEMBER_ID);
+        member.setUsername("alice");
+        member.setEmail("alice@example.com");
+        Team team = teamWithMember(member);
+        when(teamService.getById(TEAM_ID)).thenReturn(team);
+        when(userService.getById(MEMBER_ID)).thenReturn(member);
+
+        when(snapshotService.getMetricSnapshotsByUserAndTeamAndMetricTypeInWindow(
+                eq(member), eq(team), any(MetricType.class), eq(FROM), eq(TO)))
+                .thenReturn(List.of());
+        when(snapshotService.getMetricSnapshotsByUserAndTeamAndMetricTypeInWindow(
+                eq(member), eq(team), eq(MetricType.PR_LEAD_TIME_HOURS_MEDIAN), eq(FROM), eq(TO)))
+                .thenReturn(List.of(
+                        weekSnapshot(member, MetricType.PR_LEAD_TIME_HOURS_MEDIAN,
+                                LocalDate.of(2024, 1, 1),  LocalDate.of(2024, 1, 7),  20.0),
+                        weekSnapshot(member, MetricType.PR_LEAD_TIME_HOURS_MEDIAN,
+                                LocalDate.of(2024, 1, 8),  LocalDate.of(2024, 1, 14), 30.0),
+                        weekSnapshot(member, MetricType.PR_LEAD_TIME_HOURS_MEDIAN,
+                                LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 21), 40.0)));
+
+        mvc.perform(get("/api/metrics/teams/{teamId}/members/{memberId}/summary", TEAM_ID, MEMBER_ID)
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metrics.PR_LEAD_TIME_HOURS_MEDIAN").value(30.0));
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void getTeamSummary_dailyRowsForACountMetric_stillSumAcrossDays() throws Exception {
+        // The shape split must not change how daily rows behave: their dates are disjoint.
+        User member = new User();
+        member.setId(MEMBER_ID);
+        member.setUsername("alice");
+        member.setEmail("alice@example.com");
+        Team team = teamWithMember(member);
+        when(teamService.getById(TEAM_ID)).thenReturn(team);
+
+        when(snapshotService.getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(
+                anyList(), eq(TEAM_ID), any(MetricType.class), eq(FROM), eq(TO)))
+                .thenReturn(List.of());
+        when(snapshotService.getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(
+                eq(List.of(MEMBER_ID)), eq(TEAM_ID), eq(MetricType.DAILY_COMMITS_COUNT), eq(FROM), eq(TO)))
+                .thenReturn(List.of(
+                        teamSnapshot(member, MetricType.DAILY_COMMITS_COUNT, DAY, 4),
+                        teamSnapshot(member, MetricType.DAILY_COMMITS_COUNT, DAY.plusDays(1), 5)));
+
+        mvc.perform(get("/api/metrics/teams/{teamId}/summary", TEAM_ID)
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].metrics.DAILY_COMMITS_COUNT").value(9.0));
     }
 
@@ -266,10 +372,10 @@ class MetricsTeamControllerTest {
         when(teamService.getById(TEAM_ID)).thenReturn(team);
         when(userService.getById(MEMBER_ID)).thenReturn(member);
 
-        when(snapshotService.getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(
+        when(snapshotService.getMetricSnapshotsByUserAndTeamAndMetricTypeInWindow(
                 eq(member), eq(team), any(MetricType.class), eq(FROM), eq(TO)))
                 .thenReturn(List.of());
-        when(snapshotService.getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(
+        when(snapshotService.getMetricSnapshotsByUserAndTeamAndMetricTypeInWindow(
                 eq(member), eq(team), eq(MetricType.DAILY_PR_CREATED), eq(FROM), eq(TO)))
                 .thenReturn(List.of(teamSnapshot(member, MetricType.DAILY_PR_CREATED, DAY, 6)));
 

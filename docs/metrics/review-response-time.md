@@ -36,7 +36,7 @@ review_response_time_hours_median =
 - Window: `P.merged_at >= from` AND `P.merged_at < to+1`.
 - PRs without any review row in `github_pr_reviews` are **excluded** from the denominator. This metric measures review speed when reviews happen, not review adoption (which is `MERGE_WITHOUT_REVIEW_RATIO`).
 - Negative durations (review timestamp before PR creation) are skipped: `if (hours < 0) continue`.
-- Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`.
+- Saved as aggregate shape: `periodFrom` = the ISO week Monday, `periodTo` = that week Sunday.
 - Bot exclusion on PR author: `author_login NOT LIKE '%[bot]'`.
 
 ## Edge cases
@@ -57,3 +57,25 @@ review_response_time_hours_median =
 ## References
 
 Forsgren, N., et al. (2021). The SPACE of developer productivity. *Queue*, 19(1), 20–48. (Communication and collaboration dimension.)
+
+## Calculation grain and window resolution
+
+Computed on a fixed grain: **one ISO calendar week**, `periodFrom` = that week's Monday
+and `periodTo` = that week's Sunday. A calculation request covering any part of a week
+computes that week in full, so a stored period never claims narrower coverage than was
+actually measured, and recomputing over a differently-framed range updates the same rows
+rather than adding a second window over the same days.
+
+The ISO week is the canonical grain because it matches the weekly summary job and
+`COMMITS_PER_WEEK_AVG`, and because it is the smallest window over which a median is not
+usually a median of one observation.
+
+Reads do not require the requested window to match a stored one. A request resolves to
+every stored week it fully contains; where it contains none — a request narrower than one
+week — it resolves to the week that contains it. The response reports the window actually
+covered, not the window requested.
+
+Where a request spans several weeks, the reported figure is the **median of the per-week
+medians**. Combining sub-window medians is an approximation of the median over the whole
+range — the underlying observations are not stored per window — but it is bounded by the
+weekly values and is labelled with the window it covers.

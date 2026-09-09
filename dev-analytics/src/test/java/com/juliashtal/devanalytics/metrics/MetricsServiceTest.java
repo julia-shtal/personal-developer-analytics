@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;
+import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
 import com.juliashtal.devanalytics.user.model.Role;
@@ -26,6 +27,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -85,6 +87,128 @@ class MetricsServiceTest {
         assertThat(ctx.toDate()).isEqualTo(TO);
         assertThat(ctx.user()).isSameAs(user);
         assertThat(ctx.team()).isNull();
+    }
+
+    // ------------------------------------------------------------------
+    // Storage-shape split: series over the range, aggregates per ISO week
+    // ------------------------------------------------------------------
+
+    @Test
+    void calculateDailyMetrics_oneIsoWeek_runsAggregateCalculatorOverThatWeeksMondayToSunday() {
+        User user = stubPersonalUser();
+        MetricCalculator aggregate = aggregateCalculator();
+        when(metricCalculatorRegistry.all()).thenReturn(List.of(aggregate));
+
+        // FROM is Monday 2024-01-15, TO is Sunday 2024-01-21 — exactly one ISO week.
+        metricsService.calculateDailyMetrics(1L, FROM, TO);
+
+        ArgumentCaptor<MetricCalcContext> ctx = ArgumentCaptor.forClass(MetricCalcContext.class);
+        verify(aggregate).calculate(ctx.capture());
+        assertThat(ctx.getValue().fromDate()).isEqualTo(LocalDate.of(2024, 1, 15));
+        assertThat(ctx.getValue().toDate()).isEqualTo(LocalDate.of(2024, 1, 21));
+        assertThat(ctx.getValue().user()).isSameAs(user);
+    }
+
+    @Test
+    void calculateDailyMetrics_rangeSpanningTwoIsoWeeks_runsAggregateCalculatorOncePerWeek() {
+        stubPersonalUser();
+        MetricCalculator aggregate = aggregateCalculator();
+        when(metricCalculatorRegistry.all()).thenReturn(List.of(aggregate));
+
+        // Monday 2024-01-15 through Sunday 2024-01-28 — two whole ISO weeks.
+        metricsService.calculateDailyMetrics(1L, FROM, LocalDate.of(2024, 1, 28));
+
+        ArgumentCaptor<MetricCalcContext> ctx = ArgumentCaptor.forClass(MetricCalcContext.class);
+        verify(aggregate, times(2)).calculate(ctx.capture());
+        assertThat(ctx.getAllValues())
+                .extracting(MetricCalcContext::fromDate, MetricCalcContext::toDate)
+                .containsExactly(
+                        tuple(LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 21)),
+                        tuple(LocalDate.of(2024, 1, 22), LocalDate.of(2024, 1, 28)));
+    }
+
+    @Test
+    void calculateDailyMetrics_singleDay_widensTheAggregateWindowToItsWholeIsoWeek() {
+        // The nightly job asks for one day. Storing a one-day period is what made every
+        // weekly read miss: the window is widened to the week that day belongs to, so the
+        // stored period is one a weekly summary can actually resolve.
+        stubPersonalUser();
+        MetricCalculator aggregate = aggregateCalculator();
+        when(metricCalculatorRegistry.all()).thenReturn(List.of(aggregate));
+
+        LocalDate wednesday = LocalDate.of(2024, 1, 17);
+        metricsService.calculateDailyMetrics(1L, wednesday, wednesday);
+
+        ArgumentCaptor<MetricCalcContext> ctx = ArgumentCaptor.forClass(MetricCalcContext.class);
+        verify(aggregate).calculate(ctx.capture());
+        assertThat(ctx.getValue().fromDate()).isEqualTo(LocalDate.of(2024, 1, 15));   // Monday
+        assertThat(ctx.getValue().toDate()).isEqualTo(LocalDate.of(2024, 1, 21));     // Sunday
+    }
+
+    @Test
+    void calculateDailyMetrics_seriesCalculator_takesOnePassOverTheWholeRangeRegardlessOfWeeks() {
+        stubPersonalUser();
+        MetricCalculator series = seriesCalculator();
+        when(metricCalculatorRegistry.all()).thenReturn(List.of(series));
+
+        metricsService.calculateDailyMetrics(1L, FROM, LocalDate.of(2024, 1, 28));
+
+        ArgumentCaptor<MetricCalcContext> ctx = ArgumentCaptor.forClass(MetricCalcContext.class);
+        verify(series).calculate(ctx.capture());
+        assertThat(ctx.getValue().fromDate()).isEqualTo(FROM);
+        assertThat(ctx.getValue().toDate()).isEqualTo(LocalDate.of(2024, 1, 28));
+    }
+
+    @Test
+    void calculateDailyMetrics_mixedRegistry_seriesRunsOnceAndAggregateRunsPerWeek() {
+        stubPersonalUser();
+        MetricCalculator series = seriesCalculator();
+        MetricCalculator aggregate = aggregateCalculator();
+        when(metricCalculatorRegistry.all()).thenReturn(List.of(series, aggregate));
+
+        metricsService.calculateDailyMetrics(1L, FROM, LocalDate.of(2024, 1, 28));
+
+        verify(series, times(1)).calculate(any(MetricCalcContext.class));
+        verify(aggregate, times(2)).calculate(any(MetricCalcContext.class));
+    }
+
+    @Test
+    void calculateDailyMetrics_recomputedOverlappingRange_reusesTheSameWeekWindows() {
+        // The upsert guard keys on (date, periodFrom, periodTo). Week-aligned windows are
+        // stable across differently-framed requests, so a recomputation updates the same
+        // rows instead of adding a second window covering the same days.
+        stubPersonalUser();
+        MetricCalculator aggregate = aggregateCalculator();
+        when(metricCalculatorRegistry.all()).thenReturn(List.of(aggregate));
+
+        metricsService.calculateDailyMetrics(1L, LocalDate.of(2024, 1, 17), LocalDate.of(2024, 1, 19));
+        metricsService.calculateDailyMetrics(1L, LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 21));
+
+        ArgumentCaptor<MetricCalcContext> ctx = ArgumentCaptor.forClass(MetricCalcContext.class);
+        verify(aggregate, times(2)).calculate(ctx.capture());
+        assertThat(ctx.getAllValues())
+                .extracting(MetricCalcContext::fromDate, MetricCalcContext::toDate)
+                .containsOnly(tuple(LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 21)));
+    }
+
+    @Test
+    void calculateDailyMetrics_partialWeeksAtBothEnds_coversEveryTouchedWeekInFull() {
+        stubPersonalUser();
+        MetricCalculator aggregate = aggregateCalculator();
+        when(metricCalculatorRegistry.all()).thenReturn(List.of(aggregate));
+
+        // Wednesday 2024-01-17 to Tuesday 2024-01-30 touches three ISO weeks. Each is stored
+        // whole, so no period ever claims a narrower coverage than was actually computed.
+        metricsService.calculateDailyMetrics(1L, LocalDate.of(2024, 1, 17), LocalDate.of(2024, 1, 30));
+
+        ArgumentCaptor<MetricCalcContext> ctx = ArgumentCaptor.forClass(MetricCalcContext.class);
+        verify(aggregate, times(3)).calculate(ctx.capture());
+        assertThat(ctx.getAllValues())
+                .extracting(MetricCalcContext::fromDate, MetricCalcContext::toDate)
+                .containsExactly(
+                        tuple(LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 21)),
+                        tuple(LocalDate.of(2024, 1, 22), LocalDate.of(2024, 1, 28)),
+                        tuple(LocalDate.of(2024, 1, 29), LocalDate.of(2024, 2, 4)));
     }
 
     // ------------------------------------------------------------------
@@ -188,6 +312,28 @@ class MetricsServiceTest {
     // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
+
+    private User stubPersonalUser() {
+        User user = new User();
+        user.setId(1L);
+        when(userRepository.getReferenceById(1L)).thenReturn(user);
+        when(repoScopeResolver.resolve(user, null)).thenReturn(List.of(10L));
+        return user;
+    }
+
+    /** Stands in for PrLeadTimeCalculator and friends: produces a type flagged aggregatePeriod. */
+    private static MetricCalculator aggregateCalculator() {
+        MetricCalculator c = mock(MetricCalculator.class);
+        when(c.produces()).thenReturn(Set.of(MetricType.PR_LEAD_TIME_HOURS_MEDIAN));
+        return c;
+    }
+
+    /** Stands in for DailyCommitsCalculator: produces only date-series types. */
+    private static MetricCalculator seriesCalculator() {
+        MetricCalculator c = mock(MetricCalculator.class);
+        when(c.produces()).thenReturn(Set.of(MetricType.DAILY_COMMITS_COUNT));
+        return c;
+    }
 
     private static User user(Long id, Role role) {
         User u = new User();
