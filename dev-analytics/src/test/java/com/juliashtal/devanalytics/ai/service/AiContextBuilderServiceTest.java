@@ -16,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -226,6 +227,20 @@ class AiContextBuilderServiceTest {
                 .filter(m -> "bob".equals(m.getUsername()))
                 .findFirst().orElseThrow();
         assertThat(bobMetrics.getMetrics()).doesNotContainKey(MetricType.DAILY_COMMITS_COUNT.name());
+    }
+
+    /**
+     * CONTEXT_METRIC_TYPES is declared explicitly to fix the order the model reads,
+     * so it can no longer follow the inAiContext flag automatically. This guards the
+     * two directions in which they can drift: a metric flagged but not listed would be
+     * silently missing from every summary, and a metric listed but not flagged would be
+     * sent to the model against the enum's own declaration.
+     */
+    @Test
+    void contextMetricTypes_matchesInAiContextFlag_inBothDirections() {
+        assertThat(AiContextBuilderService.CONTEXT_METRIC_TYPES)
+                .containsExactlyInAnyOrderElementsOf(
+                        Arrays.stream(MetricType.values()).filter(t -> t.inAiContext).toList());
     }
 
     private MetricSnapshot snapshot(LocalDate date, double value) {
