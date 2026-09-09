@@ -47,7 +47,7 @@ const LABEL: Record<MetricType, string> = {
   KNOWLEDGE_SILO_SCORE: '',
   REFACTOR_RATIO: '',
   PR_SIZE_COMPLEXITY_SCORE: '',
-  MERGE_TO_MAIN_FREQUENCY_PER_WEEK: '',
+  COMMITS_PER_WEEK_AVG: '',
 };
 
 /**

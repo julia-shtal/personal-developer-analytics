@@ -24,7 +24,7 @@ const METRIC_LABELS: Record<string, string> = {
   AFTER_HOURS_COMMIT_RATIO: 'After-Hours Commits',
   DEEP_WORK_STREAK_DAYS: 'Deep Work Streak',
   PR_SIZE_COMPLEXITY_SCORE: 'PR Size Complexity',
-  MERGE_TO_MAIN_FREQUENCY_PER_WEEK: 'Merge to Main Frequency',
+  COMMITS_PER_WEEK_AVG: 'Commits per Week (avg)',
   REVIEW_PARTICIPATION_COUNT: 'Review Participation',
 };
 

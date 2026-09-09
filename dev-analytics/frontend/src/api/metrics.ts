@@ -53,8 +53,8 @@ export const metricsApi = {
   dailyRefactorRatio: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/refactor-ratio', { params: { from, to } }),
 
-  mergeToMain: (from: string, to: string) =>
-    api.get<MetricAggregateDto>('/metrics/merge-to-main-frequency-per-week', { params: { from, to } }),
+  commitsPerWeekAvg: (from: string, to: string) =>
+    api.get<MetricAggregateDto>('/metrics/commits-per-week-avg', { params: { from, to } }),
 
   deepWorkStreak: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/deep-work-streak', { params: { from, to } }),

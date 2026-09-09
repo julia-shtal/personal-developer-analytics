@@ -220,13 +220,13 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(DEEP_WORK_STREAK_DAYS, from, to, null);
     }
 
-    @Operation(summary = "Merge Frequency (merges to main per ISO week, average) for the current user")
-    @GetMapping("/merge-to-main-frequency-per-week")
-    public MetricAggregateDto getMergeFrequency(
+    @Operation(summary = "Commits per Week (average commits per ISO week) for the current user")
+    @GetMapping("/commits-per-week-avg")
+    public MetricAggregateDto getCommitsPerWeekAvg(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        return getPersonalLeadTimeAggregate(MERGE_TO_MAIN_FREQUENCY_PER_WEEK, from, to, null);
+        return getPersonalLeadTimeAggregate(COMMITS_PER_WEEK_AVG, from, to, null);
     }
 
     @Operation(summary = "Knowledge Silo Score for the current user")

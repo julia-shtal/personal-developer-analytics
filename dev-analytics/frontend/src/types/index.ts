@@ -136,7 +136,7 @@ export type MetricType =
   | 'REFACTOR_RATIO'
   | 'PR_SIZE_COMPLEXITY_SCORE'
   | 'MERGE_WITHOUT_REVIEW_RATIO'
-  | 'MERGE_TO_MAIN_FREQUENCY_PER_WEEK';
+  | 'COMMITS_PER_WEEK_AVG';
 
 export interface MetricPointDto {
   date: string;

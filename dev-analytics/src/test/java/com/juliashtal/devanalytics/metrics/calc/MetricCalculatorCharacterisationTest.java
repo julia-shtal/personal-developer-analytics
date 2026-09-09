@@ -116,7 +116,7 @@ class MetricCalculatorCharacterisationTest {
                 new FocusRatioCalculator(commitRepository, writer),
                 new AfterHoursAndRefactorCalculator(commitRepository, writer),
                 new DeepWorkStreakCalculator(commitRepository, writer),
-                new MergeFrequencyCalculator(commitRepository, writer),
+                new CommitsPerWeekCalculator(commitRepository, writer),
                 new KnowledgeSiloCalculator(commitRepository, gitRepoRepository, writer),
                 new PrSizeComplexityCalculator(pullRequestRepository, gitRepoRepository, writer),
                 new MergeWithoutReviewCalculator(pullRequestRepository, prReviewRepository, gitRepoRepository, writer),
