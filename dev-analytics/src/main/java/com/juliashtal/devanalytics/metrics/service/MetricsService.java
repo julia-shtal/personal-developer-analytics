@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.metrics.service;
 
 import com.juliashtal.devanalytics.exception.ForbiddenException;
+import com.juliashtal.devanalytics.metrics.MetricCoverageRepository;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;
@@ -32,6 +33,7 @@ public class MetricsService {
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
     private final RepoScopeResolver repoScopeResolver;
+    private final MetricCoverageRepository coverageRepository;
 
     /** Personal metrics — uses only the user's own data sources, saved with team=null. */
     @Transactional
@@ -75,6 +77,13 @@ public class MetricsService {
      * happened to pass, so the nightly job stored one-day windows that no weekly read
      * could resolve. The branch lives here rather than inside individual calculators so
      * each calculator still sees one window and does not know about the grain.
+     *
+     * <p>This method is also the sole writer of the {@code metric_coverage} ledger, which
+     * records the calendar days personal metrics have actually been computed for and is the
+     * reference {@code MetricBackfillService} subtracts its target range from. The write is
+     * deliberately co-located with the calculation and inside the same transaction, so
+     * coverage cannot drift from what was computed; see the guard's own comment below for
+     * why team scopes and empty repo scopes are excluded.
      */
     private void calculateDailyMetricsForUser(User user, Team team, LocalDate fromDate, LocalDate toDate) {
         List<Long> repoIds = repoScopeResolver.resolve(user, team);
@@ -98,6 +107,17 @@ public class MetricsService {
             for (LocalDate weekStart : isoWeeksOverlapping(fromDate, toDate)) {
                 MetricCalcContext week = context(user, team, repoIds, weekStart, weekStart.plusDays(6));
                 aggregateCalculators.forEach(c -> c.calculate(week));
+            }
+        }
+
+        // Coverage is recorded here, on the personal path only, so the ledger the backfill
+        // reads can never disagree with what was actually computed — whichever entry point
+        // triggered it. Skipped when the scope is empty: every calculator returns early on
+        // an empty repo list, so marking those days would let the nightly job convince the
+        // backfill that a user's history is covered before any repository was attached.
+        if (team == null && !repoIds.isEmpty()) {
+            for (LocalDate day = fromDate; !day.isAfter(toDate); day = day.plusDays(1)) {
+                coverageRepository.markCovered(user.getId(), day);
             }
         }
     }

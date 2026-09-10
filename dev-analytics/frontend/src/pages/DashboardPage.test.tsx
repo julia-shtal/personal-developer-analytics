@@ -192,3 +192,47 @@ describe('DashboardPage — period comparison', () => {
     await waitFor(() => expect(metricsApi.dailyIssuesCreated).toHaveBeenCalledTimes(2));
   });
 });
+
+describe('DashboardPage — backfill coverage chips', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('shows how many days of history are still computing when the backfill is behind', async () => {
+    const { metricsApi } = await import('@/api/metrics');
+    vi.mocked(metricsApi.freshness).mockResolvedValue({
+      data: {
+        metricsComputedThrough: '2026-06-30',
+        coverageFrom: '2026-01-01',
+        coverageTo: '2026-06-30',
+        daysRemaining: 12,
+      },
+    } as never);
+
+    render(<DashboardPage />, { wrapper: Wrapper });
+
+    expect(await screen.findByText('12 day(s) of history still computing')).toBeInTheDocument();
+    expect(screen.getByText('metrics through 2026-06-30')).toBeInTheDocument();
+  });
+
+  it('hides the remaining-days chip once coverage is complete', async () => {
+    const { metricsApi } = await import('@/api/metrics');
+    vi.mocked(metricsApi.freshness).mockResolvedValue({
+      data: {
+        metricsComputedThrough: '2026-06-30',
+        coverageFrom: '2026-01-01',
+        coverageTo: '2026-06-30',
+        daysRemaining: 0,
+      },
+    } as never);
+
+    render(<DashboardPage />, { wrapper: Wrapper });
+
+    // The "metrics through" chip proves freshness resolved, so the absence below is a real
+    // assertion about daysRemaining === 0 rather than a race against an unresolved query.
+    // A truthiness bug that rendered "0 day(s)…" would fail here.
+    await screen.findByText('metrics through 2026-06-30');
+    expect(screen.queryByText(/day\(s\) of history still computing/)).not.toBeInTheDocument();
+  });
+});

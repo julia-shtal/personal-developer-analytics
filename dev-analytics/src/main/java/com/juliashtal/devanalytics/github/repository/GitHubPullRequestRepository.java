@@ -23,6 +23,14 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     List<GitHubPullRequestEntity> findByRepository(GitRepositoryEntity repository);
     Page<GitHubPullRequestEntity> findByRepositoryOrderByCreatedAtDesc(GitRepositoryEntity repository, Pageable pageable);
 
+    /**
+     * Oldest pull request in the given repository scope. Used alongside the equivalent
+     * commit and issue earliest-activity queries so the backfill can take the minimum of
+     * all three as the start of its target range.
+     */
+    @Query("SELECT MIN(p.createdAt) FROM GitHubPullRequestEntity p WHERE p.repository.id IN :repoIds")
+    Optional<Instant> findEarliestCreatedAt(@Param("repoIds") List<Long> repoIds);
+
     @Query("""
     select p.repository.id as repoId,
            p.createdAt     as createdAt,

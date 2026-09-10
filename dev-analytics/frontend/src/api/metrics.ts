@@ -75,7 +75,12 @@ export const metricsApi = {
     api.get<MetricAggregateDto>('/metrics/review-participation', { params: { from, to } }),
 
   freshness: () =>
-    api.get<{ metricsComputedThrough?: string }>('/metrics/freshness'),
+    api.get<{
+      metricsComputedThrough: string | null
+      coverageFrom: string | null
+      coverageTo: string | null
+      daysRemaining: number
+    }>('/metrics/freshness'),
 
   anomalies: (from: string, to: string) =>
     api.get<MetricAnomalyResponse>('/metrics/anomalies', { params: { from, to } }),

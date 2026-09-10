@@ -57,6 +57,12 @@ app:
   mail:
     from-address: ${MAIL_FROM:noreply@dev-analytics.local}
     from-name: ${MAIL_FROM_NAME:Dev Analytics}
+  metrics:
+    backfill:
+      # Days of imported history one backfill run may compute per user. The cap is a
+      # resumable throttle, not truncation: whatever it defers is still missing on the
+      # next run. Raise it to fill a long range in fewer scheduled passes.
+      max-days-per-run: ${METRICS_BACKFILL_MAX_DAYS_PER_RUN:30}
 
 ai:
   ollama:

@@ -1,9 +1,11 @@
 package com.juliashtal.devanalytics.metrics;
 
 import com.juliashtal.devanalytics.metrics.controller.MetricsController;
+import com.juliashtal.devanalytics.metrics.model.BackfillResult;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
+import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
@@ -29,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -54,6 +57,7 @@ class MetricsControllerTest {
     @MockBean UserService userService;
     @MockBean CheckHelper checkHelper;
     @MockBean MetricSnapshotRepository snapshotRepository;
+    @MockBean MetricBackfillService backfillService;
     @MockBean JwtService jwtService;
     @MockBean CustomUserDetailsService customUserDetailsService;
 
@@ -431,23 +435,45 @@ class MetricsControllerTest {
 
     @Test
     @WithMockUser
-    void getFreshness_whenExists_returnsDate() throws Exception {
+    void getFreshness_whenComputed_returnsDateAndCoverage() throws Exception {
         when(snapshotService.findMaxPersonalDate(currentUser.getId()))
                 .thenReturn(Optional.of(LocalDate.of(2024, 1, 31)));
+        when(backfillService.describeCoverage(currentUser.getId()))
+                .thenReturn(new BackfillResult(0, 12,
+                        LocalDate.of(2023, 6, 1), LocalDate.of(2024, 1, 31)));
 
         mvc.perform(get("/api/metrics/freshness"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.metricsComputedThrough").value("2024-01-31"));
+                .andExpect(jsonPath("$.metricsComputedThrough").value("2024-01-31"))
+                .andExpect(jsonPath("$.coverageFrom").value("2023-06-01"))
+                .andExpect(jsonPath("$.coverageTo").value("2024-01-31"))
+                .andExpect(jsonPath("$.daysRemaining").value(12));
     }
 
     @Test
     @WithMockUser
-    void getFreshness_whenNone_returnsEmptyMap() throws Exception {
+    void getFreshness_whenNoneComputed_returnsNullsAndZeroRemaining() throws Exception {
         when(snapshotService.findMaxPersonalDate(currentUser.getId()))
                 .thenReturn(Optional.empty());
+        when(backfillService.describeCoverage(currentUser.getId()))
+                .thenReturn(BackfillResult.empty());
 
         mvc.perform(get("/api/metrics/freshness"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isEmpty());
+                .andExpect(jsonPath("$.metricsComputedThrough").doesNotExist())
+                .andExpect(jsonPath("$.daysRemaining").value(0));
+    }
+
+    @Test
+    @WithMockUser
+    void getFreshness_neverComputesInTheRequestThread() throws Exception {
+        when(snapshotService.findMaxPersonalDate(currentUser.getId()))
+                .thenReturn(Optional.empty());
+        when(backfillService.describeCoverage(currentUser.getId()))
+                .thenReturn(BackfillResult.empty());
+
+        mvc.perform(get("/api/metrics/freshness")).andExpect(status().isOk());
+
+        verify(backfillService, never()).backfillUser(anyLong());
     }
 }

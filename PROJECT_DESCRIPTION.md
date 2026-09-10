@@ -84,6 +84,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 │  GitHubPrStatsEnrichmentService · GitHubIssuesCollector         │
 │  JiraCollector · IssueService                                   │
 │  MetricsService · MetricSnapshotService · MetricsScheduler      │
+│  MetricBackfillService · MetricBackfillScheduler                │
 │  MetricsAiService · OllamaLlmClient                             │
 │  JwtService · RefreshTokenService · PasswordResetService        │
 │  CustomUserDetailsService · EmailService                        │
@@ -96,7 +97,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
                              │
 ┌────────────────────────────▼────────────────────────────────────┐
 │                        PostgreSQL 16                            │
-│            Schema managed by Flyway (58 migrations)             │
+│            Schema managed by Flyway (59 migrations)             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -425,7 +426,7 @@ CHECK constraints (added V35):
 
 **`DataSourceValidator`** — `validateCreate(CreateDataSourceRequest)`: checks required fields per type, validates path exists (GIT_LOCAL), validates base URL format (HTTP types).
 
-**`AsyncDataSourceCollectService`** — `@Async("collectTaskExecutor")` wrapper. Calls `DataSourceCollectService.collectForDataSource()` in background thread, updates `SyncJobTracker` on start/complete/fail.
+**`AsyncDataSourceCollectService`** — `@Async("collectTaskExecutor")` wrapper. Calls `DataSourceCollectService.collectForDataSource()` in background thread, updates `SyncJobTracker` on start/complete/fail. On a source's **first** successful collection it also calls `MetricBackfillTrigger.onFirstCollection(userId)`, so a newly attached repository's history does not wait for the 03:00 job. "First" is decided by reading `lastSuccessSync` before collection stamps it; that read sits inside the same `try` as the collection, so a lookup failure (config deleted or access revoked between the controller's 202 and this task running) is reported through `tracker.fail` + `sendSyncFailureIfEnabled` rather than escaping the `@Async void` method. A backfill failure is logged but does not fail the collection, which did succeed.
 
 **`DataSourceCollectService`** — Dispatches to collectors based on `DataSourceType`. For GITHUB type it also conditionally collects issues per repo when `repo.isCollectIssues()` is true:
 - `GIT_LOCAL` → `GitLocalCollector.collectForRepository()`
@@ -939,6 +940,19 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date, metric_type)`.
 
+**`MetricCoverage`** — Table `metric_coverage`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGSERIAL PK | |
+| `user_id` | FK → users NOT NULL | ON DELETE CASCADE |
+| `date` | DATE NOT NULL | A calendar day personal metrics have actually been computed for |
+| `computed_at` | TIMESTAMPTZ NOT NULL | Defaults to `now()` |
+
+Unique constraint `uq_metric_coverage_user_date` on `(user_id, date)`; no separate index, since that constraint's btree already serves `findDatesInRange`'s `user_id = ? AND date BETWEEN ? AND ?` predicate.
+
+The ledger records the computation rather than inferring it from the output, which is what makes the backfill converge. `MAX(metric_snapshots.date)` is a high-water mark that a capped run advances past days it skipped; `SELECT DISTINCT date FROM metric_snapshots` fails differently, because calculators write a row only when the day produced data, so a day the user did not commit on would be reported missing forever. Personal scope only — there is no `team_id` column, and `MetricsService` writes here only when `team == null` and the repo scope is non-empty.
+
 #### MetricType (Enum) — 21 values
 
 Each value carries three boolean flags: `(inAiContext, dailySum, aggregatePeriod)`. `inAiContext` marks whether the metric is included in the AI summary context; `dailySum` marks daily-count metrics (summed per-day); `aggregatePeriod` marks the metrics computed on the canonical **ISO calendar week** grain.
@@ -1046,7 +1060,11 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 
 `MetricAggregateDto.periodFrom`/`periodTo` are populated from the resolved window, never echoed from the request — no figure is labelled with a window it was not computed over. `AggregateStorageShapeDriftTest` pins the set of period-storing types against this class's declared reductions.
 
-**`MetricsScheduler`** — `@Scheduled(cron = "0 0 1 * * ?")` (daily 01:00 UTC). For each user, computes every missing day since `findMaxPersonalDate(userId)` rather than only yesterday, so a multi-day outage is fully recovered; the window is capped at `MAX_BACKFILL_DAYS = 30` to prevent runaway backfills. Per-user exceptions caught and logged as warnings.
+**`MetricsScheduler`** — `@Scheduled(cron = "0 0 1 * * ?")` (daily 01:00 server time). The incremental job only: computes yesterday for every user. Per-user exceptions caught and logged as warnings. Gap recovery is deliberately not here — it previously derived the window from `findMaxPersonalDate(userId)` and capped it at `MAX_BACKFILL_DAYS = 30`, but moving the start forward left the excluded days behind a watermark the same run then advanced past, so no later run revisited them.
+
+**`MetricBackfillService`** — Computes personal metrics for days inside a user's collected history that were never calculated. The target range runs from the earliest collected activity (the oldest commit, pull request or issue in the user's repo scope, via `findEarliestAuthorDate` / `findEarliestCreatedAt`) to yesterday in the user's timezone; missing days are that range minus the `metric_coverage` ledger. Because the missing set is derived from what was actually computed rather than from a high-water mark, `app.metrics.backfill.max-days-per-run` (default 30) is a resumable throttle: what one run defers is still missing for the next. Days are computed newest-first in contiguous blocks, each block one `calculateDailyMetrics` pass. Not `@Transactional` — an enclosing transaction would make each block participate rather than commit, so one failed block would discard the whole run. An in-process key set serialises concurrent runs per user, because `MetricSnapshotWriter.save` is read-then-write and `metric_snapshots` has no unique constraint. Implements `MetricBackfillTrigger`, the single interface the `datasource` package calls into. `describeCoverage(userId)` is the read-only view behind `GET /api/metrics/freshness`.
+
+**`MetricBackfillScheduler`** — `@Scheduled(cron = "0 0 3 * * ?", zone = "UTC")` (daily 03:00 UTC). Iterates users and calls `backfillUser`; per-user failures logged without aborting the run.
 
 #### DTOs
 
@@ -1056,10 +1074,12 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 | `MetricAggregateDto` | `metricType`, `value`, `periodFrom?`, `periodTo?` |
 | `TeamMetricPointDto` | `date`, `value`, `metricType`, `userId?`, `username` |
 | `MemberSummaryDto` | `userId`, `username`, `metrics: Map<MetricType, Double>`, `hasCustomAvatar`, `avatarPreset`, `lastActiveAt?`, `email?` |
+| `MetricsFreshnessDto` | `metricsComputedThrough?`, `coverageFrom?`, `coverageTo?`, `daysRemaining` |
+| `BackfillResult` | `daysComputed`, `daysRemaining`, `coverageFrom?`, `coverageTo?` — record; service-level, not exposed at the controller boundary |
 
 #### Controllers
 
-**`MetricsController`** — `/api/metrics`, `@PreAuthorize("isAuthenticated()")` (class-level), injects: `MetricSnapshotService`, `MetricsService`, `MetricsAnomalyService`, `RepoService`, `CheckHelper`. Personal endpoints only (team endpoints extracted to `MetricsTeamController`).
+**`MetricsController`** — `/api/metrics`, `@PreAuthorize("isAuthenticated()")` (class-level), injects: `MetricSnapshotService`, `MetricsService`, `MetricsAnomalyService`, `MetricBackfillService`, `RepoService`, `CheckHelper`. Personal endpoints only (team endpoints extracted to `MetricsTeamController`).
 
 **Personal endpoints:**
 
@@ -1088,7 +1108,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 | GET | `/merge-without-review-ratio` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/review-participation` | `from`, `to` | `MetricAggregateDto` — cross-repo, no `repoId` param |
 | GET | `/anomalies` | `from`, `to` | `Map<String, Boolean>` — per-metric 2σ anomaly flags |
-| GET | `/freshness` | — | `{metricsComputedThrough: date}` — latest personal snapshot date |
+| GET | `/freshness` | — | `MetricsFreshnessDto` — `metricsComputedThrough` (latest personal snapshot date), `coverageFrom`, `coverageTo`, `daysRemaining`. Read-only: calls `describeCoverage`, never `backfillUser`, so no backfill runs in a request thread |
 
 **`MetricsTeamController`** — `/api/metrics/teams`, injects: `MetricSnapshotService`, `MetricsService`, `RepoService`, `TeamService`, `UserService`, `CheckHelper`. Extracted from `MetricsController`.
 
@@ -1364,7 +1384,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 ## 4. Database Design
 
-### 4.1 Schema Evolution — 58 Flyway Migrations
+### 4.1 Schema Evolution — 59 Flyway Migrations
 
 | Version | File | What it does |
 |---|---|---|
@@ -1426,6 +1446,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 | V56 | `V56__user_goals.sql` | Create `user_goals` (id, user_id FK, metric_type VARCHAR, target_value, target_date, created_at) — developer metric targets for the AI coaching loop; `metric_type` stored as the enum name to avoid migration coupling |
 | V57 | `V57__rename_merge_frequency_metric.sql` | Rewrite `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` to `COMMITS_PER_WEEK_AVG` in `metric_snapshots.metric_type` and `user_goals.metric_type`; restate the `metric_snapshots` table comment written by V40 — `MetricType` is persisted by name, so the rename is a data migration |
 | V58 | `V58__delete_non_week_aligned_aggregate_snapshots.sql` | DELETE `metric_snapshots` rows for the five `aggregatePeriod` types whose `period_from` is not an ISO Monday or whose `period_to` is not that Monday + 6. Reads resolve by containment rather than exact match, so a legacy one-day row would be read alongside the week that already covers it — harmless for a median, but `REVIEW_PARTICIPATION_COUNT` sums its windows. Rows are regenerated at week grain by the next calculation pass |
+| V59 | `V59__metric_coverage.sql` | Create `metric_coverage` (id, user_id FK CASCADE, date, computed_at TIMESTAMPTZ DEFAULT now()), UNIQUE (user_id, date) — the ledger of days personal metrics have actually been computed for, so the backfill's per-run cap resumes instead of truncating. Deliberately no separate `(user_id, date)` index: the unique constraint's btree already serves the range predicate. Seeds itself from `SELECT DISTINCT user_id, date FROM metric_snapshots WHERE team_id IS NULL` with `ON CONFLICT DO NOTHING`, so an existing installation does not recompute history it already holds |
 
 ### 4.2 Entity-Relationship Overview
 
@@ -1550,14 +1571,17 @@ LIMIT 1
 POST /datasources/{id}/collect
   └─▶ DataSourceController
         └─▶ AsyncDataSourceCollectService.collectAsync()  [@Async → thread pool]
-              └─▶ SyncJobTracker.start(dataSourceId)       [in-memory job state]
-                    └─▶ DataSourceCollectService.collectForDataSource()
-                          ├─ GIT_LOCAL      → GitLocalCollector.collectForRepository()
-                          ├─ GITHUB         → GitHubCollector.collectForRepository()    [commits]
-                          │                   GitHubPrCollector.collectForRepository()  [PRs]
-                          │                   GitHubIssuesCollector (if repo.collectIssues) [issues]
-                          ├─ GITHUB_ISSUES  → GitHubIssuesCollector.collectIssuesForRepo()
-                          └─ JIRA           → JiraCollector.collectIssues()
+              ├─▶ SyncJobTracker.start(dataSourceId)       [in-memory job state]
+              │     └─▶ reads lastSuccessSync  [before collection stamps it → "first run?"]
+              │     └─▶ DataSourceCollectService.collectForDataSource()
+              │           ├─ GIT_LOCAL      → GitLocalCollector.collectForRepository()
+              │           ├─ GITHUB         → GitHubCollector.collectForRepository()    [commits]
+              │           │                   GitHubPrCollector.collectForRepository()  [PRs]
+              │           │                   GitHubIssuesCollector (if repo.collectIssues) [issues]
+              │           ├─ GITHUB_ISSUES  → GitHubIssuesCollector.collectIssuesForRepo()
+              │           └─ JIRA           → JiraCollector.collectIssues()
+              └─▶ MetricBackfillTrigger.onFirstCollection(userId)   [only if it was the first
+                    successful run; resets that user's coverage, then backfills one capped batch]
 ```
 
 Client polls `GET /datasources/{id}/collect/status` every 3 seconds. `SyncJobTracker` reports phase, item counts, elapsed seconds, and ETA (extrapolated from current throughput).
@@ -1835,10 +1859,10 @@ The editorial design system lives in `frontend/src/index.css` (`@theme` block re
 | Scheduler | Schedule | What it does |
 |---|---|---|
 | `TokenCleanupScheduler` | Daily 02:00 UTC | Deletes expired `refresh_tokens`; deletes used or expired `password_reset_tokens` |
-| `MetricsScheduler` | Daily 01:00 UTC | For every user: `calculateDailyMetrics(userId, lastComputed+1, yesterday)`, capped at 30 days of backfill. Per-user failures logged, do not abort run |
+| `MetricsScheduler` | Daily 01:00 server time | For every user: `calculateDailyMetrics(userId, yesterday, yesterday)`. Incremental only — gap recovery moved to `MetricBackfillScheduler`. Per-user failures logged, do not abort run |
 | `MetricsSummaryScheduler` | Every Monday 08:00 UTC | For every user: computes the week first via `calculateDailyMetrics(userId, from, to)`, then generates a personal AI summary for the previous week (Mon–Sun); persists to `metric_summaries` with headline; triggers `NotificationDispatchService.dispatchSummaries()` if email prefs enabled |
 | `CommitStatsEnrichmentScheduler` | Every 2 minutes | Finds repos with PENDING commits or PRs; processes up to 50 per repo per run. Respects GitHub rate limits. Continues until all enriched |
-| `MetricsBackfillScheduler` | Daily 03:00 UTC | Detects gaps in `metric_snapshots` relative to `sync_jobs` completion dates; triggers backfill calculations for users with stale data |
+| `MetricBackfillScheduler` | Daily 03:00 UTC | For every user: `MetricBackfillService.backfillUser(userId)` — subtracts the `metric_coverage` ledger from the user's collected history and computes up to `app.metrics.backfill.max-days-per-run` (default 30) missing days, newest-first. Per-user failures logged, do not abort run |
 | `InviteTokenCleanupScheduler` | Daily 05:00 UTC | Deletes expired or already-used `invite_tokens` |
 
 ---
@@ -1969,4 +1993,4 @@ Ollama must be running separately: `ollama serve` (and `ollama pull llama3.2` on
 
 ---
 
-*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 21-metric calculation engine (registry-based dispatch via `MetricCalculatorRegistry`, 17 `MetricCalculator` beans) with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries, 2σ anomaly detection, 1:1 meeting prep export, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (23 controllers, 58 Flyway migrations, 18+ repositories).*
+*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 21-metric calculation engine (registry-based dispatch via `MetricCalculatorRegistry`, 17 `MetricCalculator` beans) with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries, 2σ anomaly detection, 1:1 meeting prep export, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (23 controllers, 59 Flyway migrations, 18+ repositories).*

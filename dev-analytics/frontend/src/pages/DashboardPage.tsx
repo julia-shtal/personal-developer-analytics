@@ -307,6 +307,9 @@ export function DashboardPage() {
             {freshness.data?.metricsComputedThrough && (
               <Chip color="amber">metrics through {freshness.data.metricsComputedThrough}</Chip>
             )}
+            {!!freshness.data?.daysRemaining && (
+              <Chip color="amber">{freshness.data.daysRemaining} day(s) of history still computing</Chip>
+            )}
             {selectedRepo && (
               <Chip color="cyan">{selectedRepo.name}</Chip>
             )}

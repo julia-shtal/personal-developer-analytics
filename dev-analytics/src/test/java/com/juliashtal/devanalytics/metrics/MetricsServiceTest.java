@@ -42,6 +42,7 @@ class MetricsServiceTest {
     @Mock UserRepository userRepository;
     @Mock TeamRepository teamRepository;
     @Mock RepoScopeResolver repoScopeResolver;
+    @Mock MetricCoverageRepository coverageRepository;
 
     @InjectMocks MetricsService metricsService;
 
