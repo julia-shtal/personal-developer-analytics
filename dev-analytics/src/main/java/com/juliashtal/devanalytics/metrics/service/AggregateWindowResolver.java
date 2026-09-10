@@ -18,21 +18,11 @@ import java.util.Set;
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 
 /**
- * Turns the AGGREGATE-shape rows returned by the window-resolution queries into a
- * single value plus the window that value was actually computed over.
+ * Reduces AGGREGATE-shape rows to one value plus the window it was computed over.
  *
- * <p>Reads never match a stored window against the requested one, so a request that
- * spans several stored windows has to combine them. How is a property of the metric,
- * not of the query: a count sums, a ratio averages, a median takes the median of the
- * per-window medians. Three metrics cannot be recovered from sub-windows at all —
- * {@code DEEP_WORK_STREAK_DAYS} (a run may cross a window boundary),
- * {@code COMMITS_PER_WEEK_AVG} (already a per-week rate) and {@code KNOWLEDGE_SILO_SCORE}
- * (a share whose denominator is not stored). Those use {@link Reduction#WIDEST_WINDOW}:
- * one stored window is reported verbatim rather than silently reduced, and the caller
- * labels the figure with that window.
- *
- * <p>Cross-repository rows sharing one window are combined first, with the same
- * operation, so a multi-repo user yields one value per window before windows combine.
+ * <p>How several stored windows combine is a property of the metric, not the query — see
+ * {@link Reduction}. Cross-repository rows sharing a window are combined first, so one value
+ * per window reaches the reduction.</p>
  */
 @Service
 public class AggregateWindowResolver {
@@ -41,7 +31,7 @@ public class AggregateWindowResolver {
     public enum Reduction {
         /** Medians of sub-windows; the median of them is the honest summary. */
         MEDIAN,
-        /** Ratios; the mean is biased because numerator and denominator are not stored, but bounded. */
+        /** Ratios; the mean is biased because the denominator is not stored, but bounded. */
         MEAN,
         /** Counts; sub-window counts are disjoint and add up. */
         SUM,
@@ -49,15 +39,7 @@ public class AggregateWindowResolver {
         WIDEST_WINDOW
     }
 
-    /**
-     * Every metric type stored in AGGREGATE shape, and how it reduces.
-     *
-     * <p>Exposed through {@link #periodStoredTypes()} so {@code AggregateStorageShapeDriftTest}
-     * can assert this key set equals the set of types the calculators actually write periods
-     * for. That drift check is the regression guard for TASK 01: the {@code aggregatePeriod}
-     * flag marked five types while thirteen were period-stored, and every read path that
-     * trusted the flag silently dropped the other eight.
-     */
+    /** Every metric type stored in AGGREGATE shape, and how it reduces. */
     static final Map<MetricType, Reduction> REDUCTIONS;
 
     static {
@@ -98,10 +80,7 @@ public class AggregateWindowResolver {
         return rows.stream().filter(s -> s.getPeriodFrom() == null).toList();
     }
 
-    /**
-     * Every metric type stored in AGGREGATE shape. The drift test asserts this equals the
-     * set of types the calculators actually write a period for.
-     */
+    /** Every metric type stored in AGGREGATE shape; the drift test asserts the calculators agree. */
     public Set<MetricType> periodStoredTypes() {
         return REDUCTIONS.keySet();
     }
@@ -117,9 +96,8 @@ public class AggregateWindowResolver {
     }
 
     /**
-     * One value per stored window, oldest first, with cross-repository rows already
-     * combined. Used where the read side wants a series rather than a single figure —
-     * the AI context computes min, max, median, trend and anomaly over exactly this.
+     * One value per stored window, oldest first, with cross-repository rows already combined.
+     * Used where the read side wants a series rather than a single figure.
      */
     public List<WindowValue> perWindow(List<MetricSnapshot> aggregateRows, MetricType type) {
         Reduction reduction = REDUCTIONS.getOrDefault(type, Reduction.MEDIAN);
@@ -132,8 +110,7 @@ public class AggregateWindowResolver {
                         .computeIfAbsent(List.of(s.getPeriodFrom(), s.getPeriodTo()), k -> new ArrayList<>())
                         .add(s.getValue()));
 
-        // WIDEST_WINDOW metrics are not decomposable across windows, but rows sharing one
-        // window differ only by repository, so combining those is still sound: take the median.
+        // Rows sharing a window differ only by repository, so WIDEST_WINDOW can still median them.
         Reduction crossRepo = reduction == Reduction.WIDEST_WINDOW ? Reduction.MEDIAN : reduction;
 
         return byWindow.entrySet().stream()
@@ -143,9 +120,8 @@ public class AggregateWindowResolver {
     }
 
     /**
-     * The single figure for these rows and the window it covers. Empty when there is
-     * nothing stored, which the caller reports as "no data" rather than as zero over
-     * the requested window.
+     * The single figure for these rows and the window it covers. Empty when nothing is stored,
+     * which the caller reports as "no data" rather than as zero.
      */
     public Optional<ResolvedAggregate> resolve(List<MetricSnapshot> aggregateRows, MetricType type) {
         List<WindowValue> windows = perWindow(aggregateRows, type);

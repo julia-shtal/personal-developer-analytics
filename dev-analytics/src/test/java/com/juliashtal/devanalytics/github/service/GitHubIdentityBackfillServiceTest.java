@@ -32,13 +32,9 @@ import static org.mockito.Mockito.*;
 /**
  * Acceptance tests for the per-repository identity backfill.
  *
- * <p>This is the only path that reaches records collected before attribution existed. Every ingest
- * path is incremental — commit ingest skips hashes it holds, the PR collector skips PRs whose
- * {@code updated_at} has not moved, review enrichment never re-runs a merged PR that is already
- * {@code COMPLETE} — so without these steps the whole history stays unattributed.
- *
- * <p>Each step is idempotent: rows already carrying the right id are skipped without a write, so a
- * retry after a partial failure costs API calls and nothing else.
+ * <p>The only path that reaches records collected before attribution existed, since every ingest
+ * path is incremental and never revisits them. Each step is idempotent — rows already carrying
+ * the right id are skipped without a write — so a retry costs API calls and nothing else.</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)

@@ -21,18 +21,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 /**
  * Acceptance tests for commit attribution.
  *
- * <p>The metric this guards is the one the change exists for: matching commits against the single
- * account email dropped 99 of 276 commits (36%) on the reference installation, because commits made
- * through the GitHub web UI carry a {@code users.noreply.github.com} alias rather than the address
- * on the profile.
- *
- * <p>Run against the real schema rather than mocks. The predicate is a disjunction over a nullable
- * bigint and a {@code lower()} expression, and its whole point is how SQL evaluates it: a mocked
- * repository would assert only that the calculator passed the arguments it was told to.
- *
- * <p>Fixture conventions follow {@code EarliestActivityQueryTest} — JdbcTemplate inserts stating the
- * exact column values, and {@code author_date} bound as a UTC {@link LocalDateTime} because the
- * column is still {@code TIMESTAMP WITHOUT TIME ZONE}.
+ * <p>Run against the real schema rather than mocks: the predicate is a disjunction over a nullable
+ * bigint and a {@code lower()} expression, so what matters is how SQL evaluates it. Fixture
+ * conventions follow {@code EarliestActivityQueryTest}.</p>
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -59,13 +50,11 @@ class CommitAttributionQueryTest {
         Long dataSourceId = insertDataSource(userId);
         repoId = insertRepo(dataSourceId, "attribution-fixture-" + System.nanoTime());
 
-        // 1. Collected from GitHub with an address A never declared -- the noreply-alias case.
-        //    Only author_github_id can attribute this one.
+        // 1. From GitHub with an undeclared address: only author_github_id can attribute it.
         insertCommit("c-gh-undeclared", "49405289+a@users.noreply.github.com", A_GITHUB_ID);
 
-        // 2. A local JGit commit, and deliberately in different case from the declared address.
-        //    Local commits never carry a GitHub id, so only the email path can match it, and it
-        //    matches only because both sides are lower-cased.
+        // 2. A local JGit commit, in different case: no GitHub id, so only the lower-cased
+        //    email path can match it.
         insertCommit("c-local-a-uppercase", "A@X.org", null);
 
         // 3. A local commit by B.
@@ -98,10 +87,8 @@ class CommitAttributionQueryTest {
 
     @Test
     void aggregateCommitsDailyByRepoIdsAndIdentity_githubIdButNoDeclaredEmails_matchesOnIdWithoutSqlError() {
-        // Hibernate renders an empty collection parameter as `in ()`, which PostgreSQL rejects,
-        // so CalcUtils.emailsOrSentinel substitutes an unmatchable value. Both halves matter and
-        // both have failed here: the clause has to be valid SQL *and* match nothing, leaving the
-        // author_github_id branch to return the one GitHub-linked commit on its own.
+        // Hibernate renders an empty collection as `in ()`, which PostgreSQL rejects, so
+        // CalcUtils.emailsOrSentinel substitutes a value that is valid SQL and matches nothing.
         assertThatCode(() -> commitsFor(A_GITHUB_ID, Set.of())).doesNotThrowAnyException();
         assertThat(commitsFor(A_GITHUB_ID, Set.of())).isEqualTo(1);
     }

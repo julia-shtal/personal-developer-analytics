@@ -19,12 +19,8 @@ import java.util.List;
 /**
  * The four migration steps, in order, on a pool thread.
  *
- * <p>A separate bean from {@link AttributionMigrationService} so {@code @Async} actually applies:
- * calling an annotated method from within the same bean bypasses the Spring proxy and would run
- * the whole migration synchronously on the request thread.
- *
- * <p>Every step is idempotent and the run as a whole is resumable — see
- * {@link AttributionMigrationService} for why that matters more here than atomicity.
+ * <p>A separate bean from {@link AttributionMigrationService} so {@code @Async} actually applies —
+ * a self-invocation would bypass the Spring proxy and run synchronously on the request thread.</p>
  */
 @Component
 @RequiredArgsConstructor
@@ -68,9 +64,8 @@ public class AttributionMigrationJob {
             try {
                 authorIdentityService.setGithubIdentity(user.getId(), user.getGithubLogin());
             } catch (RuntimeException e) {
-                // A login that no longer exists, or one another user already holds, is a fact
-                // about the data rather than a reason to stop: that user keeps matching through
-                // their declared addresses, and the remaining users still get resolved.
+                // A dead or already-claimed login is data, not a failure: that user keeps
+                // matching through their declared addresses and the rest still resolve.
                 log.warn("Could not resolve the GitHub login for userId={}: {}",
                         user.getId(), e.getMessage());
             }
@@ -93,9 +88,7 @@ public class AttributionMigrationJob {
                 githubBackfill.refreshReviews(repo);
                 githubBackfill.backfillIssues(repo);
 
-                // Stamped only after all four succeeded: the marker is the job's only durable
-                // progress record, and setting it early would permanently skip a repository
-                // whose records were never finished.
+                // Stamped only after all four succeeded; the marker is the only durable progress.
                 repo.setIdentityBackfilledAt(Instant.now());
                 repoRepository.save(repo);
                 log.info("Attribution migration: {} complete", repo.getName());

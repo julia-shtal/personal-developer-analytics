@@ -6,18 +6,11 @@ import java.time.LocalDate;
  * Outcome of one backfill pass over a user's coverage gap.
  *
  * @param daysComputed  days this run calculated; zero when nothing was missing
- * @param daysRemaining days still missing after this run — the number the per-run cap deferred
- *                      (plus any block that failed), and therefore what the next run picks up
- * @param coverageFrom  first day of the target range (earliest collected activity), or
- *                      {@code null} when there is no target range at all. Three distinct cases
- *                      collapse into that null: the user has no repository in scope, the scope
- *                      holds no collected commit, pull request or issue, or all collected
- *                      activity falls after the range's last day — history collected today,
- *                      which nothing is due to compute until tomorrow. Readers presenting this
- *                      to a user cannot tell "no data" from "nothing due yet" from this field
- *                      alone.
- * @param coverageTo    last day of the target range (yesterday in the user's zone), or
- *                      {@code null} in the same three cases
+ * @param daysRemaining days still missing after this run, and so what the next run picks up
+ * @param coverageFrom  first day of the target range, or {@code null} when there is no range —
+ *                      no repository in scope, nothing collected, or nothing due yet, which this
+ *                      field alone cannot tell apart
+ * @param coverageTo    last day of the target range (yesterday), or {@code null} likewise
  */
 public record BackfillResult(
         long daysComputed,

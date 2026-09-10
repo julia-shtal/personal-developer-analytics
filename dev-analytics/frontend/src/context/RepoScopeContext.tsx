@@ -29,17 +29,12 @@ export function RepoScopeProvider({ children }: { children: ReactNode }) {
     staleTime: 5 * 60_000,
   });
 
-  // The persisted id outlives the repo it points at: deleting a data source,
-  // unsubscribing, losing team access, or recreating the database all leave a scope
-  // that no longer resolves. Nothing downstream notices — RepoSelector finds no
-  // matching option and falls back to displaying "all repos", while every metric
-  // request still carries the dead id and comes back 404. Drop the scope as soon as
-  // the repo list proves the id is gone, so the UI and the requests agree again.
+  // A persisted id can outlive the repo it points at, leaving the selector showing
+  // "all repos" while every metric request still carries the dead id and 404s. Drop the
+  // scope once the repo list proves the id is gone.
   //
-  // Only a loaded list is evidence: `repos` stays undefined while the query is in
-  // flight or has failed, and clearing on that would discard a valid scope whenever
-  // the network hiccups. An empty array is a real answer — no accessible repos — and
-  // does clear.
+  // Only a loaded list counts as evidence: `repos` is undefined while in flight or failed,
+  // and clearing on that would discard a valid scope. An empty array is a real answer.
   useEffect(() => {
     if (repoId != null && repos && !repos.some((r) => r.id === repoId)) {
       setRepoId(null);

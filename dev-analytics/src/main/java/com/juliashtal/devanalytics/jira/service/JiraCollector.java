@@ -59,9 +59,8 @@ public class JiraCollector {
 
     @Transactional
     public int collectIssues(JiraProjectEntity project) {
-        // Re-fetch so the entity is managed in this session's persistence context.
-        // The caller loaded `project` in a separate transaction; using a detached entity
-        // as a @ManyToOne target causes a DetachedObjectException on flush in Hibernate 6.
+        // Re-fetch so the entity is managed here: the caller loaded it in another transaction,
+        // and a detached @ManyToOne target throws DetachedObjectException on flush in Hibernate 6.
         project = jiraProjectRepository.getReferenceById(project.getId());
         DataSourceConfig config = project.getDataSource();
         String baseUrl = config.getBaseUrl();
@@ -86,8 +85,7 @@ public class JiraCollector {
 
         project.setLastScanAt(Instant.now());
 
-        // Links the token owner's Jira account to the data source owner, so a user who
-        // connected Jira with their own token never has to type an accountId. A no-op when
+        // Links the token owner's Jira account so they never type an accountId. A no-op when
         // they already have one, or when another user holds it.
         if (config.getUser() != null) {
             authorIdentityService.claimJiraAccountIdIfAbsent(config.getUser().getId(), accountId);
@@ -171,20 +169,13 @@ public class JiraCollector {
     }
 
     /**
-     * JQL for the whole project, with no assignee clause.
+     * JQL for the whole project, with no assignee clause: attribution happens in the metric
+     * queries against each issue's stored accountId, so collection must return every issue.
      *
-     * <p>The filter used to be {@code assignee = <token owner's accountId>}, which made the
-     * stored rows depend on whose token happened to collect them. The canonical project row is
-     * collected once, with its owner's token, so every other subscriber was credited with the
-     * owner's issues. Attribution now happens in the metric queries against each issue's stored
-     * accountId, which means collection has to bring back the whole project.
-     *
-     * <p>The key is validated rather than escaped: it is interpolated into JQL, and Jira project
-     * keys are uppercase alphanumerics by definition, so anything else is a bug or an injection
-     * attempt. Quoting the key additionally keeps reserved words from being parsed as operators.
+     * <p>The key is validated rather than escaped because it is interpolated into JQL; quoting it
+     * also keeps reserved words from parsing as operators.</p>
      */
-    // Package-private rather than private so JiraCollectorJqlTest can assert the clause
-    // directly; the collector's only other entry point would need a live Jira to reach it.
+    // Package-private so JiraCollectorJqlTest can assert the clause without a live Jira.
     String buildJql(String projectKey) {
         if (projectKey == null || !PROJECT_KEY_PATTERN.matcher(projectKey).matches()) {
             throw new IllegalStateException("Invalid Jira project key: " + projectKey);
@@ -200,8 +191,7 @@ public class JiraCollector {
         }
     }
 
-    // Package-private for JiraIssueUpsertTest: the only other route here is a live Jira,
-    // and storing both accountIds is what makes Jira issues attributable at all.
+    // Package-private for JiraIssueUpsertTest; the only other route here is a live Jira.
     void upsertJiraIssue(JiraProjectEntity project, JiraSearchResponse.JiraIssue jiraIssue) {
         String sourceIssueKey = jiraIssue.getKey();
 

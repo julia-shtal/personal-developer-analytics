@@ -11,15 +11,9 @@ import java.time.LocalDate;
 /**
  * The incremental daily job: computes yesterday's personal metrics for every user.
  *
- * <p>Gap recovery is deliberately not here. This job used to detect gaps from
- * {@code MAX(metric_snapshots.date)} and cap the recovered window at 30 days — but moving the
- * window start forward left the excluded days behind a watermark that the same run then
- * advanced past, so they were never revisited by any later run. Recovery moved to
- * {@link MetricBackfillScheduler}, which subtracts the {@code metric_coverage} ledger from the
- * user's collected history and therefore resumes rather than truncates.
- *
- * <p>Coverage for the day computed here is recorded by
- * {@link MetricsService#calculateDailyMetrics}, so this class holds no ledger logic of its own.
+ * <p>Gap recovery belongs to {@link MetricBackfillScheduler}, which resumes from the
+ * {@code metric_coverage} ledger rather than a watermark. Coverage for the day computed here is
+ * recorded by {@link MetricsService#calculateDailyMetrics}, so this class holds no ledger logic.</p>
  */
 @Component
 @RequiredArgsConstructor

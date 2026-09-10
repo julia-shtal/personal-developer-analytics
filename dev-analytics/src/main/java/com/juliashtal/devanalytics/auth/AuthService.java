@@ -76,13 +76,10 @@ public class AuthService {
      * Declares the registration address as the new user's first commit email, so their commits
      * are attributed from the very first collection without them configuring anything.
      *
-     * <p>Only a seed: {@code AuthorIdentityResolver} reads the table and never the account
-     * email, so changing the account address later does not move attribution, and removing the
-     * seeded row is a supported way to stop matching on it.
-     *
-     * <p>Publishes no {@code AuthorIdentityChangedEvent} -- a user created one statement ago has
-     * no metrics to invalidate -- and skips silently when another account already holds the
-     * address, since registration is the wrong place to surface an ownership conflict.
+     * <p>Only a seed: the resolver reads the table and never the account email, so changing the
+     * account address later does not move attribution. Publishes no event — a user created one
+     * statement ago has no metrics to invalidate — and skips silently when another account
+     * already holds the address.</p>
      */
     private void seedCommitEmail(User user) {
         if (user.getEmail() == null || user.getEmail().isBlank()) return;

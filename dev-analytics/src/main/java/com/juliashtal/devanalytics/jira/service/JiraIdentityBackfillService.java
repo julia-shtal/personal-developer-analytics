@@ -24,8 +24,7 @@ public class JiraIdentityBackfillService implements JiraIdentityBackfill {
             try {
                 total += jiraCollector.collectIssues(project);
             } catch (RuntimeException e) {
-                // One unreachable Jira instance must not stop the others. The issues keep their
-                // null accountIds and simply match nobody until the next run.
+                // One unreachable Jira instance must not stop the others; those issues match nobody for now.
                 log.error("Jira identity backfill failed for projectId={}", project.getId(), e);
             }
         }

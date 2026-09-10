@@ -41,9 +41,7 @@ public class GitHubAccountLookupImpl implements GitHubAccountLookup {
     public Optional<GitHubAccount> findByLogin(Long userId, String login) {
         if (login == null || login.isBlank()) return Optional.empty();
 
-        // The user's own GitHub data source supplies the base URL (GitHub Enterprise installs
-        // resolve logins against their own host, not github.com) and a token that lifts the
-        // unauthenticated rate limit. Neither is required: the public API answers this anonymously.
+        // The user's data source supplies the Enterprise base URL and a token; neither is required.
         DataSourceConfig config = ownGithubSource(userId).orElse(null);
         String apiBase = resolveApiBase(config != null ? config.getBaseUrl() : null);
         String token   = config != null ? clientFactory.getDecryptedToken(config) : null;
@@ -51,9 +49,7 @@ public class GitHubAccountLookupImpl implements GitHubAccountLookup {
         String url = apiBase + "/users/" + URLEncoder.encode(login.trim(), StandardCharsets.UTF_8);
         HttpResponse<String> response = send(url, token, "resolve GitHub login");
 
-        // 404 is the only status that means "no such account". Everything else -- 403 rate limit,
-        // 401 bad token, 5xx -- is a lookup that did not complete, and answering "not found" to
-        // those would let a transient failure silently unlink a correct identity.
+        // Only 404 means "no such account"; answering it for 403/401/5xx would unlink a correct identity.
         if (response.statusCode() == 404) return Optional.empty();
         if (response.statusCode() != 200) {
             throw new GitHubException("GitHub returned " + response.statusCode() + " while resolving a login");

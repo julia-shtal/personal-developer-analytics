@@ -122,12 +122,10 @@ public class DataSeeder implements ApplicationRunner {
      * Seeds {@link #WEEKS} whole ISO calendar weeks ending with the last complete week
      * before today.
      *
-     * <p>The windows are anchored on an ISO Monday rather than on yesterday, so the seeded
-     * aggregate rows carry the same grain {@code MetricsService} writes. A rolling window
-     * anchored on yesterday would produce periods no ISO-week read resolves cleanly, and
-     * V58 — which deletes non-week-aligned rows for the five {@code aggregatePeriod} types
-     * — would delete them on the next upgrade of an already-seeded demo database, with no
-     * way to regenerate them: the seeder skips entirely once the demo user exists.
+     * <p>Anchored on an ISO Monday rather than on yesterday, so the seeded aggregate rows carry
+     * the same grain {@code MetricsService} writes. Misaligned rows would be deleted by the
+     * week-alignment migration and could not be regenerated, since the seeder skips entirely
+     * once the demo user exists.</p>
      */
     private void seedMetrics(User user, User teammate, Team team, GitRepositoryEntity repo) {
         LocalDate lastCompleteWeekStart = LocalDate.now().with(DayOfWeek.MONDAY).minusWeeks(1);

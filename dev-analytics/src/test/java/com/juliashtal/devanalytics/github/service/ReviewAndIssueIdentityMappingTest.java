@@ -36,12 +36,9 @@ import static org.mockito.Mockito.*;
  * Acceptance tests for identity capture on reviews and GitHub issues — the two record types the
  * first ingest-mapping pass did not cover directly.
  *
- * <p>Reviews matter twice over: {@code reviewer_github_id} is what review participation counts on,
- * and it is also what the self-review exclusion compares. Comparing logins let a self-review slip
- * through whenever the author and reviewer rows spelled the same account differently.
- *
- * <p>GitHub issues previously stored only creator and assignee logins, which is why issue metrics
- * had no usable author filter and credited every subscriber with every issue in the repository.
+ * <p>{@code reviewer_github_id} is what review participation counts on and what the self-review
+ * exclusion compares, and the creator/assignee ids are what give issue metrics an author filter
+ * at all.</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)

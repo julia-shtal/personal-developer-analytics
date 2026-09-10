@@ -18,15 +18,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Acceptance tests for issue attribution, including the team N× regression.
  *
- * <p>These queries previously had no author filter at all: every issue in the repo scope counted
- * for every user. GitHub issues are collected repo-wide, so each subscriber was credited with
- * everyone's issues, and {@code buildTeamDailySeries} summed the members — making a team's
- * {@code DAILY_ISSUES_CLOSED} N times the real value for an N-member team.
- *
- * <p>The queries are native, route GitHub and Jira issues through one {@code COALESCE} join, and
- * bind nullable parameters through {@code CAST}. All three are reasons to exercise the real schema.
- *
- * <p>Created counts follow the reporter/creator; closed counts and lead time follow the assignee.
+ * <p>Without a per-author filter a repo-wide issue counts for every subscriber, and
+ * {@code buildTeamDailySeries} then sums the members into an N× team total — the regression the
+ * last test pins. The queries are native, join GitHub and Jira through one {@code COALESCE}, and
+ * CAST nullable parameters, so they are exercised against the real schema. Created counts follow
+ * the creator; closed counts and lead time follow the assignee.</p>
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -98,7 +94,6 @@ class IssueAttributionQueryTest {
 
     @Test
     void aggregateIssuesCreatedDailyByRepoIdsAndIdentity_subscriberWithNoIdentity_getsNoRows() {
-        // The old behaviour: a subscriber to the repo was credited with every issue in it.
         // Both parameters null must bind as typed NULLs and match nothing, not everything.
         assertThat(created(null, null)).isZero();
         assertThat(closed(null, null)).isZero();
@@ -106,9 +101,8 @@ class IssueAttributionQueryTest {
 
     @Test
     void aggregateIssuesClosedDailyByRepoIdsAndIdentity_summedOverTeamMembers_equalsDistinctIssues() {
-        // The N× regression, stated the way the team dashboard computes it: buildTeamDailySeries
-        // sums each member's series. With per-member attribution that sum equals the number of
-        // distinct issues the team closed. Unfiltered, a 3-member team reported 6 for these 2.
+        // The N× regression as the dashboard computes it: summing each member's series must
+        // equal the distinct issues the team closed, not N times them.
         long teamAggregate = closed(A_GITHUB_ID, A_JIRA)
                 + closed(B_GITHUB_ID, B_JIRA)
                 + closed(303L, "jira-account-c");
@@ -142,9 +136,7 @@ class IssueAttributionQueryTest {
     }
 
     // -------------------------------------------------------------------------
-    // Fixtures — see EarliestActivityQueryTest for the schema constraints these satisfy
-    // (NOT NULL data_source_id, repo_type vs local_path, NOT NULL issues.source,
-    // base_url required for non-GIT_LOCAL types, NOT NULL base_url_normalized).
+    // Fixtures — see EarliestActivityQueryTest for the schema constraints these satisfy.
     // -------------------------------------------------------------------------
 
     private Long insertUser() {

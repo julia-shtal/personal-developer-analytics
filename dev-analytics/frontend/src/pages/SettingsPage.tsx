@@ -207,9 +207,8 @@ export function SettingsPage() {
     },
     onError: (err: unknown) => {
       const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
-      // 422 means GitHub answered "no such login"; 409 means the account or Jira id is already
-      // linked elsewhere. Anything else keeps the server's message, including the 502 raised
-      // when GitHub could not be reached at all -- which must not read as "login not found".
+      // 422 is "no such login", 409 is "already linked elsewhere". Anything else keeps the
+      // server's message, so a 502 does not read as "login not found".
       const msg =
         res?.status === 422 ? 'GitHub login not found.'
         : res?.status === 409 ? 'Already linked to another account.'

@@ -133,9 +133,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({NoSuchElementException.class, NotFoundException.class})
     public ResponseEntity<ApiError> handleNotFound(
             RuntimeException ex, HttpServletRequest request) {
-        // DEBUG, matching handleNoResource below: a 404 reports a bad client-supplied id, not a
-        // server fault. At WARN a single stale identifier reused across a dashboard's requests
-        // buries real warnings under one line per request.
+        // DEBUG, like handleNoResource: a 404 is a bad client id, and at WARN one stale id floods the log.
         log.debug("Resource not found on {}: {}", request.getRequestURI(), ex.getMessage());
         return build(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), request);
     }

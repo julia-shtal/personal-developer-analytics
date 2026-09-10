@@ -229,9 +229,8 @@ describe('DashboardPage — backfill coverage chips', () => {
 
     render(<DashboardPage />, { wrapper: Wrapper });
 
-    // The "metrics through" chip proves freshness resolved, so the absence below is a real
-    // assertion about daysRemaining === 0 rather than a race against an unresolved query.
-    // A truthiness bug that rendered "0 day(s)…" would fail here.
+    // The "metrics through" chip proves freshness resolved, so the absence below asserts
+    // daysRemaining === 0 rather than racing an unresolved query.
     await screen.findByText('metrics through 2026-06-30');
     expect(screen.queryByText(/day\(s\) of history still computing/)).not.toBeInTheDocument();
   });

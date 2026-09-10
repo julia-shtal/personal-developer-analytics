@@ -37,23 +37,12 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     // -------------------------------------------------------------------------
     // Repo-scoped, author-filtered variants.
     //
-    // These previously had no author filter at all: every issue in the repo scope was counted
-    // for every user. GitHub issues are collected repo-wide, so each subscriber was credited
-    // with everyone's issues, and the team rollup summed the members -- making the team's
-    // DAILY_ISSUES_CLOSED N times the real value for an N-member team.
+    // Filtered per source, because GitHub identifies people by numeric account ID and Jira by
+    // accountId string; a user linked to neither matches nothing.
     //
-    // The filter is per source because the two systems identify people differently: GitHub by
-    // numeric account ID, Jira by accountId string. A user linked to only one of them matches
-    // only that source's issues, and a user linked to neither matches nothing.
-    //
-    // Nullable bind parameters are CAST explicitly: these are native queries, and PostgreSQL
-    // cannot infer a type for a bare NULL parameter in a comparison.
-    //
-    // COALESCE(i.repository_id, rm.repository_id) routes both
-    // GitHub issues (direct repository_id FK) and Jira issues (via
-    // jira_project_repo_mappings) through the same repo-scoped aggregation.
-    // Native SQL is used because JPQL cannot express the LEFT JOIN + COALESCE
-    // pattern across nullable FKs from two different sources cleanly.
+    // Native SQL: COALESCE(i.repository_id, rm.repository_id) routes GitHub and Jira issues
+    // through one repo-scoped filter, which JPQL cannot express across nullable FKs. Nullable
+    // bind parameters are CAST explicitly, since PostgreSQL cannot type a bare NULL.
     // -------------------------------------------------------------------------
 
     @Query(value = """
@@ -118,10 +107,8 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
             @Param("to") Instant to);
 
     /**
-     * Oldest issue in the given repository scope. Native for the same reason as the other
-     * issue queries here: COALESCE over the nullable repository_id / jira_project_id FKs is
-     * what routes GitHub issues and Jira issues through one repo-scoped filter, and JPQL
-     * cannot express the LEFT JOIN cleanly.
+     * Oldest issue in the given repository scope. Native for the same reason as the other issue
+     * queries here: JPQL cannot express the COALESCE over the two sources' nullable FKs.
      */
     @Query(value = """
     SELECT MIN(i.created_at)

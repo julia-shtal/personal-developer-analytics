@@ -34,9 +34,8 @@ public class User {
     private String githubLogin;
 
     /**
-     * Numeric GitHub account ID behind {@link #githubLogin}. Stable across renames and unique
-     * per account, so this -- not the login -- is what PR, review and issue metrics match on.
-     * Null until the login is resolved; a null identity attributes nothing rather than everything.
+     * Numeric GitHub account ID behind {@link #githubLogin}, and what PR, review and issue
+     * metrics match on. Null until resolved, which attributes nothing rather than everything.
      */
     @Column(name = "github_user_id")
     private Long githubUserId;

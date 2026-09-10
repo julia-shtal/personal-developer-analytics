@@ -119,9 +119,8 @@ class GitHubAccountLookupImplTest {
 
     @Test
     void findByLogin_userWithOwnGithubSource_sendsItsTokenAndUsesItsBaseUrl() {
-        // The base URL matters for GitHub Enterprise, where logins resolve against the customer's
-        // own host; the token lifts the unauthenticated rate limit. Both come from the user's
-        // data source, which is why the lookup takes a user id rather than just a login.
+        // Both the Enterprise base URL and the rate-limit-lifting token come from the user's data
+        // source, which is why the lookup takes a user id rather than just a login.
         when(dataSourceConfigRepository.findAllByUserId(1L)).thenReturn(List.of(githubSource()));
         stubFor(get(urlPathEqualTo("/users/octocat"))
                 .willReturn(okJson("{\"id\": 7, \"login\": \"octocat\"}")));

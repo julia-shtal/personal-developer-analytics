@@ -193,10 +193,8 @@ public class GitHubPrStatsEnrichmentService {
     /**
      * Re-fetches one PR's reviews and replaces the stored rows.
      *
-     * <p>Extracted verbatim from {@link #enrichSingle}, which still calls it: same fetch, same
-     * delete-then-insert, same ordering. Exposed so the attribution backfill can refresh reviews
-     * for a PR whose stats are already {@code COMPLETE} — enrichment never revisits those, so
-     * the reviewer IDs on historical rows would otherwise stay null forever.
+     * <p>Shared with {@link #enrichSingle}. Exposed so the attribution backfill can refresh
+     * reviews for a PR already {@code COMPLETE}, which enrichment never revisits.</p>
      */
     void refreshReviews(GitHubPullRequestEntity pr, String apiBase, String token, String repoFullName)
             throws IOException, InterruptedException {

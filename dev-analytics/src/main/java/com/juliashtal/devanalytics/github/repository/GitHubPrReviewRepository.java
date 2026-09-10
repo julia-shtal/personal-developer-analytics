@@ -35,16 +35,10 @@ public interface GitHubPrReviewRepository extends JpaRepository<GitHubPrReviewEn
      * Counts distinct PRs reviewed by the given GitHub account within the time window,
      * scoped to the given repository IDs, excluding self-reviews.
      *
-     * <p>Both the reviewer match and the self-review exclusion compare numeric account IDs.
-     * Comparing logins made the exclusion fail whenever the author and reviewer rows spelled
-     * the same account differently, which silently credited a self-review.</p>
-     *
-     * <p>Bot reviewer accounts cannot appear because the query is already scoped to the
-     * specific user's GitHub account, which is a registered human account. Ingestion
-     * preserves raw review records for audit.</p>
-     *
-     * <p>Uses distinct PR ID to avoid counting multiple reviews on the same PR. The {@code to}
-     * bound is exclusive so adjacent calculation windows do not double-count.</p>
+     * <p>Reviewer match and self-review exclusion both compare numeric account IDs, so differing
+     * spellings cannot credit a self-review. Distinct PR ID avoids counting two reviews of one PR,
+     * and the {@code to} bound is exclusive so adjacent windows do not double-count. Bots cannot
+     * appear: the query is scoped to one registered human account.</p>
      */
     @Query("""
             SELECT COUNT(DISTINCT r.pullRequest.id)

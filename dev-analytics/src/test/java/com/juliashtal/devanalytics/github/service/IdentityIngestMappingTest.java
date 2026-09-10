@@ -28,17 +28,10 @@ import static org.mockito.Mockito.*;
 /**
  * Acceptance tests for identity capture at ingest.
  *
- * <p>The commit case is the one the whole change turns on. GitHub's commit-list JSON carries two
- * different notions of author: {@code commit.author}, the raw Git trailer the committer configured
- * locally, and a top-level {@code author} object holding the account GitHub itself resolved from
- * that address. The ingest read only the first and passed over the second, which is why commits
- * made through the web UI — carrying a {@code users.noreply.github.com} alias — could not be
- * attributed to anyone.
- *
- * <p>The null case is equally load-bearing: {@code author} is null whenever the commit address
- * belongs to no GitHub account, and storing anything but null for it would invent an attribution.
- *
- * <p>HTTP is stubbed with WireMock, following {@code GitHubCommitIngestServiceTest}.
+ * <p>GitHub's commit JSON carries two notions of author: {@code commit.author}, the raw Git
+ * trailer, and a top-level {@code author}, the account GitHub resolved from it. Both are captured,
+ * and the null case matters equally — storing anything but null would invent an attribution.
+ * HTTP is stubbed with WireMock, following {@code GitHubCommitIngestServiceTest}.</p>
  */
 @ExtendWith(MockitoExtension.class)
 @WireMockTest

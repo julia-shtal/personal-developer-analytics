@@ -74,9 +74,8 @@ describe('Modal accessibility', () => {
   });
 });
 describe('Modal focus stability', () => {
-  // Mirrors the real usage in TeamManagePage/AdminPage/SettingsPage: the component
-  // that owns the input state also creates the onClose closure, so onClose gets a
-  // fresh identity on every keystroke-triggered re-render.
+  // Mirrors real usage: the component owning the input state also creates the onClose
+  // closure, so onClose gets a fresh identity on every keystroke re-render.
   function Host() {
     const [value, setValue] = useState('');
     return (

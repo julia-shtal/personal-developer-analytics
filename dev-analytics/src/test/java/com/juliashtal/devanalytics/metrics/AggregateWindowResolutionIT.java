@@ -20,16 +20,13 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Exercises the window-resolution queries against a real database, which is the half of
- * TASK 01 that unit tests mock away: the bug was in a JPQL predicate, not in Java.
+ * Exercises the window-resolution queries against a real database, since the predicate they turn
+ * on is JPQL rather than Java and unit tests mock it away.
  *
- * <p>The scenario is the one that shipped broken — a user whose metrics exist only because
- * the nightly job ran, then a weekly pass, asked for a seven-day AI context. The context
- * must carry all twelve metric types; before the fix the five period-stored ones matched
- * no exact period and were dropped from every scheduled summary.
- *
- * <p>The LLM is deliberately not involved: this asserts the context the model would be
- * given, not the text it would return. Needs the project Postgres ({@code docker-compose up -d}).
+ * <p>The scenario is a user whose metrics come from the nightly job plus a weekly pass, asking for
+ * a seven-day AI context: it must carry all twelve metric types, period-stored ones included. The
+ * LLM is not involved — this asserts the context, not the text. Needs the project Postgres
+ * ({@code docker-compose up -d}).</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Transactional

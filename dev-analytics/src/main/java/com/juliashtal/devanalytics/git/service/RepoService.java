@@ -35,17 +35,9 @@ public class RepoService {
      * paths. A repo they cannot reach is reported as not found, whether or not it exists.
      *
      * <p>Entitlement comes from the {@code user_accessible_repos} view, the same source
-     * {@link #listAccessible} uses, so what this admits and what the selector offers cannot
-     * drift apart. A hand-rolled owned-or-subscribed test would omit the view's TEAM branch
-     * and refuse a team member any repo they had not also subscribed to individually — a repo
-     * the selector had just listed for them.
-     *
-     * <p>Entitlement is checked before the row is loaded, and failure raises the same
-     * not-found error {@link #getById} would, so a repo belonging to someone else is
-     * indistinguishable from one that never existed. Answering "forbidden" for the first and
-     * "not found" for the second would confirm which ids are real to any caller willing to
-     * enumerate them. Both cases are equally unreachable for this user, so both get the same
-     * answer — and the honest one for the common case, a scope that went stale.
+     * {@link #listAccessible} uses, so admission and the selector cannot drift apart. Failure
+     * raises the same not-found error {@link #getById} would, so answering "forbidden" never
+     * confirms to an enumerating caller which ids are real.</p>
      */
     public GitRepositoryEntity getAccessibleRepo(Long userId, Long repoId) {
         if (!gitRepoRepository.existsAccessibleRepo(userId, repoId)) {
@@ -58,16 +50,9 @@ public class RepoService {
      * Returns the repo if it belongs to the given team's data sources; otherwise reports it as
      * not found, on the same reasoning as {@link #getAccessibleRepo}.
      *
-     * <p>Team endpoints ask a different question than personal ones. "Can this user reach the
-     * repo?" is the wrong test there: a manager reaches their own private repos too, and
-     * accepting one would filter a team series by a repository the team never worked in.
-     * The test that matches the endpoint is whether the repo is in the team's own scope, which
-     * is also exactly what {@code listAccessible(dataSourceId, teamId)} offers the team
-     * selector.
-     *
-     * <p>Callers must still enforce that the user may read the team itself — this answers only
-     * whether the repo belongs to it. On the team endpoints that guard is
-     * {@code @PreAuthorize("@teamAccessGuard.canRead(...)")}.
+     * <p>"Can this user reach the repo?" is the wrong test on team endpoints: a manager reaches
+     * their own private repos too. Callers must still enforce that the user may read the team —
+     * this answers only whether the repo belongs to it.</p>
      */
     public GitRepositoryEntity getTeamRepo(Long teamId, Long repoId) {
         if (!gitRepoRepository.existsByIdAndTeamId(repoId, teamId)) {

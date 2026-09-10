@@ -3,25 +3,13 @@ package com.juliashtal.devanalytics.user.model;
 import java.util.Set;
 
 /**
- * The stable identifiers a user is attributed by, resolved once per calculation run.
+ * The stable identifiers a user is attributed by, resolved once per calculation run: declared
+ * commit addresses, the numeric GitHub account ID, and the Jira accountId.
  *
- * <p>Three identifiers rather than one, because no single one covers every record:
- * <ul>
- *   <li>{@code commitEmails} — declared addresses. The only path for local JGit commits,
- *       which never pass through the GitHub API and so carry no account ID.</li>
- *   <li>{@code githubUserId} — GitHub's numeric account ID. Stable across login renames and
- *       unique by construction, so it is the attribution key for commits GitHub resolved,
- *       and for every PR, review and GitHub issue.</li>
- *   <li>{@code jiraAccountId} — the Jira accountId, for Jira issues.</li>
- * </ul>
- *
- * <p>Immutable and already normalised: addresses arrive trimmed and lower-cased, matching the
- * CHECK constraint on {@code user_commit_emails} and the {@code lower(author_email)} index.
- * Calculators must never normalise again or re-derive identities from names.
- *
- * <p>A missing identifier means "attribute nothing", never "attribute everything": a calculator
- * whose identifier is absent returns without writing, which is why the {@code has*} predicates
- * exist.
+ * <p>Immutable and already normalised, so calculators must never normalise again or re-derive an
+ * identity from a name. A missing identifier means "attribute nothing", never "attribute
+ * everything" — hence the {@code has*} predicates. Canonical rules: {@code
+ * docs/metrics/author-attribution.md}.</p>
  */
 public record AuthorIdentity(Set<String> commitEmails, Long githubUserId, String jiraAccountId) {
 

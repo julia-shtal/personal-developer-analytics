@@ -5,14 +5,9 @@ import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 /**
  * Fills the numeric identity columns on records collected before author attribution existed.
  *
- * <p>Needed because every ingest path is incremental: commit ingest skips hashes it already
- * holds, the PR collector skips PRs whose {@code updated_at} has not moved, and review
- * enrichment never re-runs for a merged PR that is already {@code COMPLETE}. A normal
- * collection run would therefore never revisit an existing row, and its ID columns would stay
- * null permanently — which is exactly the history the metrics need.
- *
- * <p>An interface so the migration job depends on the four steps rather than on GitHub
- * transport code. Each step is idempotent and safe to re-run after a partial failure.
+ * <p>Needed because every ingest path is incremental and so never revisits an existing row,
+ * leaving its ID columns null permanently. An interface so the migration job depends on the four
+ * steps rather than on GitHub transport code; each is idempotent and safe to re-run.</p>
  */
 public interface GitHubIdentityBackfill {
 

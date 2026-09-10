@@ -97,18 +97,14 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             @Param("to") LocalDate to);
 
     // -------------------------------------------------------------------------
-    // Window-resolution queries — route by the STORED ROW SHAPE, never by a list
-    // of metric types. A row is DAILY when period_from IS NULL and AGGREGATE when
-    // it is set (see MetricSnapshot's class javadoc). Keeping the shape test in
-    // the query is what stops the read path from having to know which types are
-    // period-stored — the disagreement that TASK 01 was raised for.
+    // Window-resolution queries — route by the STORED ROW SHAPE, never by a list of metric
+    // types. A row is DAILY when period_from IS NULL and AGGREGATE when it is set. Keeping the
+    // shape test in the query is what stops the read path needing to know which types those are.
     // -------------------------------------------------------------------------
 
     /**
-     * Every row for this metric that the requested window can honestly answer with:
-     * DAILY rows whose {@code date} falls in the window, plus AGGREGATE rows whose
-     * {@code [periodFrom, periodTo]} is fully contained by it. Callers partition the
-     * result by shape and reduce each part appropriately.
+     * Rows the requested window can honestly answer with: DAILY rows dated inside it, plus
+     * AGGREGATE rows whose {@code [periodFrom, periodTo]} it fully contains.
      */
     @Query("""
             SELECT s FROM MetricSnapshot s
@@ -142,11 +138,8 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             @Param("to") LocalDate to);
 
     /**
-     * AGGREGATE rows whose window fully covers the request. Fallback for requests
-     * narrower than the grain the metric was computed on — a three-day request
-     * against ISO-week rows contains nothing but is contained by one week. The
-     * caller reports the covering window, so the figure is never labelled with a
-     * window it was not computed over.
+     * AGGREGATE rows whose window fully covers the request — the fallback for a request narrower
+     * than the metric's grain. The caller reports the covering window, never the requested one.
      */
     @Query("""
             SELECT s FROM MetricSnapshot s
@@ -181,11 +174,7 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
 
-    /**
-     * Team-scoped equivalent of {@link #findPersonalInWindow} for the manager
-     * team summary. Replaces the plain date-between query that summed AGGREGATE
-     * rows across overlapping windows.
-     */
+    /** Team-scoped equivalent of {@link #findPersonalInWindow}, for the manager team summary. */
     @Query("""
             SELECT s FROM MetricSnapshot s
             WHERE s.user.id IN :userIds
@@ -257,13 +246,9 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
     /**
      * Deletes every snapshot belonging to a user, personal and team-scoped alike.
      *
-     * <p>Used when the user's attribution identity changes. Recalculating over the existing
-     * rows would not be enough: calculators upsert only the days that produced data and never
-     * delete, so a narrowed identity leaves behind rows the old identity produced, and the
-     * coverage ledger marks those days computed so the backfill never revisits them.
-     *
-     * <p>Team-scoped rows are removed too, because they were attributed with the same identity.
-     * They are not recomputed here — the next team calculation the manager runs rebuilds them.
+     * <p>Used when the attribution identity changes: calculators upsert and never delete, so
+     * recomputing in place would leave rows the old identity produced. Team-scoped rows are
+     * removed but rebuilt only by the next team calculation.</p>
      */
     @Transactional
     @Modifying

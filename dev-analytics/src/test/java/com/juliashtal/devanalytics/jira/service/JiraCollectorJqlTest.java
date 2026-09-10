@@ -15,13 +15,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Acceptance tests for Jira collection scope and identity mapping.
  *
- * <p>The JQL used to narrow the fetch itself, with {@code assignee = <token owner's accountId>}.
- * Since the canonical project row is collected once, with whichever user's token owns it, every
- * other subscriber was credited with the owner's issues. Attribution moved into the metric
- * queries, which only works if collection brings back the whole project.
- *
- * <p>The key is interpolated into JQL rather than bound, so validation — not escaping — is what
- * keeps it safe, and quoting additionally stops a reserved word being parsed as an operator.
+ * <p>The JQL carries no assignee clause: attribution happens in the metric queries, which only
+ * works if collection returns the whole project. The key is interpolated rather than bound, so
+ * validation is what keeps it safe, and quoting stops a reserved word parsing as an operator.</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -36,8 +32,7 @@ class JiraCollectorJqlTest {
         String jql = collector.buildJql("PDA");
 
         assertThat(jql).isEqualTo("project = \"PDA\" ORDER BY created DESC");
-        // The regression this guards: any assignee clause makes the stored rows depend on whose
-        // token collected them.
+        // Any assignee clause would make the stored rows depend on whose token collected them.
         assertThat(jql).doesNotContain("assignee");
     }
 
@@ -54,7 +49,7 @@ class JiraCollectorJqlTest {
 
     @Test
     void buildJql_blankKey_throwsIllegalState() {
-        // Previously a missing key silently produced an unscoped query across every project.
+        // A missing key must not silently produce an unscoped query across every project.
         assertThatThrownBy(() -> collector.buildJql("  "))
                 .isInstanceOf(IllegalStateException.class);
     }
@@ -74,8 +69,7 @@ class JiraCollectorJqlTest {
 
     @Test
     void jiraUser_searchResponse_deserializesAccountId() throws Exception {
-        // accountId is what issue attribution matches on; display names are neither unique nor
-        // stable, and they were previously the only thing stored.
+        // accountId is what issue attribution matches on; display names are not unique or stable.
         String body = """
             {"total": 1, "issues": [{"id": "1", "key": "PDA-1", "fields": {
                "summary": "An issue",

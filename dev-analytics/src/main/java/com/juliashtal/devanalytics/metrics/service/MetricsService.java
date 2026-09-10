@@ -46,9 +46,8 @@ public class MetricsService {
     }
 
     /**
-     * Team-scoped metrics — uses only repos belonging to this specific team,
-     * attributed by author identity. Saved with team=team so they are isolated
-     * from the user's personal metrics and from other teams.
+     * Team-scoped metrics — only repos belonging to this team, saved with team=team so they stay
+     * isolated from personal metrics and from other teams.
      */
     @Transactional
     public void calculateForTeam(Long teamId, Long requestingUserId, LocalDate fromDate, LocalDate toDate) {
@@ -68,30 +67,15 @@ public class MetricsService {
     /**
      * Runs the registry in two shapes, because the table stores two.
      *
-     * <p>Series calculators write one row per calendar day and take a single pass over
-     * the whole range. Aggregate calculators write one row carrying
-     * {@code periodFrom}/{@code periodTo}, and run once per ISO calendar week the range
-     * touches — each pass windowed on that week's Monday to Sunday. The ISO week is the
-     * canonical grain: it matches the weekly summary job and {@code COMMITS_PER_WEEK_AVG},
-     * and is the smallest window over which a median of PR lead times is not usually a
-     * median of one observation.
-     *
-     * <p>Before this split, an aggregate row's period was whatever range the caller
-     * happened to pass, so the nightly job stored one-day windows that no weekly read
-     * could resolve. The branch lives here rather than inside individual calculators so
-     * each calculator still sees one window and does not know about the grain.
-     *
-     * <p>This method is also the sole writer of the {@code metric_coverage} ledger, which
-     * records the calendar days personal metrics have actually been computed for and is the
-     * reference {@code MetricBackfillService} subtracts its target range from. The write is
-     * deliberately co-located with the calculation and inside the same transaction, so
-     * coverage cannot drift from what was computed; see the guard's own comment below for
-     * why team scopes and empty repo scopes are excluded.
+     * <p>Series calculators write one row per calendar day in a single pass; aggregate
+     * calculators write one row per ISO week the range touches, windowed Monday to Sunday, so
+     * each calculator still sees one window and never learns about the grain. Also the sole
+     * writer of the {@code metric_coverage} ledger, inside this transaction so coverage cannot
+     * drift from what was computed.</p>
      */
     private void calculateDailyMetricsForUser(User user, Team team, LocalDate fromDate, LocalDate toDate) {
         List<Long> repoIds = repoScopeResolver.resolve(user, team);
-        // Resolved once per run rather than per calculator: it is the same for all seventeen,
-        // and re-reading it per weekly window would multiply the query count by the range.
+        // Resolved once per run, not per calculator: re-reading it per week multiplies queries.
         AuthorIdentity identity = authorIdentityResolver.resolve(user);
 
         List<MetricCalculator> seriesCalculators = new ArrayList<>();
@@ -116,11 +100,8 @@ public class MetricsService {
             }
         }
 
-        // Coverage is recorded here, on the personal path only, so the ledger the backfill
-        // reads can never disagree with what was actually computed — whichever entry point
-        // triggered it. Skipped when the scope is empty: every calculator returns early on
-        // an empty repo list, so marking those days would let the nightly job convince the
-        // backfill that a user's history is covered before any repository was attached.
+        // Personal path only, and skipped on an empty scope: calculators return early there, so
+        // marking those days would tell the backfill a user's history was already covered.
         if (team == null && !repoIds.isEmpty()) {
             for (LocalDate day = fromDate; !day.isAfter(toDate); day = day.plusDays(1)) {
                 coverageRepository.markCovered(user.getId(), day);
@@ -141,9 +122,8 @@ public class MetricsService {
     }
 
     /**
-     * The Monday of every ISO week the inclusive range touches. Weeks are always whole,
-     * so a partial request still produces a full-week window and the stored period never
-     * claims a narrower coverage than was computed.
+     * The Monday of every ISO week the inclusive range touches. Weeks are always whole, so a
+     * stored period never claims narrower coverage than was computed.
      */
     private static List<LocalDate> isoWeeksOverlapping(LocalDate fromDate, LocalDate toDate) {
         List<LocalDate> weeks = new ArrayList<>();

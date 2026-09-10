@@ -11,20 +11,9 @@ import org.springframework.stereotype.Component;
  * Drives {@link MetricBackfillService} over every user once a night, filling days inside each
  * user's collected history that have never been calculated.
  *
- * <p>Separate from {@link MetricsScheduler}, which only computes yesterday. Gap recovery
- * belongs here because this path has a coverage reference — the {@code metric_coverage}
- * ledger — rather than a high-water mark. The old design in {@code MetricsScheduler} advanced a
- * {@code MAX(date)} watermark past the days its 30-day cap excluded, so those days were never
- * revisited by a later run; this service instead subtracts {@code metric_coverage} from the
- * user's collected history, so the same per-run cap resumes on the next run instead of
- * truncating history permanently.
- *
- * <p>Runs at 03:00 UTC. {@link MetricsScheduler} runs at 01:00 server time with no explicit
- * zone, so in a server zone west of UTC this job can run before that one. That is harmless, not
- * merely tolerated: both paths compute through the same {@link MetricsService#calculateDailyMetrics}
- * upsert guard, so if this job also (re)computes yesterday because the incremental job hasn't
- * run yet, the result is the same row written twice rather than a wrong one. Ordering between
- * the two jobs is therefore not a correctness requirement.
+ * <p>Separate from {@link MetricsScheduler}, which only computes yesterday. Runs at 03:00 UTC;
+ * ordering against that job is not a correctness requirement, because both write through the
+ * same {@link MetricsService#calculateDailyMetrics} upsert guard.</p>
  */
 @Component
 @RequiredArgsConstructor
@@ -46,11 +35,8 @@ public class MetricBackfillScheduler {
                             user.getId(), result.daysComputed(), result.daysRemaining());
                 }
             } catch (Exception e) {
-                // One user's failure must not abort the run — same discipline as MetricsScheduler.
-                // The exception is passed as the trailing argument, not e.getMessage(): this job
-                // runs unattended overnight, so a failure is not seen until someone notices stale
-                // coverage the next day, and getMessage() is null for a NullPointerException and
-                // a one-line summary for a wrapped SQLException — losing the failure site itself.
+                // One user's failure must not abort the run. The exception is passed whole, not as
+                // getMessage(): this runs unattended, so the failure site must survive in the log.
                 log.warn("Backfill failed for userId={}", user.getId(), e);
             }
         });

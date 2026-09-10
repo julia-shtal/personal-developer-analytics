@@ -16,16 +16,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Acceptance test for the stale-row guarantee behind an identity change.
  *
- * <p>Recalculating in place is not enough when an identity narrows. Calculators upsert only the
- * days that produced data and never delete, so rows the previous identity produced would survive
- * a recompute, and the coverage ledger would still mark those days computed — which makes the
- * backfill skip them forever. Everything for the user therefore has to go first.
- *
- * <p>Team-scoped rows go too: they were attributed with the same identity. They are not rebuilt
- * here; the next team calculation the manager runs restores them.
- *
- * <p>The other user's rows are the control. A delete keyed on anything looser than the user id
- * would take them with it.
+ * <p>Calculators upsert and never delete, so rows the previous identity produced must be removed
+ * outright rather than recomputed over. Team-scoped rows go too, rebuilt only by the next team
+ * calculation. The other user's rows are the control for a delete keyed too loosely.</p>
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)

@@ -7,11 +7,9 @@ import java.util.Optional;
 /**
  * Resolves a GitHub account to its numeric ID and canonical login.
  *
- * <p>The interface exists so the {@code user} package can link an identity without depending on
- * GitHub transport code: attribution needs the numeric ID, which only GitHub can supply.
- *
- * <p>The ID and the login are always returned together and must be stored together. Storing a
- * login without its ID reintroduces the free-text matching this whole change removes.
+ * <p>An interface so the {@code user} package can link an identity without depending on GitHub
+ * transport code. ID and login are returned together and must be stored together — a login
+ * without its ID reintroduces free-text matching.</p>
  */
 public interface GitHubAccountLookup {
 
@@ -23,9 +21,8 @@ public interface GitHubAccountLookup {
      * source when they have one, and falls back to an unauthenticated call to the public API.
      *
      * @return empty when GitHub answers 404, i.e. no such login
-     * @throws com.juliashtal.devanalytics.exception.GitHubException on transport failure or any
-     *         other non-200 response — a lookup that could not complete must not be mistaken
-     *         for a login that does not exist
+     * @throws com.juliashtal.devanalytics.exception.GitHubException on any other non-200, so an
+     *         incomplete lookup is never mistaken for a login that does not exist
      */
     Optional<GitHubAccount> findByLogin(Long userId, String login);
 

@@ -93,11 +93,8 @@ class AsyncDataSourceCollectServiceTest {
     }
 
     /**
-     * Guards against the lookup-before-tracker.start defect: reading {@code lastSuccessSync} to
-     * decide whether this is a first collection must never escape as an uncaught exception. If
-     * that read is moved back outside the try/catch that owns {@code tracker.fail} +
-     * {@code sendSyncFailureIfEnabled}, this test fails because neither is invoked and the
-     * exception propagates out of the {@code @Async void} method instead.
+     * Reading {@code lastSuccessSync} must never escape as an uncaught exception: moving it
+     * outside the try/catch that owns {@code tracker.fail} fails this test.
      */
     @Test
     void collectAsync_dataSourceLookupFails_reportsFailureAndNotifies() {

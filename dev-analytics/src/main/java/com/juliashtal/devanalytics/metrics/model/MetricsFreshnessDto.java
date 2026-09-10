@@ -7,20 +7,14 @@ import java.time.LocalDate;
 /**
  * How far the current user's personal metrics have actually been computed.
  *
- * <p>{@code daysRemaining} makes coverage inspectable rather than inferred: a dashboard that
- * looks sparse because history is still being backfilled is distinguishable from one that is
- * sparse because there was no activity. Chapter 8 cites this number to state the window the
- * case-study metrics were computed over.
+ * <p>{@code daysRemaining} makes coverage inspectable rather than inferred, so a dashboard sparse
+ * from an unfinished backfill is distinguishable from one sparse from no activity.</p>
  *
- * @param metricsComputedThrough latest day for which any personal metric snapshot exists, or
- *                               {@code null} when nothing has been computed yet
- * @param coverageFrom           first day of collected history, in the user's timezone, or
- *                               {@code null} when there is no target range
- * @param coverageTo             last day the backfill targets — yesterday in the user's
- *                               timezone — or {@code null} in the same case
- * @param daysRemaining          days inside the collected range still awaiting calculation;
- *                               a primitive, so it is always serialised and reads 0 rather
- *                               than absent when there is nothing outstanding
+ * @param metricsComputedThrough latest day any personal snapshot exists for, or {@code null}
+ * @param coverageFrom           first day of collected history in the user's timezone, or {@code null}
+ * @param coverageTo             last day the backfill targets (yesterday), or {@code null}
+ * @param daysRemaining          days in range still awaiting calculation; primitive, so 0 rather
+ *                               than absent when nothing is outstanding
  */
 @Schema(description = "Coverage of the current user's computed personal metrics")
 public record MetricsFreshnessDto(

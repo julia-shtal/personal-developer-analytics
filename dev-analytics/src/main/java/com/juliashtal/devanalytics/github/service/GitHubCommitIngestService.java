@@ -208,10 +208,8 @@ public class GitHubCommitIngestService {
         entity.setAuthorName(author.path("name").asText("unknown"));
         entity.setAuthorEmail(author.path("email").asText("unknown"));
 
-        // `commit.author` above is raw Git metadata: whatever the committer configured locally,
-        // and the only thing this method used to read. The top-level `author` is GitHub's own
-        // resolution of that email to an account, and is the stable attribution key. It is null
-        // when the email belongs to no GitHub account, so both fields stay null in that case.
+        // `commit.author` is raw Git metadata; the top-level `author` is GitHub's resolution of it to
+        // an account and the stable attribution key, null when the email matches no account.
         JsonNode githubAuthor = node.path("author");
         if (githubAuthor.isObject()) {
             entity.setAuthorGithubId(githubAuthor.path("id").isNumber()

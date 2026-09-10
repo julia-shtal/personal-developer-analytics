@@ -91,10 +91,8 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     // -------------------------------------------------------------------------
     // Author-scoped variants: filter by explicit repo IDs + the author's numeric GitHub ID.
     //
-    // Previously `p.authorLogin = :authorLogin`. A login is free text the user types into
-    // their profile: the comparison was case-sensitive, two users could enter the same value,
-    // and renaming an account on GitHub split one person's history into two identities. The
-    // numeric ID has none of those properties. authorLogin survives as a display value only.
+    // Matched on the numeric ID: a login is free text, case-sensitive and re-assignable,
+    // so authorLogin survives as a display value only.
     // -------------------------------------------------------------------------
 
     @Query("""

@@ -43,11 +43,9 @@ public class MetricsAnomalyService {
     private final AggregateWindowResolver aggregateWindowResolver;
 
     /**
-     * One flag per context metric. Period-stored metrics contribute one observation per
-     * stored window rather than one per day, so the deviation being tested is week-to-week
-     * variation. Which shape a metric is stored in is read off the rows, not off a list of
-     * types — the list this class used to keep named four of the five aggregate types, and
-     * the fifth was scored against an empty series.
+     * One flag per context metric. Period-stored metrics contribute one observation per stored
+     * window rather than per day, so the deviation tested is week-to-week variation. The storage
+     * shape is read off the rows, never off a list of types.
      */
     public Map<MetricType, Boolean> computeAnomalies(User user, LocalDate from, LocalDate to) {
         Map<MetricType, Boolean> result = new LinkedHashMap<>();
