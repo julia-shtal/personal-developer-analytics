@@ -50,8 +50,7 @@ public class MetricsAiService {
 
     @Cacheable(value = "ai_summaries", key = "{#user.id, #from, #to, #repoId}")
     public MetricsSummaryDto generateSummary(User user, LocalDate from, LocalDate to, Long repoId) {
-        // Entitlement check, not a lookup: repoId reaches here straight from the request, and
-        // the summary names the repository it was built over.
+        // Entitlement check, not a lookup: repoId comes straight from the request.
         GitRepositoryEntity repo = repoId != null
                 ? repoService.getAccessibleRepo(user.getId(), repoId)
                 : null;

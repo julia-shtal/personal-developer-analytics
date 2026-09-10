@@ -200,8 +200,7 @@ public class GitHubPullRequestCollector {
         JsonNode userNode = node.path("user");
         entity.setAuthorLogin(userNode.isMissingNode() || userNode.isNull()
                 ? null : userNode.path("login").asText(null));
-        // The numeric ID is what PR metrics match on; the login above survives as a display
-        // value, so a GitHub rename no longer splits one author into two identities.
+        // PR metrics match the numeric ID; the login is display only, so a rename cannot split an author.
         entity.setAuthorGithubId(userNode.isObject() && userNode.path("id").isNumber()
                 ? userNode.path("id").asLong() : null);
 

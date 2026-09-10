@@ -33,14 +33,9 @@ import java.util.stream.Collectors;
 public class AiContextBuilderService {
 
     /**
-     * Metric types supplied to the model, in a fixed presentation order:
-     * activity, flow and lead time, collaboration, wellness. The order reaches
-     * the prompt (LinkedHashMap -> JSON -> prompt text), so it is declared here
-     * rather than derived from MetricType.values(), whose order is a property of
-     * the enum declaration and not a decision about what the model reads.
-     *
-     * <p>Package-private so {@code AiContextBuilderServiceTest} can assert that this
-     * list and the {@code inAiContext} flag never drift apart.
+     * Metric types supplied to the model, in a fixed presentation order that reaches the prompt.
+     * Declared here rather than derived from {@code MetricType.values()}, whose order is a
+     * property of the enum and not a decision about what the model reads.
      */
     static final List<MetricType> CONTEXT_METRIC_TYPES = List.of(
             // Activity
@@ -77,11 +72,8 @@ public class AiContextBuilderService {
         Map<String, AggregatedMetricsContext.MetricAggregate> aggregates = new LinkedHashMap<>();
 
         for (MetricType type : CONTEXT_METRIC_TYPES) {
-            // One query per type, routed by the shape of the rows it comes back with rather
-            // than by a list of which types are period-stored. The exact-period query this
-            // replaced matched only windows that had been passed verbatim to the calculation
-            // endpoint, so the weekly summary job — which computes nothing itself — found no
-            // rows for any period-stored metric and dropped it from the context silently.
+            // One query per type, routed by the shape of the rows returned rather than by a
+            // list of which types are period-stored.
             List<MetricSnapshot> rows = repo != null
                     ? metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(user, type, repo, from, to)
                     : metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(user, type, from, to);
@@ -130,8 +122,7 @@ public class AiContextBuilderService {
                 List<MetricSnapshot> rows = metricSnapshotService
                         .getMetricSnapshotsByUserAndTeamAndMetricTypeInWindow(member, team, type, from, to);
 
-                // Daily rows sum or average as before; period rows now resolve through the
-                // window resolver instead of being dropped for want of a team-scoped query.
+                // Daily rows sum or average; period rows resolve through the window resolver.
                 List<MetricSnapshot> dailyRows = AggregateWindowResolver.dailyRows(rows);
                 if (!dailyRows.isEmpty()) {
                     double value = DAILY_SUM_METRICS.contains(type)
@@ -158,11 +149,9 @@ public class AiContextBuilderService {
     /**
      * The chronological series the statistics are computed over.
      *
-     * <p>DAILY rows contribute one value per day, ordered by date. AGGREGATE rows
-     * contribute one value per stored window, ordered by window start, with
-     * cross-repository rows already combined — so min, max, median, trend and anomaly
-     * describe variation across weeks rather than across repositories. A type only ever
-     * writes one shape, so exactly one branch contributes.
+     * <p>DAILY rows contribute one value per day; AGGREGATE rows one per stored window, with
+     * cross-repository rows already combined, so the statistics describe variation across weeks
+     * rather than across repositories. A type writes one shape, so one branch contributes.</p>
      */
     private List<Double> valuesForContext(List<MetricSnapshot> rows, MetricType type) {
         List<MetricSnapshot> aggregateRows = AggregateWindowResolver.aggregateRows(rows);

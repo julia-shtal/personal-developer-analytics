@@ -31,22 +31,11 @@ import java.util.stream.Stream;
 /**
  * Computes personal metrics for days in a user's history that were collected but never calculated.
  *
- * <p>The target range runs from the earliest collected activity (oldest commit, PR, or issue)
- * to yesterday. Earliest activity is used as the coverage reference instead of {@code sync_jobs}
- * because it reflects the same data the calculators read.
- *
- * <p>Missing days = target range minus the {@code metric_coverage} ledger. Since coverage reflects
- * actual computation rather than a watermark, {@code maxDaysPerRun} is a resumable throttle: a run
- * that stops early leaves gaps that later runs will revisit. The old watermark-based approach
- * turned this cap into permanent truncation, leaving unrevisited holes.
- *
- * <p>Missing days are processed newest-first (so the dashboard's visible range fills first) and in
- * contiguous blocks (one calculator pass per range, not per day). Aggregate-period metrics need no
- * extra handling: {@link MetricsService#calculateDailyMetrics} already expands ranges to full ISO
- * weeks for those types.
- *
- * <p>All writes go through {@link MetricsService#calculateDailyMetrics}, which owns both the
- * snapshot upsert guard and the coverage ledger — this service never marks coverage itself.
+ * <p>Missing days are the range from the earliest collected activity to yesterday, minus the
+ * {@code metric_coverage} ledger; because coverage records actual computation rather than a
+ * watermark, {@code maxDaysPerRun} throttles a run without truncating it. Days are processed
+ * newest-first in contiguous blocks, and every write goes through
+ * {@link MetricsService#calculateDailyMetrics}, which owns both the upsert guard and the ledger.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -65,40 +54,18 @@ public class MetricBackfillService implements MetricBackfillTrigger {
     private final BackfillProperties properties;
 
     /**
-     * Users with a backfill pass currently running, preventing the nightly scheduler and a
-     * first collection from computing the same days concurrently.
-     *
-     * <p>Needed because {@code MetricSnapshotWriter.save} is read-then-write
-     * ({@code findExisting(...).orElseGet(...)}) and {@code metric_snapshots} has no unique
-     * constraint (only the plain {@code V18} index). Concurrent transactions could both find
-     * nothing and both insert, producing duplicates that skew aggregates. The coverage ledger
-     * is unaffected either way, since {@code markCovered} is a real {@code ON CONFLICT} upsert.
-     *
-     * <p>In-process only — sufficient for this single-instance deployment. A multi-instance
-     * setup would need a DB-level guard (e.g. {@code pg_try_advisory_lock} on user id), but
-     * that's deliberately omitted since no current deployment needs it.
+     * Users with a backfill pass running. Guards the read-then-write snapshot save, which has no
+     * unique constraint behind it, against two runs inserting the same day. In-process only.
      */
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
     /**
      * Computes up to {@code maxDaysPerRun} missing days for one user, newest first.
      *
-     * <p>Deliberately not {@code @Transactional}: each contiguous block commits via
-     * {@link MetricsService#calculateDailyMetrics}'s own transaction, so a failed block rolls
-     * back only its own snapshots and coverage marks. An enclosing transaction would break this —
-     * the inner transaction would mark it rollback-only, causing the outer commit to throw
-     * {@code UnexpectedRollbackException} and discard already-succeeded blocks.
-     *
-     * <p>A failed block is logged and skipped, letting other blocks still commit — but this only
-     * helps when the batch has multiple blocks. For a new user with contiguous imported history
-     * (this service's primary case), the batch is one block, so a reproducibly failing day stalls
-     * the run entirely: nothing computes, the next run retries the same batch, and older days
-     * stay unreachable. Such stalls are logged at {@code ERROR} for observability; splitting
-     * blocks or quarantining bad days is out of scope.
-     *
-     * <p>CPU- and database-bound over up to a month of history — must not run on a request
-     * thread. Only the nightly scheduler and async collection path call this. A concurrent call
-     * for the same user returns {@link BackfillResult#empty()} without computing anything.
+     * <p>Deliberately not {@code @Transactional}: each block commits through
+     * {@link MetricsService#calculateDailyMetrics}, so a failed block rolls back only its own
+     * work. CPU- and database-bound, so never call it from a request thread; a concurrent call
+     * for the same user returns {@link BackfillResult#empty()}.</p>
      */
     public BackfillResult backfillUser(Long userId) {
         if (!inFlight.add(userId)) {
@@ -118,9 +85,7 @@ public class MetricBackfillService implements MetricBackfillTrigger {
             return coverage.asResult(0, 0);
         }
 
-        // Clamped rather than trusted: @Min(1) already rejects a non-positive cap at startup,
-        // but a negative bound here would throw out of subList and a zero one out of the
-        // block-grouping, and neither belongs in a nightly job.
+        // Clamped, not trusted: a non-positive cap would throw out of subList rather than no-op.
         int batchSize = Math.max(0, Math.min(properties.maxDaysPerRun(), coverage.missing().size()));
         List<LocalDate> batch = coverage.missing().subList(0, batchSize);
 
@@ -153,10 +118,7 @@ public class MetricBackfillService implements MetricBackfillTrigger {
         return coverage.asResult(computed, remaining);
     }
 
-    /**
-     * Read-only view of the same computation — the target range and how much of it is still
-     * missing — safe to call from a request thread because it writes nothing.
-     */
+    /** Read-only view of the target range and what is still missing; safe on a request thread. */
     @Transactional(readOnly = true)
     public BackfillResult describeCoverage(Long userId) {
         Coverage coverage = coverage(userId);
@@ -166,11 +128,8 @@ public class MetricBackfillService implements MetricBackfillTrigger {
     /**
      * {@inheritDoc}
      *
-     * <p>The reset and the recomputation are two separate units of work, not one atomic step:
-     * the delete commits on its own before any metric is recalculated. A backfill that then
-     * fails leaves the user with no coverage at all, which later runs must rebuild from the
-     * start of their history a capped batch at a time. The failure is logged at {@code ERROR}
-     * and rethrown so the destructive step is traceable rather than silently half-applied.
+     * <p>The reset commits before anything is recomputed, so a failed backfill leaves the user
+     * with no coverage until later runs rebuild it. Logged at {@code ERROR} and rethrown.</p>
      */
     @Override
     public void onFirstCollection(Long userId) {
@@ -188,10 +147,8 @@ public class MetricBackfillService implements MetricBackfillTrigger {
     /**
      * {@inheritDoc}
      *
-     * <p>The delete is one transaction and the recomputation another, matching
-     * {@link #onFirstCollection}. Between them the user has no metrics at all; a dashboard
-     * loaded in that window shows an empty range rather than stale figures, which is the
-     * honest state given their identity just changed.
+     * <p>Purge and recomputation are separate transactions, as in {@link #onFirstCollection}.
+     * Between them the user has no metrics, which is the honest state after an identity change.</p>
      */
     @Override
     public void onAttributionChanged(Long userId) {
@@ -213,9 +170,7 @@ public class MetricBackfillService implements MetricBackfillTrigger {
     /** An inclusive run of consecutive missing days, computed in a single calculator pass. */
     private record Block(LocalDate from, LocalDate to) {
         long days() {
-            // ChronoUnit, not Period: Period.getDays() returns only the day component, so a
-            // block spanning a month boundary (2026-01-31 -> 2026-03-02 is P1M2D) would report
-            // 2 days instead of 30 and under-count what the run actually computed.
+            // ChronoUnit, not Period: Period.getDays() drops the month component across a boundary.
             return ChronoUnit.DAYS.between(from, to) + 1L;
         }
     }
@@ -229,16 +184,12 @@ public class MetricBackfillService implements MetricBackfillTrigger {
         }
     }
 
-    /**
-     * Derives the target range and the missing days inside it. Writes nothing, so the
-     * computing and the read-only entry point share one definition of "missing".
-     */
+    /** Derives the target range and its missing days, so both entry points share one definition. */
     private Coverage coverage(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
 
-        // Same entitlement path the calculators use, so backfill and calculation never
-        // disagree about which repositories are in scope.
+        // Same entitlement path the calculators use, so scope never disagrees.
         List<Long> repoIds = repoScopeResolver.resolve(user, null);
         if (repoIds.isEmpty()) {
             return new Coverage(null, null, List.of());
@@ -277,10 +228,8 @@ public class MetricBackfillService implements MetricBackfillTrigger {
     }
 
     /**
-     * Day boundaries follow the user's own zone, matching how the after-hours calculator
-     * interprets wall-clock time. A server-zone conversion would put the first and last day of
-     * the range somewhere other than where the metrics themselves are read. An unset or
-     * unparseable zone falls back to UTC rather than failing the whole run.
+     * Day boundaries follow the user's own zone, matching the after-hours calculator. An unset or
+     * unparseable zone falls back to UTC rather than failing the run.
      */
     private static ZoneId zoneOf(User user) {
         String timezone = user.getTimezone();
@@ -296,11 +245,7 @@ public class MetricBackfillService implements MetricBackfillTrigger {
         }
     }
 
-    /**
-     * Splits a descending list of days into contiguous blocks, newest block first, so each
-     * block becomes one calculator pass over a real range instead of one pass per day. An empty
-     * input yields no blocks rather than relying on a caller to have checked.
-     */
+    /** Splits a descending day list into contiguous blocks, newest first, one calculator pass each. */
     private static List<Block> contiguousBlocks(List<LocalDate> descendingDays) {
         if (descendingDays.isEmpty()) {
             return List.of();

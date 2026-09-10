@@ -37,12 +37,10 @@ public class MetricSnapshotService {
     }
 
     /**
-     * Every row this window can honestly answer with: DAILY rows dated inside it plus
-     * AGGREGATE rows whose window it fully contains. When nothing is contained and the
-     * request is narrower than the grain the metric was computed on, falls back to the
-     * AGGREGATE row whose window covers the request. Callers partition the result by
-     * shape via {@link AggregateWindowResolver} — no caller needs a list of which
-     * metric types are period-stored.
+     * Every row this window can honestly answer with: DAILY rows dated inside it plus AGGREGATE
+     * rows whose window it fully contains, falling back to a covering AGGREGATE row when the
+     * request is narrower than the metric's grain. Callers partition by shape via
+     * {@link AggregateWindowResolver}.
      */
     public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeInWindow(User user,
                                                                              MetricType metricType,

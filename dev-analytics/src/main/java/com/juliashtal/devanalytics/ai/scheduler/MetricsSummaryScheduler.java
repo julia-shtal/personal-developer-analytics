@@ -36,10 +36,7 @@ public class MetricsSummaryScheduler {
 
         userRepository.findAll().forEach(user -> {
             try {
-                // Compute the week before summarising it. The nightly job only guarantees rows
-                // up to yesterday at its own grain; without this pass the aggregate calculators
-                // may never have been run over the ISO week this summary is about, and the
-                // context would be built from a partial catalogue.
+                // Compute the week before summarising it: the nightly job may not have covered this ISO week.
                 metricsService.calculateDailyMetrics(user.getId(), from, to);
 
                 MetricsSummaryDto summary = metricsAiService.generateSummary(user, from, to, null);

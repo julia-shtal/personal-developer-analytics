@@ -14,13 +14,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * by a repository, against the real schema: {@code existsAccessibleRepo} (can this user reach
  * it?) and {@code existsByIdAndTeamId} (does this team own it?).
  *
- * <p>Run against the actual database rather than mocked because the first is native and exists
- * solely to inherit the {@code user_accessible_repos} view's four branches — a mock would
- * assert only that the method was called. One test per branch, since the branch the check
- * exists to cover (TEAM) is the one a hand-rolled owned-or-subscribed test omits.
- *
- * <p>The two queries answer deliberately different questions, so the pair of tests at the end
- * pins the case that separates them: a repo reachable by a user but outside the team.
+ * <p>Run against the real database because the first is native and exists to inherit the
+ * {@code user_accessible_repos} view's four branches — one test each. The two queries answer
+ * different questions, so the final pair pins a repo the user reaches but the team does not own.</p>
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -119,9 +115,8 @@ class RepoEntitlementQueryTest {
     }
 
     // -------------------------------------------------------------------------
-    // Fixtures, inserted with JdbcTemplate so each test names the exact rows the
-    // view joins on. Mirrors EarliestActivityQueryTest's approach and its notes on
-    // the NOT NULL columns git_repositories and data_source_configs carry.
+    // Fixtures, inserted with JdbcTemplate so each test names the exact rows the view joins
+    // on. Mirrors EarliestActivityQueryTest.
     // -------------------------------------------------------------------------
 
     private Long insertUser() {
@@ -161,7 +156,7 @@ class RepoEntitlementQueryTest {
     }
 
     private void insertRegistration(Long userId, Long repoId) {
-        // repository_id, not repo_id: V42 renamed the column when it normalised FK naming.
+        // repository_id, not repo_id.
         jdbc.update("INSERT INTO user_repo_registrations (user_id, repository_id) VALUES (?, ?)",
                 userId, repoId);
     }

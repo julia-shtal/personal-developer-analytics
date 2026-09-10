@@ -136,9 +136,7 @@ public class MetricsTeamController {
             List<MetricSnapshot> rows = metricSnapshotService
                     .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(memberIds, teamId, type, from, to);
 
-            // Summing is only correct for DAILY rows, whose dates are disjoint. AGGREGATE rows
-            // carry a period, so summing them adds up overlapping windows — the error the
-            // storage-shape distinction exists to prevent. Route each shape to its own reduction.
+            // Only DAILY rows sum: their dates are disjoint, while AGGREGATE periods overlap.
             AggregateWindowResolver.dailyRows(rows)
                     .forEach(s -> byUser.get(s.getUser().getId()).merge(type, s.getValue(), Double::sum));
 
@@ -252,8 +250,7 @@ public class MetricsTeamController {
 
         List<MetricSnapshot> snapshots;
         if (repoId != null) {
-            // Team scope, not personal: the repo must belong to this team, or a manager could
-            // filter a team series by one of their own private repositories.
+            // Team scope: the repo must belong to this team, not to the manager personally.
             GitRepositoryEntity repo = repoService.getTeamRepo(teamId, repoId);
             snapshots = metricSnapshotService
                     .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndRepositoryAndDateBetween(

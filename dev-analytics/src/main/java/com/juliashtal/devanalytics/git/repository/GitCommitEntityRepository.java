@@ -30,9 +30,8 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     Page<GitCommitEntity> findByRepositoryIdOrderByAuthorDateDesc(Long repositoryId, Pageable pageable);
 
     /**
-     * Oldest commit in the given repository scope. The backfill uses this — not sync_jobs —
-     * as its coverage reference, because it is the same table the calculators read: history
-     * that was collected but never calculated is exactly what the backfill has to find.
+     * Oldest commit in the given repository scope. The backfill uses this rather than
+     * {@code sync_jobs}, because it is the same table the calculators read.
      */
     @Query("SELECT MIN(c.authorDate) FROM GitCommitEntity c WHERE c.repository.id IN :repoIds")
     Optional<Instant> findEarliestAuthorDate(@Param("repoIds") List<Long> repoIds);
@@ -83,16 +82,11 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     // -------------------------------------------------------------------------
     // Author-scoped variants: filter by explicit repo IDs + the user's AuthorIdentity.
     //
-    // The predicate is deliberately a disjunction. Neither identifier covers every commit:
-    // author_github_id is null for local JGit commits and for any commit whose email GitHub
-    // could not resolve to an account, while a declared address misses commits made with an
-    // address the user never registered (a GitHub noreply alias, a second machine). Matching
-    // on the account email alone -- what this used to do -- dropped 36% of commits on the
-    // reference installation.
-    //
-    // Both branches select the same row when both match, so a commit is never double-counted.
-    // A null githubUserId makes its branch unsatisfiable in SQL, which is exactly the wanted
-    // behaviour: the email set then carries the match on its own.
+    // The predicate is a disjunction because neither identifier covers every commit:
+    // author_github_id is null for local JGit commits, and a declared address misses commits
+    // made with an address the user never registered. Both branches select the same row when
+    // both match, so a commit is never double-counted, and a null githubUserId simply makes
+    // its branch unsatisfiable so the email set carries the match alone.
     // -------------------------------------------------------------------------
 
     @Query("""

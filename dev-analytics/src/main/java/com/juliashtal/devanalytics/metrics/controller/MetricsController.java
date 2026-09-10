@@ -371,8 +371,7 @@ public class MetricsController {
                     .toList();
         }
 
-        // Entitlement check, not a lookup: a repoId arrives from the client, so the repo must be
-        // one this user may actually scope by. getById would answer for any id in the database.
+        // Entitlement check, not a lookup: getById would answer for any id in the database.
         GitRepositoryEntity repo = repoService.getAccessibleRepo(user.getId(), repoId);
         return metricSnapshotService
                 .getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to)
@@ -385,14 +384,11 @@ public class MetricsController {
     /**
      * Resolves a period-stored metric over the requested window.
      *
-     * <p>The stored windows are whatever the calculation grain produced, which is almost
-     * never the window a dashboard asks for. Rather than demand an exact match — which
-     * returned zero for every window not previously passed verbatim to
-     * {@code POST /api/metrics/calculate} — this reads every stored window the request
-     * contains, combines them the way that metric permits, and reports the window that
-     * was actually covered. The returned {@code periodFrom}/{@code periodTo} therefore
-     * come from the resolved rows, never from the request: a figure is never labelled
-     * with a window it was not computed over.
+     * <p>Stored windows follow the calculation grain, almost never the window a dashboard asks
+     * for, so this reads every stored window the request contains and combines them the way that
+     * metric permits. The returned {@code periodFrom}/{@code periodTo} come from the resolved
+     * rows, never from the request, so a figure is never labelled with a window it was not
+     * computed over.</p>
      */
     private MetricAggregateDto getPersonalLeadTimeAggregate(MetricType type, LocalDate from, LocalDate to, Long repoId) {
         User user = checkHelper.currentUser();

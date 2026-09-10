@@ -12,20 +12,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 /**
  * Recomputes a user's metrics after their attribution identity changed.
  *
- * <p>Lives in {@code metrics} rather than {@code user} so the identity service stays unaware of
- * what depends on it: it announces a change, and this package decides that the change invalidates
- * every stored metric.
- *
- * <p>{@link TransactionPhase#AFTER_COMMIT} because the recomputation reads the very identity the
- * publishing transaction is still writing. Firing earlier would recompute against the old
- * identity and, if that transaction then rolled back, against one that never existed.
- *
- * <p>{@code @Async} because a full recompute walks the user's entire history — far too slow for
- * the HTTP request that added an address. The response returns as soon as the change is stored;
- * metrics catch up behind it.
- *
- * <p>Disabled under the {@code demo} profile: seeded demo snapshots have no commits, PRs or
- * issues behind them, so recomputing would delete the demo data and rebuild nothing.
+ * <p>{@link TransactionPhase#AFTER_COMMIT} because the recomputation reads the identity the
+ * publishing transaction is still writing, and {@code @Async} because a full recompute walks the
+ * user's whole history. Disabled under the {@code demo} profile, whose seeded snapshots have no
+ * records behind them to rebuild from.</p>
  */
 @Component
 @Profile("!demo")
@@ -42,9 +32,8 @@ public class AuthorIdentityChangedListener {
         try {
             backfillTrigger.onAttributionChanged(event.userId());
         } catch (RuntimeException e) {
-            // Nothing above can react: the publishing transaction committed long ago and this
-            // runs on a pool thread. Log and stop -- the nightly backfill rebuilds what is
-            // missing, because the purge cleared the coverage that would otherwise skip it.
+            // Nothing above can react on a pool thread after commit; the nightly backfill
+            // rebuilds what is missing, since the purge also cleared the coverage.
             log.error("Metric recomputation failed for userId={}", event.userId(), e);
         }
     }

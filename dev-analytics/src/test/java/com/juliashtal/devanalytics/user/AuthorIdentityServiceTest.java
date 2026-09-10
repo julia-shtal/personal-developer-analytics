@@ -31,12 +31,10 @@ import static org.mockito.Mockito.when;
 /**
  * Acceptance tests for identity ownership, GitHub login resolution, and event discipline.
  *
- * <p>Three rules are pinned here. Each identifier belongs to exactly one user, so a second claim
- * is a 409 rather than a silent second row — two users sharing one would have the same record
- * counted twice in team rollups. A login is always resolved to a numeric account before it is
- * stored, so an unresolvable one is a 422 and a rename is not a new identity. And an event fires
- * only on an effective change, because the listener reacts by deleting and recomputing every
- * snapshot the user has.
+ * <p>Three rules are pinned: each identifier belongs to exactly one user, so a second claim is a
+ * 409; a login is always resolved to a numeric account first, so an unresolvable one is a 422 and
+ * a rename is not a new identity; and an event fires only on an effective change, because the
+ * listener recomputes every snapshot the user has.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class AuthorIdentityServiceTest {

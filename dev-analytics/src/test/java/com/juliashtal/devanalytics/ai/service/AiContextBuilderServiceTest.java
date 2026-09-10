@@ -160,14 +160,9 @@ class AiContextBuilderServiceTest {
     }
 
     /**
-     * The regression this task exists for.
-     *
-     * <p>The weekly summary job asks for a seven-day window it did not compute verbatim.
-     * Under the old exact-period read, the five period-stored context metrics matched
-     * nothing, {@code buildPersonalContext} only put a key in the map when the query came
-     * back non-empty, and every scheduled summary was written from 7 of 12 metrics — the
-     * whole flow and lead-time family plus review participation. Asserting the key set,
-     * not just a few keys, is what would have caught it.
+     * The weekly summary job asks for a seven-day window it did not compute verbatim, and
+     * {@code buildPersonalContext} only adds a key when its query returns rows. Asserting the
+     * whole key set, not a few keys, is what catches a period-stored metric dropping out.
      */
     @Test
     void buildPersonalContext_mixedDailyAndWeeklyRows_containsEveryContextMetricType() {
@@ -284,10 +279,7 @@ class AiContextBuilderServiceTest {
         assertThat(bobMetrics.getMetrics()).doesNotContainKey(MetricType.DAILY_COMMITS_COUNT.name());
     }
 
-    /**
-     * Team members' period-stored metrics used to be unreachable: there was no team-scoped
-     * period query at all, and the four lead-time types silently returned nothing.
-     */
+    /** Team members' period-stored metrics resolve through the team-scoped period query. */
     @Test
     void buildTeamContext_memberWithAggregateRows_includesThemInTheMemberMetrics() {
         User alice = new User();
@@ -310,11 +302,8 @@ class AiContextBuilderServiceTest {
     }
 
     /**
-     * CONTEXT_METRIC_TYPES is declared explicitly to fix the order the model reads,
-     * so it can no longer follow the inAiContext flag automatically. This guards the
-     * two directions in which they can drift: a metric flagged but not listed would be
-     * silently missing from every summary, and a metric listed but not flagged would be
-     * sent to the model against the enum's own declaration.
+     * CONTEXT_METRIC_TYPES fixes the order the model reads, so it cannot follow the
+     * {@code inAiContext} flag automatically. Guards drift in both directions.
      */
     @Test
     void contextMetricTypes_matchesInAiContextFlag_inBothDirections() {

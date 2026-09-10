@@ -36,9 +36,7 @@ public class IssueLeadTimeCalculator implements MetricCalculator {
     @Override
     public void calculate(MetricCalcContext ctx) {
         if (ctx.repoIds().isEmpty()) return;
-        // Issues come from two systems and are matched per source. Without either
-        // identifier this user matches no issue at all -- which is the point: the
-        // unfiltered query credited every subscriber with every issue in the repo.
+        // Issues match per source; without either identifier this user matches none.
         if (!ctx.identity().hasIssueIdentity()) return;
 
         List<IssueLeadTimeProjection> rows = issueRepository.findIssueLeadTimesByRepoIdsAndIdentity(

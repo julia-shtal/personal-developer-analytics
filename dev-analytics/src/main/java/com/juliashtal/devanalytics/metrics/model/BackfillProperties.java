@@ -7,12 +7,10 @@ import org.springframework.validation.annotation.Validated;
 /**
  * Configuration for the history backfill.
  *
- * @param maxDaysPerRun days of history one backfill run may compute for one user. The cap is a
- *                      resumable throttle rather than truncation — whatever it defers is still
- *                      missing on the next run — so raising it fills a long range in fewer
- *                      scheduled passes. Constrained to at least one: a zero or negative cap
- *                      would leave the feature silently dead, so it fails the context at
- *                      startup with a message naming the property instead.
+ * @param maxDaysPerRun days of history one backfill run may compute for one user; a resumable
+ *                      throttle, since whatever it defers is still missing on the next run.
+ *                      Constrained to at least one, so a dead cap fails startup rather than
+ *                      silently disabling the feature.
  */
 @Validated
 @ConfigurationProperties("app.metrics.backfill")

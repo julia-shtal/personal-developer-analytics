@@ -32,14 +32,9 @@ import static org.mockito.Mockito.*;
 /**
  * Acceptance tests for the attribution migration.
  *
- * <p>Two properties carry the whole design. The {@code identity_backfilled_at} marker is the job's
- * only durable progress record, so it must be stamped strictly after all four sub-steps for a
- * repository succeed — stamping early would permanently skip a repository whose records were never
- * finished, and there is no second signal that would notice.
- *
- * <p>And the metric recompute is gated on nothing being left pending. Recomputing over a
- * half-migrated history produces numbers that look authoritative while missing exactly the records
- * the job has not reached, and the coverage ledger would then mark those days done.
+ * <p>Two properties carry the design: {@code identity_backfilled_at} is stamped strictly after all
+ * four sub-steps succeed, since it is the only durable progress record; and the metric recompute
+ * is gated on nothing being left pending, so a half-migrated history is never marked done.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class AttributionMigrationTest {

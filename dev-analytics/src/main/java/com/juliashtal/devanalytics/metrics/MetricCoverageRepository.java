@@ -28,11 +28,9 @@ public interface MetricCoverageRepository extends JpaRepository<MetricCoverage, 
             @Param("to") LocalDate to);
 
     /**
-     * Native because JPQL cannot express {@code ON CONFLICT}. Marking a day covered is
-     * idempotent by design: the backfill recomputes contiguous blocks and the nightly job
-     * recomputes yesterday, so the same day is marked repeatedly and must not raise on the
-     * unique constraint. {@code computed_at} is refreshed so the row also answers "when was
-     * this day last recomputed".
+     * Native because JPQL cannot express {@code ON CONFLICT}. Marking a day covered must be
+     * idempotent: both the backfill and the nightly job re-mark the same day.
+     * {@code computed_at} is refreshed, so the row also answers when it was last recomputed.
      */
     @Modifying
     @Query(nativeQuery = true, value = """

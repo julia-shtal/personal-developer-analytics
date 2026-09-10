@@ -26,9 +26,7 @@ public class AuthorIdentityResolverImpl implements AuthorIdentityResolver {
         if (user == null || user.getId() == null) return AuthorIdentity.empty();
 
         // Deliberately not seeded with user.getEmail(): the account address is copied into
-        // user_commit_emails once, at registration (and by V60 for pre-existing users), and
-        // has no effect on attribution afterwards. Folding it back in here would silently
-        // resurrect an address the user had removed on purpose.
+        // user_commit_emails once, and folding it back would resurrect a removed address.
         Set<String> emails = commitEmailRepository.findEmailsByUserId(user.getId()).stream()
                 .filter(e -> e != null && !e.isBlank())
                 .map(e -> e.trim().toLowerCase(Locale.ROOT))

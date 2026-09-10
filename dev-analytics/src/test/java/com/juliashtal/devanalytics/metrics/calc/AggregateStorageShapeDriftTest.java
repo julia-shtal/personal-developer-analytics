@@ -43,12 +43,10 @@ import static org.mockito.Mockito.when;
  * calculator against a fixture rich enough that all of them produce a snapshot and
  * recording which ones set {@code periodFrom}.
  *
- * <p>This is the test that would have caught TASK 01. The {@code aggregatePeriod} flag on
- * {@link MetricType} marked five types; thirteen were actually stored with a period, and
- * every read path that routed on the flag silently returned nothing for the other eight.
- * Asserting the shape against a checked-in expected set — rather than against the flag —
- * means the disagreement cannot recur unnoticed: adding a calculator that writes a period
- * fails here until the type is given a reduction in {@link AggregateWindowResolver}.
+ * <p>Asserted against a checked-in expected set rather than against
+ * {@code MetricType.aggregatePeriod}, so the two cannot drift unnoticed: adding a calculator that
+ * writes a period fails here until the type is given a reduction in
+ * {@link AggregateWindowResolver}.</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -62,10 +60,8 @@ class AggregateStorageShapeDriftTest {
     @Mock GitRepositoryEntityRepository gitRepoRepository;
 
     /**
-     * The metric types stored with {@code periodFrom}/{@code periodTo}. Checked in
-     * deliberately: it is the contract the read paths resolve against, and it is not
-     * derivable from {@code MetricType.aggregatePeriod}, which covers only the five
-     * types whose grain is the ISO calendar week.
+     * The metric types stored with {@code periodFrom}/{@code periodTo} — the contract the read
+     * paths resolve against, and not derivable from {@code MetricType.aggregatePeriod}.
      */
     private static final Set<MetricType> EXPECTED_PERIOD_STORED = Set.of(
             PR_LEAD_TIME_HOURS_MEDIAN,
@@ -207,9 +203,8 @@ class AggregateStorageShapeDriftTest {
         user.setGithubUserId(101L);
         user.setTimezone("UTC");
 
-        // Every identifier is populated so that all seventeen calculators clear their identity
-        // guard: this test asserts storage shape, and a calculator that skipped for want of an
-        // identity would silently drop out of the drift check.
+        // Every identifier is populated so no calculator skips on its identity guard and drops
+        // silently out of the drift check.
         AuthorIdentity identity = new AuthorIdentity(Set.of("dev@example.com"), 101L, "jira-acct-1");
 
         MetricCalcContext ctx = new MetricCalcContext(

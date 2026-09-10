@@ -23,9 +23,8 @@ export function Modal({
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Callers pass inline arrow functions as onClose, so its identity changes on
-  // every render of the owning page. Read it through a ref to keep the effects
-  // below keyed on `open` alone.
+  // onClose is an inline arrow from the owning page, so its identity changes every render.
+  // Read it through a ref to keep the effects below keyed on `open` alone.
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; });
 
@@ -41,11 +40,9 @@ export function Modal({
     };
   }, [open]);
 
-  // Initial focus, exactly once per open. Depending on onClose here made this
-  // re-run on every parent render, which yanked the caret out of whatever field
-  // the user was typing in after a single keystroke. If a child already claimed
-  // focus (an input with autoFocus does so during commit, before this effect),
-  // leave it alone instead of pulling focus back to the header close button.
+  // Initial focus, exactly once per open — keyed on `open` alone, or a parent re-render
+  // would yank the caret out of the field being typed in. A child that already claimed
+  // focus (an autoFocus input does so during commit) keeps it.
   useEffect(() => {
     if (!open) return;
     const dialog = dialogRef.current;

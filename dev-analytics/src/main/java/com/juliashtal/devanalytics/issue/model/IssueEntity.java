@@ -69,8 +69,7 @@ public class IssueEntity {
 
     /**
      * Jira accountIds behind {@code assignee} and {@code creator}. Null for GitHub issues.
-     * Display names were previously the only thing stored, and a display name is neither
-     * unique nor stable, so Jira issues could not be attributed after collection at all.
+     * Attribution matches these, never the display names, which are neither unique nor stable.
      */
     @Column(name = "assignee_account_id", length = 128)
     private String assigneeAccountId;

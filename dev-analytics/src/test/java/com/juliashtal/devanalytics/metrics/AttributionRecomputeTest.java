@@ -36,10 +36,9 @@ import static org.mockito.Mockito.*;
  * Acceptance tests for the recompute that follows an identity change — the path connecting an
  * address removed in Settings to that user's metrics being rebuilt.
  *
- * <p>The ordering is the point. Purging before recomputing is what removes rows the previous
- * identity produced; recalculating in place would leave them, because calculators only ever upsert
- * days that produced data and never delete. Clearing the coverage ledger in the same step is what
- * lets the backfill revisit those days at all.
+ * <p>The ordering is the point: purging before recomputing removes rows the previous identity
+ * produced, which recalculating in place would leave behind, and clearing the coverage ledger in
+ * the same step is what lets the backfill revisit those days.</p>
  */
 class AttributionRecomputeTest {
 
@@ -63,9 +62,8 @@ class AttributionRecomputeTest {
             doThrow(new IllegalStateException("boom"))
                     .when(backfillTrigger).onAttributionChanged(7L);
 
-            // Nothing above can react: the publishing transaction committed long ago and this
-            // runs on a pool thread. The nightly backfill rebuilds what is missing, because the
-            // purge already cleared the coverage that would otherwise skip it.
+            // Nothing above can react on a pool thread after commit; the nightly backfill
+            // rebuilds what is missing, since the purge also cleared the coverage.
             assertThatCode(() -> listener.onAuthorIdentityChanged(new AuthorIdentityChangedEvent(7L)))
                     .doesNotThrowAnyException();
         }
@@ -117,8 +115,7 @@ class AttributionRecomputeTest {
             service().onAttributionChanged(7L);
 
             // A user who unlinked everything has nothing to recompute, but their stale rows must
-            // still go -- otherwise the dashboard keeps showing metrics for an identity that no
-            // longer matches anything.
+            // still go, or the dashboard keeps showing metrics for an identity that matches nothing.
             verify(metricsPurger).purge(7L);
         }
 

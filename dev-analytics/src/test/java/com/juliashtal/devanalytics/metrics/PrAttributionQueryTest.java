@@ -20,17 +20,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Acceptance tests for PR and review attribution — the rename-safety cases.
  *
- * <p>Attribution used to compare {@code author_login = :login}, a free-text value typed into the
- * profile. That comparison was case-sensitive, two users could enter the same value, and renaming
- * an account on GitHub split one person's history in two. The numeric account id has none of those
- * properties, and these tests pin the behaviour that follows from it.
- *
- * <p>The self-review exclusion matters most: comparing logins made it fail whenever the author and
- * reviewer rows spelled the same account differently, silently crediting a self-review.
- *
- * <p>{@code created_at}, {@code merged_at} and {@code submitted_at} are all still
- * {@code TIMESTAMP WITHOUT TIME ZONE}, so fixture values are bound as UTC {@link LocalDateTime}
- * — see {@code EarliestActivityQueryTest} for why {@code Timestamp.from(Instant)} would shift them.
+ * <p>Attribution compares numeric account ids, so a rename cannot split one person's history and
+ * differing spellings cannot defeat the self-review exclusion. The timestamp columns are
+ * {@code TIMESTAMP WITHOUT TIME ZONE}, so fixtures bind UTC {@link LocalDateTime} — see
+ * {@code EarliestActivityQueryTest}.</p>
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -84,9 +77,8 @@ class PrAttributionQueryTest {
 
     @Test
     void countDistinctPrsReviewedByUser_selfReviewSpelledDifferently_isExcluded() {
-        // Same account (101) reviewing its own PR, but the review row spells the login the new
-        // way while the PR row still spells it the old way. A login comparison would see two
-        // different people here and count the self-review.
+        // Account 101 reviewing its own PR, with the two rows spelling the login differently:
+        // a login comparison would see two people and count the self-review.
         insertReview(selfReviewedPrId, "new-name", AUTHOR_ID);
 
         assertThat(reviewRepository.countDistinctPrsReviewedByUser(AUTHOR_ID, List.of(repoId), FROM, TO))

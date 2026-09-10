@@ -358,11 +358,9 @@ class MetricBackfillServiceTest {
 
     @Test
     void backfillUser_partialWeekBlock_isPassedThroughForIsoWeekExpansion() {
-        // Aggregate-period metrics must land on whole ISO weeks (TASK 01). The backfill does
-        // not week-align anything itself: it hands the contiguous day block to
-        // MetricsService.calculateDailyMetrics, which already expands the range to every ISO
-        // week it touches for the aggregate calculators and keeps day grain for the rest.
-        // Duplicating that split here would give the two paths two chances to disagree.
+        // The backfill week-aligns nothing itself: it hands the day block to
+        // MetricsService.calculateDailyMetrics, which already expands to whole ISO weeks for
+        // the aggregate calculators. Duplicating that split would let the two paths disagree.
         commitsSpanning(3);
 
         service.backfillUser(1L);
@@ -373,10 +371,8 @@ class MetricBackfillServiceTest {
 
     @Test
     void backfillUser_capOfZero_computesNothingWithoutFailing() {
-        // @Min(1) on BackfillProperties rejects this at startup, so it is unreachable in a
-        // running application. Asserted anyway because the empty batch it produces used to
-        // escape as IndexOutOfBoundsException from the block grouping, which a nightly job
-        // would have swallowed to a warning with the feature silently dead.
+        // Unreachable at runtime thanks to @Min(1), but asserted anyway: the empty batch it
+        // produces must not escape as IndexOutOfBoundsException from the block grouping.
         service = newService(0);
         commitsSpanning(10);
 
@@ -414,10 +410,9 @@ class MetricBackfillServiceTest {
 
     @Test
     void backfillUser_blockSpanningMonthBoundary_countsEveryDayInIt() {
-        // Fixed dates on purpose. Period.between(2026-01-31, 2026-03-02) is P1M2D, so a
-        // regression from ChronoUnit back to Period.getDays() reports 3 days instead of 31.
-        // Dates derived from LocalDate.now() only expose that on the handful of calendar days
-        // where the block happens to straddle a month this way, so the guard would sleep.
+        // Fixed dates on purpose: Period.between(2026-01-31, 2026-03-02) is P1M2D, so a
+        // regression to Period.getDays() reports 3 instead of 31. Dates from now() would only
+        // expose that on the few calendar days where the block straddles a month this way.
         LocalDate holeFrom = LocalDate.of(2026, 1, 31);
         LocalDate holeTo = LocalDate.of(2026, 3, 2);
         LocalDate rangeStart = LocalDate.of(2025, 12, 1);

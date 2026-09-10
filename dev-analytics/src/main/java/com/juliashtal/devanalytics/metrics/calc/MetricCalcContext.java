@@ -13,12 +13,9 @@ import java.util.List;
  * Calculators inject their own repositories via constructor injection; this record
  * carries only the per-invocation data.
  *
- * <p>{@code identity} carries the identifiers this user's records are matched by, resolved
- * once per run. Calculators must filter on it and never on {@code user.getEmail()} or
- * {@code user.getGithubLogin()}: those are display values, and matching on them is what let
- * one person's records split across two identities or leak into another person's metrics.
- * A calculator whose required identifier is absent writes nothing at all — see the
- * {@code has*} predicates on {@link AuthorIdentity}.
+ * <p>{@code identity} carries the identifiers this user's records are matched by. Calculators
+ * must filter on it, never on {@code user.getEmail()} or {@code user.getGithubLogin()}, which
+ * are display values; one whose identifier is absent writes nothing at all.
  */
 public record MetricCalcContext(
         User user,

@@ -30,8 +30,7 @@ public class FocusRatioCalculator implements MetricCalculator {
     @Override
     public void calculate(MetricCalcContext ctx) {
         if (ctx.repoIds().isEmpty()) return;
-        // Neither a declared address nor a GitHub account: attribute nothing rather
-        // than everything. A calculator without an identity must write no rows.
+        // No identity: attribute nothing rather than everything, so write no rows.
         if (!ctx.identity().hasCommitIdentity()) return;
 
         List<DailyCommitsProjection> rows = commitRepository

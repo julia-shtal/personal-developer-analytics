@@ -27,12 +27,8 @@ public class AsyncDataSourceCollectService {
         SyncJobTracker.JobState jobState = tracker.start(dataSourceId);
         boolean firstCollection;
         try {
-            // Read before collecting: collectForDataSource stamps lastSuccessSync on success, so
-            // afterwards every run looks like a repeat one. This lookup is inside the try, not
-            // before tracker.start, so a failure here (the config was deleted, or the user lost
-            // access, between the controller's 202 and this task running) is reported through
-            // the exact same tracker.fail + sendSyncFailureIfEnabled path as any other collection
-            // failure, rather than escaping this @Async void method silently.
+            // Read before collecting, since collectForDataSource stamps lastSuccessSync on success.
+            // Inside the try so a failure here reports through tracker.fail like any other.
             firstCollection =
                     dataSourceService.getForUser(userId, dataSourceId).getLastSuccessSync() == null;
 
@@ -47,9 +43,8 @@ public class AsyncDataSourceCollectService {
         }
 
         if (firstCollection) {
-            // Already off the request thread on collectTaskExecutor, so no second executor is
-            // needed. Failures here are logged rather than propagated: the collection did
-            // succeed, and the nightly backfill job will pick the history up regardless.
+            // Already off the request thread. Logged rather than propagated: the collection did
+            // succeed, and the nightly backfill picks the history up regardless.
             try {
                 backfillTrigger.onFirstCollection(userId);
             } catch (Exception e) {

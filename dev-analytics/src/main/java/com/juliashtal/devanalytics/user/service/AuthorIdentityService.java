@@ -26,21 +26,10 @@ import java.util.Optional;
  * Owns the identifiers a user is attributed by: declared commit addresses, the linked GitHub
  * account, and the Jira accountId.
  *
- * <p>Two invariants hold across every operation here.
- *
- * <p><b>Each identifier belongs to exactly one user.</b> Backed by DB constraints — a UNIQUE on
- * {@code user_commit_emails.email} and partial unique indexes on {@code users.github_user_id}
- * and {@code users.jira_account_id} — and checked here first so the caller receives a 409
- * rather than a constraint violation. Two users sharing an identifier would have the same
- * record counted twice in team rollups.
- *
- * <p><b>An event is published only when the effective value changed.</b> The listener reacts by
- * deleting and recomputing every snapshot the user has, which is far too expensive to trigger
- * on a profile save that re-submits an unchanged login. Display-only updates — a GitHub login
- * rename that keeps the same numeric ID — deliberately publish nothing, because attribution is
- * keyed on the ID and no stored metric changes.
- *
- * <p>Addresses and account IDs are never logged at INFO or above; log lines carry user IDs only.
+ * <p>Each identifier belongs to exactly one user — checked here so the caller gets a 409 rather
+ * than a constraint violation — and an event is published only when the effective value changed,
+ * because the listener recomputes every snapshot the user has. Addresses and account IDs are
+ * never logged at INFO or above.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -129,8 +118,7 @@ public class AuthorIdentityService {
         requireGithubAccountUnclaimed(userId, account.id());
 
         boolean changed = !Objects.equals(user.getGithubUserId(), account.id());
-        // Store the login exactly as GitHub spells it, not as the user typed it, so the
-        // display value cannot drift from the account it names.
+        // GitHub's spelling, not the user's, so the display value cannot drift from the ID.
         user.setGithubUserId(account.id());
         user.setGithubLogin(account.login());
         userRepository.save(user);
@@ -142,9 +130,8 @@ public class AuthorIdentityService {
     }
 
     /**
-     * Links the GitHub account owning a collection token, without the user typing anything.
-     * Never overrides an existing link and never takes one held by someone else — both cases
-     * are no-ops, because a collection run is the wrong place to resolve an ownership dispute.
+     * Links the GitHub account owning a collection token. Never overrides an existing link and
+     * never takes one held by someone else; both are no-ops rather than errors.
      */
     @Transactional
     public void claimGithubIdentityIfAbsent(Long userId, long githubUserId, String login) {
@@ -152,9 +139,7 @@ public class AuthorIdentityService {
         if (user == null) return;
 
         if (Objects.equals(user.getGithubUserId(), githubUserId)) {
-            // Same account, different spelling: the user renamed themselves on GitHub. Refresh
-            // the display value only. Attribution is keyed on the ID, so no stored metric is
-            // affected and no recompute is warranted.
+            // A rename. Attribution is keyed on the ID, so refresh the display value and nothing else.
             if (login != null && !login.equals(user.getGithubLogin())) {
                 user.setGithubLogin(login);
                 userRepository.save(user);
@@ -240,9 +225,8 @@ public class AuthorIdentityService {
     }
 
     /**
-     * Trims and lower-cases once, here, so every stored address satisfies the
-     * {@code CHECK (email = lower(btrim(email)))} constraint and is directly comparable
-     * against the {@code lower(author_email)} index the commit queries use.
+     * Trims and lower-cases once, here, so stored addresses satisfy the
+     * {@code CHECK (email = lower(btrim(email)))} constraint and match the commit-query index.
      */
     private String normalizeEmail(String raw) {
         if (raw == null || raw.isBlank()) {

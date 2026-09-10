@@ -72,10 +72,9 @@ public class GitRepositoryEntity {
      * columns. Initialised for every newly created repository, because ingest has captured
      * those IDs from the first page onwards.
      *
-     * <p>Null marks a repository collected before author attribution existed: incremental
-     * ingest skips records it already holds, so their ID columns would never be filled by a
-     * normal collection run. {@code AttributionMigrationService} uses null as its work queue
-     * and stamps this only after every sub-step for the repository succeeded.
+     * <p>Null marks a repository collected before author attribution existed, whose rows
+     * incremental ingest would never revisit. {@code AttributionMigrationService} uses null as
+     * its work queue and stamps this only once every sub-step succeeded.</p>
      */
     @Column(name = "identity_backfilled_at")
     private Instant identityBackfilledAt = Instant.now();

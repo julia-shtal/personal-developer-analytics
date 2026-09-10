@@ -47,15 +47,12 @@ public class UserService {
         if (req.getTimezone() != null) user.setTimezone(req.getTimezone());
         repository.save(user);
 
-        // githubLogin and jiraAccountId are identity, not profile text. They are resolved to
-        // stable IDs, can collide with another account (409), and changing them invalidates
-        // every metric computed under the old identity -- so they go through the identity
-        // service rather than being assigned here.
+        // githubLogin and jiraAccountId are identity, not profile text: they resolve to stable
+        // IDs, can collide (409), and invalidate metrics, so the identity service owns them.
         if (req.getGithubLogin() != null) {
             String submitted = req.getGithubLogin().trim();
             String current = user.getGithubLogin() == null ? "" : user.getGithubLogin();
-            // Re-resolve when the login changed, and also when it did not but no numeric ID is
-            // stored yet -- which is every account that predates author attribution.
+            // Re-resolve on a changed login, or an unchanged one with no numeric ID stored yet.
             if (!submitted.equalsIgnoreCase(current) || user.getGithubUserId() == null) {
                 authorIdentityService.setGithubIdentity(userId, submitted);
             }

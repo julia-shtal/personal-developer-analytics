@@ -17,10 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 /**
- * The nightly job is now incremental only: it computes yesterday for every user and does not
- * attempt gap recovery. Recovering skipped days moved to {@code MetricBackfillScheduler},
- * which reads the {@code metric_coverage} ledger rather than a MAX(date) watermark, so its
- * per-run cap resumes instead of silently truncating.
+ * The nightly job is incremental only: it computes yesterday for every user and attempts no gap
+ * recovery, which belongs to {@code MetricBackfillScheduler}.
  */
 @ExtendWith(MockitoExtension.class)
 class MetricsSchedulerTest {
@@ -62,10 +60,8 @@ class MetricsSchedulerTest {
         when(userRepository.findAll())
                 .thenReturn(List.of(userWithId(1L), userWithId(2L), userWithId(3L)));
         LocalDate yesterday = LocalDate.now().minusDays(1);
-        // lenient(): only user 2 is stubbed, so calls for users 1 and 3 would otherwise raise
-        // Mockito's PotentialStubbingProblem — which the scheduler's catch-all swallows and logs
-        // exactly like a real failure. The test still passed, but the log became unreadable:
-        // nobody reading it could tell a genuine scheduler failure from a too-strict mock.
+        // lenient(): only user 2 is stubbed, and PotentialStubbingProblem for the others would be
+        // swallowed by the scheduler's catch-all and logged as if it were a real failure.
         lenient().doThrow(new IllegalStateException("boom"))
                 .when(metricsService).calculateDailyMetrics(2L, yesterday, yesterday);
 
@@ -76,19 +72,8 @@ class MetricsSchedulerTest {
     }
 
     /**
-     * Positive-contract replacement for the plan's {@code calculateYesterday_neverNarrowsTheRange}.
-     * That test asserted {@code verify(metricsService, never()).calculateDailyMetrics(anyLong(),
-     * eq(LocalDate.now().minusDays(30)), any())} — after this rewrite the scheduler only ever
-     * calls with {@code (yesterday, yesterday)}, so that assertion passes unconditionally and
-     * cannot fail even if a 30-day-cap regression were reintroduced with a different from-date.
-     *
-     * <p>This version instead captures the actual {@code from} and {@code to} arguments and
-     * asserts both equal yesterday. A regression that widens the range — e.g. reintroducing a
-     * cap that moves {@code from} back 30 days — makes {@code fromCaptor}'s value diverge from
-     * {@code yesterday} and fails this test. No {@code MetricSnapshotRepository} mock is
-     * declared: the rewritten {@code MetricsScheduler} constructor is two-arg, so a stray
-     * three-arg construction (the old watermark dependency reappearing) fails to compile rather
-     * than needing a runtime assertion.
+     * Captures the actual {@code from} and {@code to} and asserts both equal yesterday, so any
+     * regression that widens the range fails here rather than passing unconditionally.
      */
     @Test
     void calculateYesterday_computesExactlyYesterdayToYesterday_neverAWiderRange() {

@@ -67,9 +67,8 @@ public class GitHubIdentityBackfillService implements GitHubIdentityBackfill {
                 String hash = node.path("sha").asText(null);
                 if (hash == null) continue;
 
-                // The top-level `author` is GitHub's resolution of the commit email to an
-                // account. Null means the email belongs to no account -- a real answer, not a
-                // failure, and one the declared-address path still covers.
+                // Null `author` means GitHub matched the email to no account -- a real answer,
+                // and one the declared-address path still covers.
                 JsonNode author = node.path("author");
                 if (!author.isObject()) continue;
 
@@ -153,9 +152,8 @@ public class GitHubIdentityBackfillService implements GitHubIdentityBackfill {
 
         for (GitHubPullRequestEntity pr : prs) {
             try {
-                // Replaces the PR's review rows wholesale, so the new rows carry reviewer IDs.
-                // Enrichment would never do this itself: a merged PR that is already COMPLETE
-                // is deliberately never re-fetched, its diff being immutable.
+                // Replaces review rows wholesale so they carry reviewer IDs; enrichment never
+                // would, since a COMPLETE merged PR is deliberately not re-fetched.
                 prEnrichmentService.refreshReviews(pr, ctx.apiBase(), ctx.token(), repo.getName());
                 refreshed++;
                 pause();
@@ -163,8 +161,7 @@ public class GitHubIdentityBackfillService implements GitHubIdentityBackfill {
                 Thread.currentThread().interrupt();
                 throw new GitHubException("Interrupted refreshing reviews for " + repo.getName(), e);
             } catch (Exception e) {
-                // One unreachable PR must not abandon the rest; the repository keeps its null
-                // marker, so the next run retries the whole repo anyway.
+                // One unreachable PR must not abandon the rest; the null marker retries the repo.
                 throw new GitHubException("Failed refreshing reviews for PR #" + pr.getNumber()
                         + " in " + repo.getName(), e);
             }
@@ -179,8 +176,7 @@ public class GitHubIdentityBackfillService implements GitHubIdentityBackfill {
             log.debug("Skipping issue backfill for {}: issue collection is off", repo.getName());
             return;
         }
-        // Issue collection re-fetches and upserts every issue on each run, so running it is
-        // the backfill -- the mapping now stores creator and assignee IDs.
+        // Issue collection upserts every issue each run, so running it is the backfill.
         issuesCollector.collectIssuesForRepo(repo.getDataSourceConfig(), repo);
     }
 
@@ -208,8 +204,8 @@ public class GitHubIdentityBackfillService implements GitHubIdentityBackfill {
                 throw new GitHubException("GitHub returned " + response.statusCode() + " during " + what);
             }
             JsonNode nodes = objectMapper.readTree(response.body());
-            // A non-array body means an error payload slipped through with a 200; treat it as a
-            // failure rather than as "no more pages", which would silently truncate the backfill.
+            // A non-array body is an error payload with a 200; treating it as "no more pages"
+            // would silently truncate the backfill.
             if (!nodes.isArray()) {
                 throw new GitHubException("Expected a JSON array during " + what);
             }

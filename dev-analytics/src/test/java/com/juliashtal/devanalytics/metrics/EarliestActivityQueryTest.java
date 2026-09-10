@@ -104,10 +104,8 @@ class EarliestActivityQueryTest {
 
     @Test
     void findEarliestCreatedAt_issues_jiraRoutedIssueOlderThanGithub_participatesInMin() {
-        // The GitHub-routed issues seeded in @BeforeEach bottom out at OLDEST (2026-01-05).
-        // Seed a Jira issue reachable only via jira_project_repo_mappings, older than that,
-        // so the assertion fails if COALESCE(i.repository_id, rm.repository_id) drops the
-        // Jira branch instead of routing it into the same repo-scoped MIN.
+        // A Jira issue reachable only via the mapping table, older than any GitHub-routed one,
+        // so the assertion fails if COALESCE drops the Jira branch from the repo-scoped MIN.
         Instant jiraOldest = Instant.parse("2025-06-01T00:00:00Z");
 
         Long jiraDataSourceId = insertJiraDataSource();
@@ -120,20 +118,11 @@ class EarliestActivityQueryTest {
     }
 
     // -------------------------------------------------------------------------
-    // Fixtures. Inserted with JdbcTemplate rather than entities so the test states
-    // the exact column values the queries read, and stays readable when an unrelated
-    // entity field is added.
+    // Fixtures. Inserted with JdbcTemplate rather than entities so the test states the exact
+    // column values the queries read, and stays readable when an unrelated field is added.
     //
-    // Deviates from the plan's fixture SQL: git_repositories.data_source_id is a NOT
-    // NULL FK (V2), git_repositories.repo_type has no default since V36 dropped it and
-    // is checked against local_path by chk_repo_local_path, git_commits.stats_status
-    // only accepts the StatsStatus enum values (COMPLETE, not "DONE"), and
-    // issues.source is NOT NULL with no default since V37 dropped it. The plan's
-    // "path" column on git_repositories does not exist -- the column is local_path.
-    // A user + data_source_configs row is required to satisfy the repository's FK.
-    // git_commits.author_date and github_pull_requests.created_at are still TIMESTAMP
-    // WITHOUT TIME ZONE (V55 only converted 4 other columns), so Instant fixture values
-    // are bound as UTC LocalDateTime -- see insertCommit/insertPr.
+    // git_commits.author_date and github_pull_requests.created_at are TIMESTAMP WITHOUT TIME
+    // ZONE, so Instant fixture values are bound as UTC LocalDateTime -- see insertCommit.
     // -------------------------------------------------------------------------
 
     private Long insertUser() {
@@ -159,11 +148,8 @@ class EarliestActivityQueryTest {
     }
 
     private void insertCommit(Long repositoryId, String hash, Instant authorDate) {
-        // git_commits.author_date is TIMESTAMP WITHOUT TIME ZONE (never converted to
-        // TIMESTAMPTZ by V55). java.sql.Timestamp.from(Instant) round-trips through the
-        // JVM's default zone on the way in while Hibernate reads the naive column back as
-        // UTC, so an Instant written that way silently shifts by the zone offset. Binding
-        // the UTC wall-clock LocalDateTime directly avoids that asymmetric conversion.
+        // author_date is TIMESTAMP WITHOUT TIME ZONE. Timestamp.from(Instant) writes through the
+        // JVM zone while Hibernate reads back as UTC, shifting the value; bind UTC directly.
         jdbc.update(
                 "INSERT INTO git_commits (repository_id, hash, author_name, author_email, " +
                         "author_date, message, additions, deletions, stats_status) " +
@@ -189,10 +175,8 @@ class EarliestActivityQueryTest {
     }
 
     // -------------------------------------------------------------------------
-    // Jira-routing fixtures for findEarliestCreatedAt_issues_jiraRoutedIssueOlderThanGithub.
-    // Jira issues have no repository_id of their own; they reach a repo only via
-    // jira_project_repo_mappings, which is the branch the native query's COALESCE exists
-    // to cover (see IssueRepository.findEarliestCreatedAt).
+    // Jira-routing fixtures. Jira issues reach a repo only via jira_project_repo_mappings,
+    // the branch IssueRepository.findEarliestCreatedAt's COALESCE exists to cover.
     // -------------------------------------------------------------------------
 
     private Long insertJiraDataSource() {
