@@ -32,9 +32,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -475,4 +477,57 @@ class MetricsTeamControllerTest {
                 .andExpect(jsonPath("$[0].value").value(0.25))
                 .andExpect(jsonPath("$[0].metricType").value("DAILY_CHURN_RATIO"));
     }
+    // =========================================================================
+    // repoId scope — the repo must belong to the team, not merely be reachable
+    // =========================================================================
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void getTeamDailyCommits_repoIdOutsideTeam_returnsNotFound() throws Exception {
+        User member = new User();
+        member.setId(MEMBER_ID);
+        member.setUsername("alice");
+        when(teamService.getById(TEAM_ID)).thenReturn(teamWithMember(member));
+        when(repoService.getTeamRepo(TEAM_ID, 34L))
+                .thenThrow(new NoSuchElementException("Git repo not found: 34"));
+
+        try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
+            su.when(SecurityUtils::getCurrentUserRole).thenReturn(Role.MANAGER);
+
+            mvc.perform(get("/api/metrics/teams/{teamId}/daily-commits-count", TEAM_ID)
+                            .param("from", FROM.toString())
+                            .param("to", TO.toString())
+                            .param("repoId", "34"))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+    /**
+     * Personal reachability is the wrong question here, so the team endpoint must not fall
+     * back to it: a manager's own repo is reachable by them and still not the team's.
+     */
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void getTeamDailyCommits_repoIdGiven_scopesByTeamNotByPersonalAccess() throws Exception {
+        User member = new User();
+        member.setId(MEMBER_ID);
+        member.setUsername("alice");
+        when(teamService.getById(TEAM_ID)).thenReturn(teamWithMember(member));
+        when(repoService.getTeamRepo(TEAM_ID, 34L))
+                .thenThrow(new NoSuchElementException("Git repo not found: 34"));
+
+        try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
+            su.when(SecurityUtils::getCurrentUserRole).thenReturn(Role.MANAGER);
+
+            mvc.perform(get("/api/metrics/teams/{teamId}/daily-commits-count", TEAM_ID)
+                            .param("from", FROM.toString())
+                            .param("to", TO.toString())
+                            .param("repoId", "34"))
+                    .andExpect(status().isNotFound());
+        }
+
+        verify(repoService, never()).getAccessibleRepo(any(), any());
+        verify(repoService, never()).getById(any());
+    }
+
 }

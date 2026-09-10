@@ -10,16 +10,21 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Characterises {@code existsAccessibleRepo} against the real {@code user_accessible_repos}
- * view. Run against the actual schema because the query is native and its whole purpose is to
- * inherit the view's four branches — a mock would assert only that the method was called.
+ * Characterises the two queries {@code RepoService} uses to decide whether a caller may scope
+ * by a repository, against the real schema: {@code existsAccessibleRepo} (can this user reach
+ * it?) and {@code existsByIdAndTeamId} (does this team own it?).
  *
- * <p>One test per branch, because the branch this check exists to cover (TEAM) is precisely the
- * one the previous hand-rolled owned-or-subscribed test in {@code RepoService} omitted.
+ * <p>Run against the actual database rather than mocked because the first is native and exists
+ * solely to inherit the {@code user_accessible_repos} view's four branches — a mock would
+ * assert only that the method was called. One test per branch, since the branch the check
+ * exists to cover (TEAM) is the one a hand-rolled owned-or-subscribed test omits.
+ *
+ * <p>The two queries answer deliberately different questions, so the pair of tests at the end
+ * pins the case that separates them: a repo reachable by a user but outside the team.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-class AccessibleRepoViewQueryTest {
+class RepoEntitlementQueryTest {
 
     @Autowired GitRepositoryEntityRepository repository;
     @Autowired JdbcTemplate jdbc;
@@ -79,6 +84,38 @@ class AccessibleRepoViewQueryTest {
         Long userId = insertUser();
 
         assertThat(repository.existsAccessibleRepo(userId, -1L)).isFalse();
+    }
+
+    // ── existsByIdAndTeamId — team ownership, a different question ───────────
+
+    @Test
+    void existsByIdAndTeamId_repoBelongsToTeamDataSource_returnsTrue() {
+        Long managerId = insertUser();
+        Long teamId = insertTeam(managerId);
+        Long repoId = insertRepo(insertDataSource(managerId, teamId));
+
+        assertThat(repository.existsByIdAndTeamId(repoId, teamId)).isTrue();
+    }
+
+    /**
+     * The divergence that makes the two queries distinct: the manager reaches this repo, and
+     * the team does not own it. Personal entitlement would admit it to a team series.
+     */
+    @Test
+    void existsByIdAndTeamId_managersOwnRepoOutsideTeam_returnsFalseWhileAccessibleIsTrue() {
+        Long managerId = insertUser();
+        Long teamId = insertTeam(managerId);
+        Long personalRepoId = insertRepo(insertDataSource(managerId, null));
+
+        assertThat(repository.existsAccessibleRepo(managerId, personalRepoId)).isTrue();
+        assertThat(repository.existsByIdAndTeamId(personalRepoId, teamId)).isFalse();
+    }
+
+    @Test
+    void existsByIdAndTeamId_repoIdDoesNotExist_returnsFalse() {
+        Long teamId = insertTeam(insertUser());
+
+        assertThat(repository.existsByIdAndTeamId(-1L, teamId)).isFalse();
     }
 
     // -------------------------------------------------------------------------

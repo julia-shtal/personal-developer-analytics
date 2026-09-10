@@ -728,8 +728,9 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 **`GitRepositoryService`** — `registerLocalRepo(Long userId, RegisterLocalRepoRequest)`, `listReposForUser(Long userId)`, `getRepoForUser(Long userId, Long repoId)` (ownership check), `listCommitsForRepo(Long userId, Long repoId, Pageable)`.
 
 **`RepoService`** — Unified subscription layer.
-- `getById(Long repoId)` → `GitRepositoryEntity`.
-- `getAccessibleRepo(Long userId, Long repoId)` → `GitRepositoryEntity` — returns the repo if owned or subscribed, else throws `ForbiddenException`; used by `IssuesController`.
+- `getById(Long repoId)` → `GitRepositoryEntity` — unchecked lookup; throws `NoSuchElementException` when absent. For a `repoId` that came from a request, use one of the two checked resolvers below instead.
+- `getAccessibleRepo(Long userId, Long repoId)` → `GitRepositoryEntity` — returns the repo if the user can reach it over any branch of the `user_accessible_repos` view (owned, subscribed, team member, team manager). A repo the user cannot reach throws `NoSuchElementException` with the same message an absent one produces, so **404, not 403** — existence is not distinguishable from entitlement. Used by `IssuesController`, `MetricsController` and `MetricsAiService`.
+- `getTeamRepo(Long teamId, Long repoId)` → `GitRepositoryEntity` — returns the repo if it belongs to that team's data sources, else `NoSuchElementException` (404, same reasoning). Team endpoints need this rather than `getAccessibleRepo`: a manager can reach their own private repos, which are not the team's. Used by `MetricsTeamController`. Callers still enforce team read access separately via `@PreAuthorize("@teamAccessGuard.canRead(...)")`.
 - `listAccessible(Long dataSourceId?, Long teamId?)` → `List<RepoDto>` — merges repos from user's own data sources + team data sources + subscriptions; deduplicates; sets `subscribed` flag; generates `repoUrl` from API base URL. When `teamId` is provided, filters to repos belonging to that team's data sources only (used by `TeamDashboardPage` repo filter).
 - `subscribe(Long repoId)` / `unsubscribe(Long repoId)` — creates/removes `UserRepoRegistration`.
 

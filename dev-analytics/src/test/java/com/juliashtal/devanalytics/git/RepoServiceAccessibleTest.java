@@ -2,7 +2,6 @@ package com.juliashtal.devanalytics.git;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
-import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.dto.RepoDto;
@@ -22,6 +21,7 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 
@@ -42,6 +42,7 @@ class RepoServiceAccessibleTest {
 
     private static final Long USER_ID = 1L;
     private static final Long DS_ID   = 10L;
+    private static final Long TEAM_ID = 20L;
 
     @BeforeEach
     void setUp() {
@@ -121,7 +122,7 @@ class RepoServiceAccessibleTest {
     @Test
     void getAccessibleRepo_owner_returnsRepo() {
         GitRepositoryEntity repo = repoOwnedBy(5L, USER_ID);
-        when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+        lenient().when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
         when(gitRepoRepository.existsAccessibleRepo(USER_ID, 5L)).thenReturn(true);
 
         GitRepositoryEntity result = repoService.getAccessibleRepo(USER_ID, 5L);
@@ -132,7 +133,7 @@ class RepoServiceAccessibleTest {
     @Test
     void getAccessibleRepo_subscribedNonOwner_returnsRepo() {
         GitRepositoryEntity repo = repoOwnedBy(5L, 99L);
-        when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+        lenient().when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
         when(gitRepoRepository.existsAccessibleRepo(USER_ID, 5L)).thenReturn(true);
 
         GitRepositoryEntity result = repoService.getAccessibleRepo(USER_ID, 5L);
@@ -147,7 +148,7 @@ class RepoServiceAccessibleTest {
     @Test
     void getAccessibleRepo_teamRepoNotSubscribed_returnsRepo() {
         GitRepositoryEntity repo = repoOwnedBy(5L, 99L);
-        when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+        lenient().when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
         when(gitRepoRepository.existsAccessibleRepo(USER_ID, 5L)).thenReturn(true);
 
         GitRepositoryEntity result = repoService.getAccessibleRepo(USER_ID, 5L);
@@ -157,22 +158,55 @@ class RepoServiceAccessibleTest {
         verify(userRepoRegRepository, never()).existsByUserIdAndRepositoryId(any(), any());
     }
 
+    /**
+     * An existing repo the user cannot reach and a repo that never existed must be
+     * indistinguishable, or the difference enumerates real ids. Both assertions below name the
+     * same exception and the same message on purpose — that identity is the guarantee.
+     */
     @Test
-    void getAccessibleRepo_notAccessibleByAnyPath_throwsForbidden() {
-        GitRepositoryEntity repo = repoOwnedBy(5L, 99L);
-        when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+    void getAccessibleRepo_notAccessibleByAnyPath_throwsNotFoundNotForbidden() {
         when(gitRepoRepository.existsAccessibleRepo(USER_ID, 5L)).thenReturn(false);
 
         assertThatThrownBy(() -> repoService.getAccessibleRepo(USER_ID, 5L))
-                .isInstanceOf(ForbiddenException.class);
+                .isInstanceOf(NoSuchElementException.class)
+                .hasMessage("Git repo not found: 5");
+        // The row must never be read for a repo the caller is not entitled to.
+        verify(gitRepoRepository, never()).findById(any());
     }
 
     @Test
-    void getAccessibleRepo_repoNotFound_throwsNoSuchElement() {
-        when(gitRepoRepository.findById(5L)).thenReturn(Optional.empty());
+    void getAccessibleRepo_repoNotFound_throwsSameErrorAsInaccessibleRepo() {
+        when(gitRepoRepository.existsAccessibleRepo(USER_ID, 5L)).thenReturn(false);
 
         assertThatThrownBy(() -> repoService.getAccessibleRepo(USER_ID, 5L))
-                .isInstanceOf(java.util.NoSuchElementException.class);
+                .isInstanceOf(NoSuchElementException.class)
+                .hasMessage("Git repo not found: 5");
+    }
+
+    // ── getTeamRepo ──────────────────────────────────────────────────────────
+
+    @Test
+    void getTeamRepo_repoBelongsToTeam_returnsRepo() {
+        GitRepositoryEntity repo = repoOwnedBy(5L, 99L);
+        lenient().when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+        when(gitRepoRepository.existsByIdAndTeamId(5L, TEAM_ID)).thenReturn(true);
+
+        assertThat(repoService.getTeamRepo(TEAM_ID, 5L)).isSameAs(repo);
+    }
+
+    /**
+     * The case personal entitlement would wave through: a manager's own repo, reachable by
+     * them but not part of the team they are filtering.
+     */
+    @Test
+    void getTeamRepo_repoOutsideTeamButReachableByUser_throwsNotFound() {
+        when(gitRepoRepository.existsByIdAndTeamId(5L, TEAM_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> repoService.getTeamRepo(TEAM_ID, 5L))
+                .isInstanceOf(NoSuchElementException.class)
+                .hasMessage("Git repo not found: 5");
+        verify(gitRepoRepository, never()).existsAccessibleRepo(any(), any());
+        verify(gitRepoRepository, never()).findById(any());
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

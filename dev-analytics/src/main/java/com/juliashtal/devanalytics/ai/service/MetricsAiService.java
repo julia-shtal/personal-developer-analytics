@@ -50,7 +50,11 @@ public class MetricsAiService {
 
     @Cacheable(value = "ai_summaries", key = "{#user.id, #from, #to, #repoId}")
     public MetricsSummaryDto generateSummary(User user, LocalDate from, LocalDate to, Long repoId) {
-        GitRepositoryEntity repo = repoId != null ? repoService.getById(repoId) : null;
+        // Entitlement check, not a lookup: repoId reaches here straight from the request, and
+        // the summary names the repository it was built over.
+        GitRepositoryEntity repo = repoId != null
+                ? repoService.getAccessibleRepo(user.getId(), repoId)
+                : null;
 
         AggregatedMetricsContext ctx = contextBuilder.buildPersonalContext(user, from, to, repo);
         String ctxJson = toJson(ctx);

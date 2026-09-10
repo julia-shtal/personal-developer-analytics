@@ -62,5 +62,16 @@ public interface GitRepositoryEntityRepository extends JpaRepository<GitReposito
            )
            """, nativeQuery = true)
     boolean existsAccessibleRepo(@Param("userId") Long userId, @Param("repoId") Long repoId);
+
+    /**
+     * Whether one repo belongs to a team's own data sources. Team scope is a plain FK walk
+     * rather than a view branch, so this stays JPQL — the view answers what a <em>user</em>
+     * can reach, which is a different question from what a <em>team</em> owns.
+     */
+    @Query("""
+           SELECT COUNT(r) > 0 FROM GitRepositoryEntity r
+           WHERE r.id = :repoId AND r.dataSourceConfig.team.id = :teamId
+           """)
+    boolean existsByIdAndTeamId(@Param("repoId") Long repoId, @Param("teamId") Long teamId);
 }
 

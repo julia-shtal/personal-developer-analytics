@@ -248,7 +248,7 @@ class MetricsAiServiceTest {
         GitRepositoryEntity repo = new GitRepositoryEntity();
         repo.setId(5L);
         repo.setName("dev-analytics");
-        when(repoService.getById(5L)).thenReturn(repo);
+        when(repoService.getAccessibleRepo(user.getId(), 5L)).thenReturn(repo);
 
         ArgumentCaptor<String> userPromptCaptor = ArgumentCaptor.forClass(String.class);
         when(llmClient.complete(eq(MODEL), any(), userPromptCaptor.capture(), anyBoolean())).thenReturn(VALID_JSON);

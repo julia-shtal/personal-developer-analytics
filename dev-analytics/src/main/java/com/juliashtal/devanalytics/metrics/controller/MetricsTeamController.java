@@ -252,7 +252,9 @@ public class MetricsTeamController {
 
         List<MetricSnapshot> snapshots;
         if (repoId != null) {
-            GitRepositoryEntity repo = repoService.getById(repoId);
+            // Team scope, not personal: the repo must belong to this team, or a manager could
+            // filter a team series by one of their own private repositories.
+            GitRepositoryEntity repo = repoService.getTeamRepo(teamId, repoId);
             snapshots = metricSnapshotService
                     .getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeAndRepositoryAndDateBetween(
                             memberIds, teamId, type, repo, from, to);

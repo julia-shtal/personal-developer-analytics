@@ -12,7 +12,6 @@ import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.service.JwtService;
-import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.service.UserService;
@@ -28,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Map;
 import java.util.Optional;
 
@@ -484,41 +484,60 @@ class MetricsControllerTest {
 
     @Test
     @WithMockUser
-    void getDailyCommits_repoIdNotAccessible_returnsForbidden() throws Exception {
+    void getDailyCommits_repoIdNotAccessible_returnsNotFound() throws Exception {
         when(repoService.getAccessibleRepo(currentUser.getId(), 34L))
-                .thenThrow(new ForbiddenException("Access denied to repository: 34"));
+                .thenThrow(new NoSuchElementException("Git repo not found: 34"));
 
         mvc.perform(get("/api/metrics/daily-commits-count")
                         .param("from", FROM.toString())
                         .param("to", TO.toString())
                         .param("repoId", "34"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
     @WithMockUser
-    void getPrLeadTime_repoIdNotAccessible_returnsForbidden() throws Exception {
+    void getPrLeadTime_repoIdNotAccessible_returnsNotFound() throws Exception {
         when(repoService.getAccessibleRepo(currentUser.getId(), 34L))
-                .thenThrow(new ForbiddenException("Access denied to repository: 34"));
+                .thenThrow(new NoSuchElementException("Git repo not found: 34"));
 
         mvc.perform(get("/api/metrics/pr-lead-time")
                         .param("from", FROM.toString())
                         .param("to", TO.toString())
                         .param("repoId", "34"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * The response for a repo the caller may not reach must carry nothing that separates it
+     * from one that does not exist — same status, same message.
+     */
+    @Test
+    @WithMockUser
+    void getDailyCommits_repoIdNotAccessible_bodyRevealsNothingAboutExistence() throws Exception {
+        when(repoService.getAccessibleRepo(currentUser.getId(), 34L))
+                .thenThrow(new NoSuchElementException("Git repo not found: 34"));
+
+        mvc.perform(get("/api/metrics/daily-commits-count")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString())
+                        .param("repoId", "34"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Git repo not found: 34"));
     }
 
     @Test
     @WithMockUser
     void getDailyCommits_repoIdGiven_neverResolvesRepoWithoutEntitlementCheck() throws Exception {
         when(repoService.getAccessibleRepo(currentUser.getId(), 34L))
-                .thenThrow(new ForbiddenException("Access denied to repository: 34"));
+                .thenThrow(new NoSuchElementException("Git repo not found: 34"));
 
         mvc.perform(get("/api/metrics/daily-commits-count")
                         .param("from", FROM.toString())
                         .param("to", TO.toString())
                         .param("repoId", "34"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
 
         verify(repoService, never()).getById(anyLong());
     }
