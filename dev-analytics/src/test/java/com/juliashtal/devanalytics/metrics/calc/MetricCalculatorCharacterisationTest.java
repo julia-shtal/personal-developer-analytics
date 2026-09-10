@@ -8,6 +8,7 @@ import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository
 import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.user.model.AuthorIdentity;
 import com.juliashtal.devanalytics.user.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,18 +63,18 @@ class MetricCalculatorCharacterisationTest {
                 .thenReturn(Optional.empty());
         when(snapshotRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        when(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(any(), any(), any(), any())).thenReturn(List.of());
-        when(pullRequestRepository.aggregatePrCreatedDailyByRepoIdsAndAuthorLogin(any(), any(), any(), any())).thenReturn(List.of());
-        when(pullRequestRepository.aggregatePrMergedDailyByRepoIdsAndAuthorLogin(any(), any(), any(), any())).thenReturn(List.of());
-        when(issueRepository.aggregateIssuesCreatedDailyByRepoIds(any(), any(), any())).thenReturn(List.of());
-        when(issueRepository.aggregateIssuesClosedDailyByRepoIds(any(), any(), any())).thenReturn(List.of());
-        when(commitRepository.aggregateChurnDailyByRepoIdsAndAuthorEmail(any(), any(), any(), any())).thenReturn(List.of());
-        when(pullRequestRepository.findMergedLeadTimesByRepoIdsAndAuthorLogin(any(), any(), any(), any())).thenReturn(List.of());
-        when(issueRepository.findIssueLeadTimesByRepoIds(any(), any(), any())).thenReturn(List.of());
-        when(pullRequestRepository.findMergedPrsByRepoIdsAndAuthorLogin(any(), any(), any(), any())).thenReturn(List.of());
-        when(commitRepository.findCommitDetailsByRepoIdsAndAuthorEmail(any(), any(), any(), any())).thenReturn(List.of());
+        when(commitRepository.aggregateCommitsDailyByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(pullRequestRepository.aggregatePrCreatedDailyByRepoIdsAndAuthorGithubId(any(), any(), any(), any())).thenReturn(List.of());
+        when(pullRequestRepository.aggregatePrMergedDailyByRepoIdsAndAuthorGithubId(any(), any(), any(), any())).thenReturn(List.of());
+        when(issueRepository.aggregateIssuesCreatedDailyByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(issueRepository.aggregateIssuesClosedDailyByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(commitRepository.aggregateChurnDailyByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(pullRequestRepository.findMergedLeadTimesByRepoIdsAndAuthorGithubId(any(), any(), any(), any())).thenReturn(List.of());
+        when(issueRepository.findIssueLeadTimesByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(pullRequestRepository.findMergedPrsByRepoIdsAndAuthorGithubId(any(), any(), any(), any())).thenReturn(List.of());
+        when(commitRepository.findCommitDetailsByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(List.of());
         when(commitRepository.countTotalCommitsByRepoIds(any(), any(), any())).thenReturn(List.of());
-        when(commitRepository.countCommitsByRepoIdsAndAuthorEmail(any(), any(), any(), any())).thenReturn(List.of());
+        when(commitRepository.countCommitsByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(List.of());
     }
 
     @Test
@@ -92,11 +93,15 @@ class MetricCalculatorCharacterisationTest {
         user.setId(1L);
         user.setEmail("dev@example.com");
         user.setGithubLogin("devuser");
+        user.setGithubUserId(101L);
         user.setTimezone("UTC");
 
         Instant from = FROM.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant to   = TO.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-        MetricCalcContext ctx = new MetricCalcContext(user, null, List.of(REPO_ID), from, to, FROM, TO);
+        // Fully populated so every calculator gets past its identity guard and actually runs;
+        // the point of this test is that none of them throws on empty data.
+        AuthorIdentity identity = new AuthorIdentity(Set.of("dev@example.com"), 101L, "jira-acct-1");
+        MetricCalcContext ctx = new MetricCalcContext(user, null, List.of(REPO_ID), identity, from, to, FROM, TO);
 
         MetricCalculatorRegistry registry = buildRegistry();
         assertThatCode(() -> registry.all().forEach(c -> c.calculate(ctx))).doesNotThrowAnyException();

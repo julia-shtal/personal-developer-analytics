@@ -32,7 +32,7 @@ review_response_time_hours_median =
   grouped per repository
 ```
 
-- Attribution: `author_login = user.githubLogin`. **Requires `User.githubLogin` to be set.**
+- Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Window: `P.merged_at >= from` AND `P.merged_at < to+1`.
 - PRs without any review row in `github_pr_reviews` are **excluded** from the denominator. This metric measures review speed when reviews happen, not review adoption (which is `MERGE_WITHOUT_REVIEW_RATIO`).
 - Negative durations (review timestamp before PR creation) are skipped: `if (hours < 0) continue`.
@@ -41,7 +41,7 @@ review_response_time_hours_median =
 
 ## Edge cases
 
-- **`githubLogin` not set**: metric is skipped; no snapshot written.
+- **GitHub account not linked**: metric is skipped; no snapshot written.
 - **No merged PRs in window**: no snapshot written.
 - **All merged PRs had no reviews**: all PRs are skipped → no snapshot written (not a 0 median).
 - **Review submitted before PR creation**: skipped (hours < 0 guard). Can occur if the GitHub API returns inconsistent timestamps.

@@ -15,6 +15,27 @@ import java.util.Optional;
  */
 public interface GitRepositoryEntityRepository extends JpaRepository<GitRepositoryEntity, Long> {
     List<GitRepositoryEntity> findAllByDataSourceConfig(DataSourceConfig dataSourceConfig);
+
+    /**
+     * GitHub repositories whose stored records have not yet been given their numeric identity
+     * columns — the attribution migration's work queue.
+     *
+     * <p>{@code join fetch} because the job needs each repo's token and API base immediately;
+     * a lazy load would fail once the job leaves the transaction that read this list.
+     */
+    @Query("""
+    select r from GitRepositoryEntity r
+    join fetch r.dataSourceConfig d
+    where r.identityBackfilledAt is null
+      and d.type = com.juliashtal.devanalytics.datasource.model.DataSourceType.GITHUB
+    order by r.id
+    """)
+    List<GitRepositoryEntity> findPendingIdentityBackfill();
+
+    long countByIdentityBackfilledAtIsNull();
+
+    long countByIdentityBackfilledAtIsNotNull();
+
     long countByDataSourceConfig(DataSourceConfig dataSourceConfig);
     Optional<GitRepositoryEntity> findByDataSourceConfigAndName(
             DataSourceConfig cfg, String name

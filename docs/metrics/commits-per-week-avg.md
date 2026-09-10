@@ -24,7 +24,8 @@ commits_per_week = MAP(week_key → SUM(commits on that day))
            COUNT(*)                   AS daily_count
     FROM git_commits
     WHERE repository_id IN :repoIds
-      AND author_email  = user.email
+      AND ( author_github_id = user.githubUserId
+         OR lower(author_email) IN user.commitEmails )
       AND author_date  >= from AND author_date < to+1
       AND author_name NOT LIKE '%[bot]%'
     GROUP BY day
@@ -48,7 +49,7 @@ for (DailyCommitsProjection row : rows) {
 double avgPerWeek = byWeek.values().stream().mapToLong(Long::longValue).average().orElse(0.0);
 ```
 
-- Attribution: `author_email = user.email`.
+- Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`.
 - ISO week: a week that crosses year boundaries (e.g. last days of December may belong to week 1 of the next year) is counted by ISO standard using `WeekFields.ISO`.
 - Partial weeks at the boundaries of the date window are included at their actual commit count (not prorated).

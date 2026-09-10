@@ -165,12 +165,7 @@ public class GitHubPrStatsEnrichmentService {
         }
 
         try {
-            // Fetch and persist reviews (replace existing ones for this PR).
-            List<GitHubPrReviewEntity> reviews = fetchReviews(pr, apiBase, token, repoFullName);
-            reviewRepository.deleteAllByPullRequest(pr);
-            if (!reviews.isEmpty()) {
-                reviewRepository.saveAll(reviews);
-            }
+            refreshReviews(pr, apiBase, token, repoFullName);
 
             // Fetch size stats from the PR detail endpoint (rate-limited).
             waitForRateLimit();
@@ -192,6 +187,23 @@ public class GitHubPrStatsEnrichmentService {
             log.warn("Interrupted enriching PR #{} in {}", pr.getNumber(), repoFullName);
         } catch (IOException e) {
             log.warn("IO error enriching PR #{} in {}: {}", pr.getNumber(), repoFullName, e.getMessage());
+        }
+    }
+
+    /**
+     * Re-fetches one PR's reviews and replaces the stored rows.
+     *
+     * <p>Extracted verbatim from {@link #enrichSingle}, which still calls it: same fetch, same
+     * delete-then-insert, same ordering. Exposed so the attribution backfill can refresh reviews
+     * for a PR whose stats are already {@code COMPLETE} — enrichment never revisits those, so
+     * the reviewer IDs on historical rows would otherwise stay null forever.
+     */
+    void refreshReviews(GitHubPullRequestEntity pr, String apiBase, String token, String repoFullName)
+            throws IOException, InterruptedException {
+        List<GitHubPrReviewEntity> reviews = fetchReviews(pr, apiBase, token, repoFullName);
+        reviewRepository.deleteAllByPullRequest(pr);
+        if (!reviews.isEmpty()) {
+            reviewRepository.saveAll(reviews);
         }
     }
 
@@ -232,7 +244,10 @@ public class GitHubPrStatsEnrichmentService {
 
                 GitHubPrReviewEntity review = new GitHubPrReviewEntity();
                 review.setPullRequest(pr);
-                review.setReviewerLogin(node.path("user").path("login").asText(null));
+                JsonNode reviewer = node.path("user");
+                review.setReviewerLogin(reviewer.path("login").asText(null));
+                review.setReviewerGithubId(reviewer.isObject() && reviewer.path("id").isNumber()
+                        ? reviewer.path("id").asLong() : null);
                 review.setState(node.path("state").asText(null));
                 review.setSubmittedAt(submittedAt);
                 reviews.add(review);

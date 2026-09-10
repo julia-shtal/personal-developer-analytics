@@ -32,11 +32,15 @@ public interface GitHubPrReviewRepository extends JpaRepository<GitHubPrReviewEn
     List<PrReviewTimestampProjection> findFirstReviewTimestampsByPrIds(@Param("prIds") List<Long> prIds);
 
     /**
-     * Counts distinct PRs reviewed by the given GitHub login within the time window,
+     * Counts distinct PRs reviewed by the given GitHub account within the time window,
      * scoped to the given repository IDs, excluding self-reviews.
      *
+     * <p>Both the reviewer match and the self-review exclusion compare numeric account IDs.
+     * Comparing logins made the exclusion fail whenever the author and reviewer rows spelled
+     * the same account differently, which silently credited a self-review.</p>
+     *
      * <p>Bot reviewer accounts cannot appear because the query is already scoped to the
-     * specific user's GitHub login, which is a registered human account. Ingestion
+     * specific user's GitHub account, which is a registered human account. Ingestion
      * preserves raw review records for audit.</p>
      *
      * <p>Uses distinct PR ID to avoid counting multiple reviews on the same PR. The {@code to}
@@ -45,14 +49,14 @@ public interface GitHubPrReviewRepository extends JpaRepository<GitHubPrReviewEn
     @Query("""
             SELECT COUNT(DISTINCT r.pullRequest.id)
             FROM GitHubPrReviewEntity r
-            WHERE r.reviewerLogin = :reviewerLogin
+            WHERE r.reviewerGithubId = :reviewerGithubId
             AND r.pullRequest.repository.id IN :repoIds
             AND r.submittedAt >= :from
             AND r.submittedAt < :to
-            AND r.pullRequest.authorLogin <> :reviewerLogin
+            AND r.pullRequest.authorGithubId <> :reviewerGithubId
             """)
     long countDistinctPrsReviewedByUser(
-            @Param("reviewerLogin") String reviewerLogin,
+            @Param("reviewerGithubId") Long reviewerGithubId,
             @Param("repoIds") List<Long> repoIds,
             @Param("from") Instant from,
             @Param("to") Instant to);

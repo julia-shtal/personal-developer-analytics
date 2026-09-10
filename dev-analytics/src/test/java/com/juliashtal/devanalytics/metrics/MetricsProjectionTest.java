@@ -11,6 +11,7 @@ import com.juliashtal.devanalytics.metrics.calc.KnowledgeSiloCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
 import com.juliashtal.devanalytics.metrics.calc.MetricSnapshotWriter;
 import com.juliashtal.devanalytics.metrics.model.*;
+import com.juliashtal.devanalytics.user.model.AuthorIdentity;
 import com.juliashtal.devanalytics.user.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,7 +75,10 @@ class MetricsProjectionTest {
 
         Instant from = DATE.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant to   = DATE.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-        ctx = new MetricCalcContext(user, null, List.of(REPO_ID), from, to, DATE, DATE);
+        // The projections under test are shape assertions, so the identity only has to be
+        // non-empty enough for each calculator's guard to let it through.
+        AuthorIdentity identity = new AuthorIdentity(Set.of("dev@example.com"), 101L, "jira-acct-1");
+        ctx = new MetricCalcContext(user, null, List.of(REPO_ID), identity, from, to, DATE, DATE);
     }
 
     // ── DailyCommitsProjection ────────────────────────────────────────────────
@@ -85,7 +90,7 @@ class MetricsProjectionTest {
         when(row.getRepoId()).thenReturn(REPO_ID);
         when(row.getCommitsCount()).thenReturn(7L);
         when(row.getAvgSize()).thenReturn(42.0);
-        when(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
+        when(commitRepository.aggregateCommitsDailyByRepoIdsAndIdentity(anyList(), any(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
         new DailyCommitsCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
@@ -109,7 +114,7 @@ class MetricsProjectionTest {
         when(row.getRepoId()).thenReturn(REPO_ID);
         when(row.getCommitsCount()).thenReturn(3L);
         when(row.getAvgSize()).thenReturn(null);
-        when(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
+        when(commitRepository.aggregateCommitsDailyByRepoIdsAndIdentity(anyList(), any(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
         new DailyCommitsCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
@@ -131,7 +136,7 @@ class MetricsProjectionTest {
         when(row.getRepoId()).thenReturn(REPO_ID);
         when(row.getAdditions()).thenReturn(30L);
         when(row.getDeletions()).thenReturn(10L);   // churn = 10 / (30+10) = 0.25
-        when(commitRepository.aggregateChurnDailyByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
+        when(commitRepository.aggregateChurnDailyByRepoIdsAndIdentity(anyList(), any(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
         new DailyChurnCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
@@ -157,7 +162,7 @@ class MetricsProjectionTest {
         when(mine.getCount()).thenReturn(60L);   // share = 60/100 = 0.6
 
         when(commitRepository.countTotalCommitsByRepoIds(anyList(), any(), any())).thenReturn(List.of(total));
-        when(commitRepository.countCommitsByRepoIdsAndAuthorEmail(anyList(), any(), any(), any())).thenReturn(List.of(mine));
+        when(commitRepository.countCommitsByRepoIdsAndIdentity(anyList(), any(), any(), any(), any())).thenReturn(List.of(mine));
 
         new KnowledgeSiloCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
 
@@ -181,7 +186,7 @@ class MetricsProjectionTest {
         when(row.getAdditions()).thenReturn(10);
         when(row.getDeletions()).thenReturn(5);
         when(row.getStatsStatus()).thenReturn(StatsStatus.COMPLETE);
-        when(commitRepository.findCommitDetailsByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
+        when(commitRepository.findCommitDetailsByRepoIdsAndIdentity(anyList(), any(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
         new AfterHoursAndRefactorCalculator(commitRepository, writer).calculate(ctx);
@@ -204,7 +209,7 @@ class MetricsProjectionTest {
         when(row.getAdditions()).thenReturn(10);
         when(row.getDeletions()).thenReturn(20);
         when(row.getStatsStatus()).thenReturn(StatsStatus.COMPLETE);
-        when(commitRepository.findCommitDetailsByRepoIdsAndAuthorEmail(anyList(), any(), any(), any()))
+        when(commitRepository.findCommitDetailsByRepoIdsAndIdentity(anyList(), any(), any(), any(), any()))
                 .thenReturn(List.of(row));
 
         new AfterHoursAndRefactorCalculator(commitRepository, writer).calculate(ctx);

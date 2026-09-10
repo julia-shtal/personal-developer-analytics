@@ -16,7 +16,7 @@ The fraction of pull requests authored by the user, merged within the selected d
 ```
 merged_prs = github_pull_requests
   WHERE repository_id IN :repoIds
-    AND author_login  = user.githubLogin
+    AND author_github_id = user.githubUserId
     AND merged_at    >= from AND merged_at < to+1
     AND author_login NOT LIKE '%[bot]'
 
@@ -44,7 +44,7 @@ for (PR pr : prs) {
 ratio = counts[0] / counts[1];
 ```
 
-- Attribution: `author_login = user.githubLogin`. **Requires `User.githubLogin` to be set.**
+- Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Window: `merged_at >= from` AND `merged_at < to+1`.
 - Denominator: total merged PRs. No denominator guard for zero: if no merged PRs exist, method returns after the empty-list check.
 - Bot exclusion: `author_login NOT LIKE '%[bot]'`.
@@ -52,7 +52,7 @@ ratio = counts[0] / counts[1];
 
 ## Edge cases
 
-- **`githubLogin` not set**: metric skipped; no snapshot written.
+- **GitHub account not linked**: metric skipped; no snapshot written.
 - **No merged PRs in window**: no snapshot written (not a 0.0 value).
 - **All PRs reviewed**: `COUNT(prs_with_reviews) = COUNT(merged_prs)` → ratio = 0.0.
 - **All PRs unreviewed**: ratio = 1.0.

@@ -33,12 +33,12 @@ public class DailyPrCalculator implements MetricCalculator {
     @Override
     public void calculate(MetricCalcContext ctx) {
         if (ctx.repoIds().isEmpty()) return;
-        if (ctx.user().getGithubLogin() == null) return;
+        if (!ctx.identity().hasGithubIdentity()) return;
 
         List<DailyCountProjection> createdRows = pullRequestRepository
-                .aggregatePrCreatedDailyByRepoIdsAndAuthorLogin(ctx.repoIds(), ctx.user().getGithubLogin(), ctx.from(), ctx.to());
+                .aggregatePrCreatedDailyByRepoIdsAndAuthorGithubId(ctx.repoIds(), ctx.identity().githubUserId(), ctx.from(), ctx.to());
         List<DailyCountProjection> mergedRows = pullRequestRepository
-                .aggregatePrMergedDailyByRepoIdsAndAuthorLogin(ctx.repoIds(), ctx.user().getGithubLogin(), ctx.from(), ctx.to());
+                .aggregatePrMergedDailyByRepoIdsAndAuthorGithubId(ctx.repoIds(), ctx.identity().githubUserId(), ctx.from(), ctx.to());
 
         Map<Long, GitRepositoryEntity> repoCache = new HashMap<>();
         for (DailyCountProjection row : createdRows) {

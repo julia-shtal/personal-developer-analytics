@@ -17,7 +17,8 @@ public record GitCommitDto(
         int additions,
         int deletions,
         int filesChanged,
-        String parentHash
+        String parentHash,
+        String authorGithubLogin
 ) {
     public static GitCommitDto fromEntity(GitCommitEntity e) {
         return new GitCommitDto(
@@ -30,7 +31,8 @@ public record GitCommitDto(
                 e.getAdditions(),
                 e.getDeletions(),
                 e.getFilesChanged(),
-                e.getParentHash()
+                e.getParentHash(),
+                e.getAuthorGithubLogin()
         );
     }
 }

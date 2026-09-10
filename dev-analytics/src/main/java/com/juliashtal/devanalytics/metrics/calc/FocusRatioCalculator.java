@@ -30,9 +30,15 @@ public class FocusRatioCalculator implements MetricCalculator {
     @Override
     public void calculate(MetricCalcContext ctx) {
         if (ctx.repoIds().isEmpty()) return;
+        // Neither a declared address nor a GitHub account: attribute nothing rather
+        // than everything. A calculator without an identity must write no rows.
+        if (!ctx.identity().hasCommitIdentity()) return;
 
         List<DailyCommitsProjection> rows = commitRepository
-                .aggregateCommitsDailyByRepoIdsAndAuthorEmail(ctx.repoIds(), ctx.user().getEmail(), ctx.from(), ctx.to());
+                .aggregateCommitsDailyByRepoIdsAndIdentity(ctx.repoIds(),
+                        ctx.identity().githubUserId(),
+                        CalcUtils.emailsOrSentinel(ctx.identity().commitEmails()),
+                        ctx.from(), ctx.to());
 
         Set<LocalDate> daysWithCommits = new HashSet<>();
         for (DailyCommitsProjection row : rows) {

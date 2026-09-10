@@ -14,6 +14,7 @@ import com.juliashtal.devanalytics.jira.repository.JiraProjectRepoMappingReposit
 import com.juliashtal.devanalytics.jira.repository.JiraProjectRepository;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.security.TokenEncryptor;
+import com.juliashtal.devanalytics.user.service.AuthorIdentityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,6 +30,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Collects Jira issues for tracked projects via the Jira REST API.
@@ -43,10 +45,14 @@ public class JiraCollector {
     private final JiraProjectRepository jiraProjectRepository;
     private final JiraProjectRepoMappingRepository jiraProjectRepoMappingRepository;
     private final TokenEncryptor tokenEncryptor;
+    private final AuthorIdentityService authorIdentityService;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${jira.page-size:100}")
     private int pageSize;
+
+    /** Jira project keys: an uppercase letter followed by uppercase alphanumerics or underscore. */
+    private static final Pattern PROJECT_KEY_PATTERN = Pattern.compile("^[A-Z][A-Z0-9_]*$");
 
     private static final DateTimeFormatter JIRA_DATE_TIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX", Locale.ROOT);
@@ -69,9 +75,9 @@ public class JiraCollector {
         headers.setBasicAuth(parts[0], parts[1]);
 
         String accountId = fetchCurrentUserAccountId(baseUrl, headers);
-        log.info("Jira authenticated as accountId={}", accountId);
+        log.info("Jira authenticated for dataSourceId={}", config.getId());
 
-        String jql = buildJql(project.getProjectKey(), accountId);
+        String jql = buildJql(project.getProjectKey());
 
         log.info("Starting Jira issue collection from: {}, project: {}, jql: {}",
                 baseUrl, project.getProjectKey(), jql);
@@ -79,6 +85,14 @@ public class JiraCollector {
         int saved = fetchAndUpsertIssues(searchUrl, jql, headers, project);
 
         project.setLastScanAt(Instant.now());
+
+        // Links the token owner's Jira account to the data source owner, so a user who
+        // connected Jira with their own token never has to type an accountId. A no-op when
+        // they already have one, or when another user holds it.
+        if (config.getUser() != null) {
+            authorIdentityService.claimJiraAccountIdIfAbsent(config.getUser().getId(), accountId);
+        }
+
         log.info("Jira collection complete: {} issues collected from {}, project: {}",
                 saved, baseUrl, project.getProjectKey());
         return saved;
@@ -156,13 +170,26 @@ public class JiraCollector {
         }
     }
 
-    private String buildJql(String projectKey, String accountId) {
-        String assigneeFilter = "assignee = " + accountId + " ";
-        if (projectKey != null && !projectKey.isBlank()) {
-            return "project = " + projectKey + " AND "
-                    + assigneeFilter + " ORDER BY created DESC";
+    /**
+     * JQL for the whole project, with no assignee clause.
+     *
+     * <p>The filter used to be {@code assignee = <token owner's accountId>}, which made the
+     * stored rows depend on whose token happened to collect them. The canonical project row is
+     * collected once, with its owner's token, so every other subscriber was credited with the
+     * owner's issues. Attribution now happens in the metric queries against each issue's stored
+     * accountId, which means collection has to bring back the whole project.
+     *
+     * <p>The key is validated rather than escaped: it is interpolated into JQL, and Jira project
+     * keys are uppercase alphanumerics by definition, so anything else is a bug or an injection
+     * attempt. Quoting the key additionally keeps reserved words from being parsed as operators.
+     */
+    // Package-private rather than private so JiraCollectorJqlTest can assert the clause
+    // directly; the collector's only other entry point would need a live Jira to reach it.
+    String buildJql(String projectKey) {
+        if (projectKey == null || !PROJECT_KEY_PATTERN.matcher(projectKey).matches()) {
+            throw new IllegalStateException("Invalid Jira project key: " + projectKey);
         }
-        return assigneeFilter + " ORDER BY created DESC";
+        return "project = \"" + projectKey + "\" ORDER BY created DESC";
     }
 
     private JiraSearchResponse parseResponse(String body) {
@@ -173,7 +200,9 @@ public class JiraCollector {
         }
     }
 
-    private void upsertJiraIssue(JiraProjectEntity project, JiraSearchResponse.JiraIssue jiraIssue) {
+    // Package-private for JiraIssueUpsertTest: the only other route here is a live Jira,
+    // and storing both accountIds is what makes Jira issues attributable at all.
+    void upsertJiraIssue(JiraProjectEntity project, JiraSearchResponse.JiraIssue jiraIssue) {
         String sourceIssueKey = jiraIssue.getKey();
 
         IssueEntity issue = issueRepository
@@ -192,6 +221,9 @@ public class JiraCollector {
 
             issue.setAssignee(f.getAssignee() != null ? f.getAssignee().getDisplayName() : null);
             issue.setCreator(f.getReporter() != null ? f.getReporter().getDisplayName() : null);
+            // Display names above are kept for the UI; these are what the metric queries match.
+            issue.setAssigneeAccountId(f.getAssignee() != null ? f.getAssignee().getAccountId() : null);
+            issue.setReporterAccountId(f.getReporter() != null ? f.getReporter().getAccountId() : null);
 
             issue.setCreatedAt(parseJiraDate(f.getCreated()));
             issue.setUpdatedAt(parseJiraDate(f.getUpdated()));

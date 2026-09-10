@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.user.model.ContactMethod;
 import com.juliashtal.devanalytics.user.model.NotificationPrefsDto;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.model.UserNotificationPrefsEntity;
+import com.juliashtal.devanalytics.user.service.AuthorIdentityService;
 import com.juliashtal.devanalytics.user.service.UserNotificationPrefsService;
 import com.juliashtal.devanalytics.user.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,7 @@ class NotificationPrefsControllerTest {
     @Autowired ObjectMapper mapper;
     @MockBean UserService userService;
     @MockBean UserNotificationPrefsService notificationPrefsService;
+    @MockBean AuthorIdentityService authorIdentityService;
     @MockBean JwtService jwtService;
     @MockBean CustomUserDetailsService customUserDetailsService;
 

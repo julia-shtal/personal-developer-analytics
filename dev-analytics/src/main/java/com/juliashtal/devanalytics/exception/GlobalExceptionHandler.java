@@ -106,6 +106,12 @@ public class GlobalExceptionHandler {
     // 409 Conflict
     // ─────────────────────────────────────────────────────────────
 
+    @ExceptionHandler(UnprocessableEntityException.class)
+    public ResponseEntity<ApiError> handleUnprocessable(
+            UnprocessableEntityException ex, HttpServletRequest request) {
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "Unprocessable Entity", ex.getMessage(), request);
+    }
+
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiError> handleConflict(
             ConflictException ex, HttpServletRequest request) {

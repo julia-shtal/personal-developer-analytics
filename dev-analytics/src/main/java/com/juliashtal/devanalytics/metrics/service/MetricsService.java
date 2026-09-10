@@ -5,11 +5,13 @@ import com.juliashtal.devanalytics.metrics.MetricCoverageRepository;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;
+import com.juliashtal.devanalytics.user.model.AuthorIdentity;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
+import com.juliashtal.devanalytics.user.service.AuthorIdentityResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +35,7 @@ public class MetricsService {
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
     private final RepoScopeResolver repoScopeResolver;
+    private final AuthorIdentityResolver authorIdentityResolver;
     private final MetricCoverageRepository coverageRepository;
 
     /** Personal metrics — uses only the user's own data sources, saved with team=null. */
@@ -87,6 +90,9 @@ public class MetricsService {
      */
     private void calculateDailyMetricsForUser(User user, Team team, LocalDate fromDate, LocalDate toDate) {
         List<Long> repoIds = repoScopeResolver.resolve(user, team);
+        // Resolved once per run rather than per calculator: it is the same for all seventeen,
+        // and re-reading it per weekly window would multiply the query count by the range.
+        AuthorIdentity identity = authorIdentityResolver.resolve(user);
 
         List<MetricCalculator> seriesCalculators = new ArrayList<>();
         List<MetricCalculator> aggregateCalculators = new ArrayList<>();
@@ -99,13 +105,13 @@ public class MetricsService {
         }
 
         if (!seriesCalculators.isEmpty()) {
-            MetricCalcContext fullRange = context(user, team, repoIds, fromDate, toDate);
+            MetricCalcContext fullRange = context(user, team, repoIds, identity, fromDate, toDate);
             seriesCalculators.forEach(c -> c.calculate(fullRange));
         }
 
         if (!aggregateCalculators.isEmpty()) {
             for (LocalDate weekStart : isoWeeksOverlapping(fromDate, toDate)) {
-                MetricCalcContext week = context(user, team, repoIds, weekStart, weekStart.plusDays(6));
+                MetricCalcContext week = context(user, team, repoIds, identity, weekStart, weekStart.plusDays(6));
                 aggregateCalculators.forEach(c -> c.calculate(week));
             }
         }
@@ -127,10 +133,11 @@ public class MetricsService {
     }
 
     private static MetricCalcContext context(User user, Team team, List<Long> repoIds,
+                                             AuthorIdentity identity,
                                              LocalDate fromDate, LocalDate toDate) {
         Instant from = fromDate.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant to   = toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-        return new MetricCalcContext(user, team, repoIds, from, to, fromDate, toDate);
+        return new MetricCalcContext(user, team, repoIds, identity, from, to, fromDate, toDate);
     }
 
     /**

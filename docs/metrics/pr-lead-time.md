@@ -22,7 +22,7 @@ pr_lead_time_hours_median =
   grouped per repository
 ```
 
-- Attribution: `author_login = user.githubLogin`. **Requires `User.githubLogin` to be set.**
+- Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Window: `merged_at >= from` AND `merged_at < to+1` (inclusive end date). `created_at` may fall before the window.
 - Bot exclusion: `author_login NOT LIKE '%[bot]'`.
 - Duration: `Duration.between(createdAt, mergedAt).toHours()` — integer hours, rounding down (Java `Duration.toHours()`).
@@ -31,7 +31,7 @@ pr_lead_time_hours_median =
 
 ## Edge cases
 
-- **`githubLogin` not set**: metric is skipped; no snapshot written.
+- **GitHub account not linked**: metric is skipped; no snapshot written.
 - **No merged PRs in window**: no snapshot written for that repo (null on the read side).
 - **`mergedAt < createdAt`**: should not occur; GitHub API guarantees `merged_at > created_at`. If encountered, the duration is negative — the implementation saves the raw value; the UI may display it as anomalous.
 - **Reopened PRs**: `mergedAt` is the actual merge timestamp; the earlier `createdAt` still counts from original creation. This convention is consistent with DORA guidance: lead time starts when work is initiated, not when it was most recently opened.

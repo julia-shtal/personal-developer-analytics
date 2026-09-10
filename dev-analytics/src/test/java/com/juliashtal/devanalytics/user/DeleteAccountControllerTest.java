@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.security.SecurityUtils;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.service.JwtService;
 import com.juliashtal.devanalytics.user.controller.UserProfileController;
+import com.juliashtal.devanalytics.user.service.AuthorIdentityService;
 import com.juliashtal.devanalytics.user.service.UserNotificationPrefsService;
 import com.juliashtal.devanalytics.user.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ class DeleteAccountControllerTest {
     @Autowired MockMvc mvc;
     @MockBean UserService userService;
     @MockBean UserNotificationPrefsService notificationPrefsService;
+    @MockBean AuthorIdentityService authorIdentityService;
     @MockBean JwtService jwtService;
     @MockBean CustomUserDetailsService customUserDetailsService;
 

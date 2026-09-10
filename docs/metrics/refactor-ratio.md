@@ -16,7 +16,8 @@ The fraction of the user's fully-enriched commits in the selected window where t
 ```
 enriched_commits = git_commits
   WHERE repository_id IN :repoIds
-    AND author_email  = user.email
+    AND ( author_github_id = user.githubUserId
+       OR lower(author_email) IN user.commitEmails )
     AND author_date  >= from AND author_date < to+1
     AND stats_status  = 'COMPLETE'
     AND author_name NOT LIKE '%[bot]%'
@@ -26,7 +27,7 @@ refactor_ratio =
   / COUNT(enriched_commits)          -- denominator guard: skip if 0
 ```
 
-- Attribution: `author_email = user.email`.
+- Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`.
 - **`stats_status = COMPLETE` filter**: only applied to the `REFACTOR_RATIO` denominator (and numerator). `AFTER_HOURS_COMMIT_RATIO` uses the same query but applies its count to all commits regardless of stats status (since it only needs `author_date`, which is always available).
 - If `enrichedTotal = 0` (no COMPLETE commits in window), the snapshot is **not saved** to avoid persisting a misleading 0.0.

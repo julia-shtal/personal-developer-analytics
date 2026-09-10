@@ -33,9 +33,15 @@ public class DailyIssuesCalculator implements MetricCalculator {
     @Override
     public void calculate(MetricCalcContext ctx) {
         if (ctx.repoIds().isEmpty()) return;
+        // Issues come from two systems and are matched per source. Without either
+        // identifier this user matches no issue at all -- which is the point: the
+        // unfiltered query credited every subscriber with every issue in the repo.
+        if (!ctx.identity().hasIssueIdentity()) return;
 
-        List<DailyCountProjection> createdRows = issueRepository.aggregateIssuesCreatedDailyByRepoIds(ctx.repoIds(), ctx.from(), ctx.to());
-        List<DailyCountProjection> closedRows  = issueRepository.aggregateIssuesClosedDailyByRepoIds(ctx.repoIds(), ctx.from(), ctx.to());
+        List<DailyCountProjection> createdRows = issueRepository.aggregateIssuesCreatedDailyByRepoIdsAndIdentity(
+                ctx.repoIds(), ctx.identity().githubUserId(), ctx.identity().jiraAccountId(), ctx.from(), ctx.to());
+        List<DailyCountProjection> closedRows  = issueRepository.aggregateIssuesClosedDailyByRepoIdsAndIdentity(
+                ctx.repoIds(), ctx.identity().githubUserId(), ctx.identity().jiraAccountId(), ctx.from(), ctx.to());
 
         Map<Long, GitRepositoryEntity> repoCache = new HashMap<>();
         for (DailyCountProjection row : createdRows) {

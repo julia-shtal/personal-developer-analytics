@@ -12,6 +12,7 @@ import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.model.*;
 import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
+import com.juliashtal.devanalytics.user.model.AuthorIdentity;
 import com.juliashtal.devanalytics.user.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -125,29 +126,29 @@ class AggregateStorageShapeDriftTest {
         List<GitCommitEntity> prCommits = List.of(commit(instant(FROM, 8)));
         List<PrReviewTimestampProjection> firstReviews = List.of(reviewTimestamp(1L, instant(FROM, 14)));
 
-        when(commitRepository.aggregateCommitsDailyByRepoIdsAndAuthorEmail(any(), any(), any(), any()))
+        when(commitRepository.aggregateCommitsDailyByRepoIdsAndIdentity(any(), any(), any(), any(), any()))
                 .thenReturn(dailyCommits);
-        when(commitRepository.aggregateChurnDailyByRepoIdsAndAuthorEmail(any(), any(), any(), any()))
+        when(commitRepository.aggregateChurnDailyByRepoIdsAndIdentity(any(), any(), any(), any(), any()))
                 .thenReturn(churn);
-        when(commitRepository.findCommitDetailsByRepoIdsAndAuthorEmail(any(), any(), any(), any()))
+        when(commitRepository.findCommitDetailsByRepoIdsAndIdentity(any(), any(), any(), any(), any()))
                 .thenReturn(commitDetails);
         when(commitRepository.countTotalCommitsByRepoIds(any(), any(), any())).thenReturn(totalCommits);
-        when(commitRepository.countCommitsByRepoIdsAndAuthorEmail(any(), any(), any(), any())).thenReturn(userCommits);
+        when(commitRepository.countCommitsByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(userCommits);
         when(commitRepository.findCommitsForPr(any(), anyInt())).thenReturn(prCommits);
 
-        when(issueRepository.aggregateIssuesCreatedDailyByRepoIds(any(), any(), any())).thenReturn(issuesCreated);
-        when(issueRepository.aggregateIssuesClosedDailyByRepoIds(any(), any(), any())).thenReturn(issuesClosed);
-        when(issueRepository.findIssueLeadTimesByRepoIds(any(), any(), any())).thenReturn(issueLeadTimes);
+        when(issueRepository.aggregateIssuesCreatedDailyByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(issuesCreated);
+        when(issueRepository.aggregateIssuesClosedDailyByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(issuesClosed);
+        when(issueRepository.findIssueLeadTimesByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(issueLeadTimes);
 
-        when(pullRequestRepository.aggregatePrCreatedDailyByRepoIdsAndAuthorLogin(any(), any(), any(), any()))
+        when(pullRequestRepository.aggregatePrCreatedDailyByRepoIdsAndAuthorGithubId(any(), any(), any(), any()))
                 .thenReturn(prsCreated);
-        when(pullRequestRepository.aggregatePrMergedDailyByRepoIdsAndAuthorLogin(any(), any(), any(), any()))
+        when(pullRequestRepository.aggregatePrMergedDailyByRepoIdsAndAuthorGithubId(any(), any(), any(), any()))
                 .thenReturn(prsMerged);
-        when(pullRequestRepository.findMergedLeadTimesByRepoIdsAndAuthorLogin(any(), any(), any(), any()))
+        when(pullRequestRepository.findMergedLeadTimesByRepoIdsAndAuthorGithubId(any(), any(), any(), any()))
                 .thenReturn(prLeadTimes);
-        when(pullRequestRepository.findMergedPrsByRepoIdsAndAuthorLogin(any(), any(), any(), any()))
+        when(pullRequestRepository.findMergedPrsByRepoIdsAndAuthorGithubId(any(), any(), any(), any()))
                 .thenReturn(mergedPrs);
-        when(pullRequestRepository.findOpenPrsByRepoIdsAndAuthorLogin(any(), any())).thenReturn(openPrs);
+        when(pullRequestRepository.findOpenPrsByRepoIdsAndAuthorGithubId(any(), any())).thenReturn(openPrs);
 
         when(prReviewRepository.findFirstReviewTimestampsByPrIds(any())).thenReturn(firstReviews);
         when(prReviewRepository.countDistinctPrsReviewedByUser(any(), any(), any(), any())).thenReturn(6L);
@@ -203,10 +204,16 @@ class AggregateStorageShapeDriftTest {
         user.setId(1L);
         user.setEmail("dev@example.com");
         user.setGithubLogin("devuser");
+        user.setGithubUserId(101L);
         user.setTimezone("UTC");
 
+        // Every identifier is populated so that all seventeen calculators clear their identity
+        // guard: this test asserts storage shape, and a calculator that skipped for want of an
+        // identity would silently drop out of the drift check.
+        AuthorIdentity identity = new AuthorIdentity(Set.of("dev@example.com"), 101L, "jira-acct-1");
+
         MetricCalcContext ctx = new MetricCalcContext(
-                user, null, List.of(REPO_ID),
+                user, null, List.of(REPO_ID), identity,
                 FROM.atStartOfDay(ZoneOffset.UTC).toInstant(),
                 TO.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant(),
                 FROM, TO);

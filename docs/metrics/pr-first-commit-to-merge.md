@@ -31,7 +31,7 @@ pr_first_commit_to_merge_lead_time =
   grouped per repository
 ```
 
-- Attribution: `author_login = user.githubLogin`. **Requires `User.githubLogin` to be set.**
+- Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Window: `merged_at >= from` AND `merged_at < to+1`.
 - `findCommitsForPr(repository, prNumber)` joins `git_commits` to the PR via commit hash associations stored during collection. If no commits are linked to the PR, the PR is skipped.
 - Duration: `Duration.between(commits.get(0).getAuthorDate(), pr.getMergedAt()).toHours()` — `commits` is ordered by `authorDate` ascending; index 0 is the earliest.
@@ -41,7 +41,7 @@ pr_first_commit_to_merge_lead_time =
 
 ## Edge cases
 
-- **`githubLogin` not set**: metric is skipped entirely.
+- **GitHub account not linked**: metric is skipped entirely.
 - **No commits linked to PR**: the PR is skipped (commits list is empty). This occurs when a PR was collected before its commits were fully synced.
 - **`mergedAt = null`**: PR skipped; only merged PRs are counted.
 - **First commit predates PR creation**: possible for PRs created after the work was already done (e.g. "upstream first, PR later" workflow). The metric correctly captures total elapsed code time.

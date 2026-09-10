@@ -18,13 +18,13 @@ are excluded.
 
 ## Attribution
 
-Attributed via `User.githubLogin`. Users without a `githubLogin` registered are skipped —
+Attributed via `reviewer_github_id = user.githubUserId`. Users with no linked GitHub account are skipped —
 no snapshot is written.
 
 ## Bot Exclusion Policy
 
 Bot reviewer accounts cannot appear in the count because the query is scoped to the
-authenticated user's `githubLogin`, which is a registered human account. Reviews of
+authenticated user's GitHub account ID, which is a registered human account. Reviews of
 bot-authored pull requests (e.g., `dependabot[bot]` dependency bumps) are included in
 the count; such reviews reflect genuine human engagement with automated changes.
 Ingestion preserves all raw review records for audit.

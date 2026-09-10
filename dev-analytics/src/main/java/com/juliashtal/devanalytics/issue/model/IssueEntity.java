@@ -60,6 +60,24 @@ public class IssueEntity {
     private String assignee;
     private String creator;
 
+    /**
+     * Numeric GitHub account IDs behind {@code assignee} and {@code creator}. Null for Jira
+     * issues, which carry {@code assigneeAccountId} / {@code reporterAccountId} instead.
+     */
+    private Long assigneeGithubId;
+    private Long creatorGithubId;
+
+    /**
+     * Jira accountIds behind {@code assignee} and {@code creator}. Null for GitHub issues.
+     * Display names were previously the only thing stored, and a display name is neither
+     * unique nor stable, so Jira issues could not be attributed after collection at all.
+     */
+    @Column(name = "assignee_account_id", length = 128)
+    private String assigneeAccountId;
+
+    @Column(name = "reporter_account_id", length = 128)
+    private String reporterAccountId;
+
     private Instant createdAt;
     private Instant updatedAt;
     private Instant closedAt;
