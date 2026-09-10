@@ -183,7 +183,9 @@ public class JiraCollector {
      * keys are uppercase alphanumerics by definition, so anything else is a bug or an injection
      * attempt. Quoting the key additionally keeps reserved words from being parsed as operators.
      */
-    private String buildJql(String projectKey) {
+    // Package-private rather than private so JiraCollectorJqlTest can assert the clause
+    // directly; the collector's only other entry point would need a live Jira to reach it.
+    String buildJql(String projectKey) {
         if (projectKey == null || !PROJECT_KEY_PATTERN.matcher(projectKey).matches()) {
             throw new IllegalStateException("Invalid Jira project key: " + projectKey);
         }
