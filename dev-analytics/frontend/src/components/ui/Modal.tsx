@@ -23,20 +23,37 @@ export function Modal({
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  // Callers pass inline arrow functions as onClose, so its identity changes on
+  // every render of the owning page. Read it through a ref to keep the effects
+  // below keyed on `open` alone.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+
+  // Escape-to-close + body scroll lock, subscribed once per open.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
-    const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    firstFocusable?.focus();
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [open, onClose]);
+  }, [open]);
+
+  // Initial focus, exactly once per open. Depending on onClose here made this
+  // re-run on every parent render, which yanked the caret out of whatever field
+  // the user was typing in after a single keystroke. If a child already claimed
+  // focus (an input with autoFocus does so during commit, before this effect),
+  // leave it alone instead of pulling focus back to the header close button.
+  useEffect(() => {
+    if (!open) return;
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.contains(document.activeElement)) return;
+    dialog.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )?.focus();
+  }, [open]);
 
   if (!open) return null;
 

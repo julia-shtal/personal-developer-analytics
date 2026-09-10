@@ -29,32 +29,24 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
- * Computes personal metrics for days inside a user's collected history that have never been
- * calculated.
+ * Computes personal metrics for days in a user's history that were collected but never calculated.
  *
- * <p>The target range runs from the earliest collected activity — the oldest commit, pull
- * request or issue in the user's repository scope — to yesterday. Earliest activity is the
- * coverage reference rather than {@code sync_jobs}, which records no date range, because it is
- * the same data the calculators read: history that was collected but never calculated is
- * exactly what this service exists to find.
+ * <p>The target range runs from the earliest collected activity (oldest commit, PR, or issue)
+ * to yesterday. Earliest activity is used as the coverage reference instead of {@code sync_jobs}
+ * because it reflects the same data the calculators read.
  *
- * <p>Missing days are the target range minus the {@code metric_coverage} ledger. Because that
- * set is derived from what was actually computed rather than from a high-water mark, the
- * {@code maxDaysPerRun} cap is a resumable throttle: a run that stops after 30 days leaves the
- * rest missing, and the next run continues from there. The previous nightly implementation
- * moved a {@code MAX(date)} watermark past the days it skipped, which turned the same cap into
- * permanent truncation and left holes that no later run revisited.
+ * <p>Missing days = target range minus the {@code metric_coverage} ledger. Since coverage reflects
+ * actual computation rather than a watermark, {@code maxDaysPerRun} is a resumable throttle: a run
+ * that stops early leaves gaps that later runs will revisit. The old watermark-based approach
+ * turned this cap into permanent truncation, leaving unrevisited holes.
  *
- * <p>Missing days are computed newest-first so the recent end of the dashboard — the part a
- * user actually looks at — fills on the first run, and in contiguous blocks so a block is one
- * calculator pass over a real range rather than one pass per day. Aggregate-period metrics need
- * no special handling here: {@link MetricsService#calculateDailyMetrics} already expands any
- * range to the whole ISO weeks it touches for those types, and duplicating that split would
- * give the two paths two chances to disagree.
+ * <p>Missing days are processed newest-first (so the dashboard's visible range fills first) and in
+ * contiguous blocks (one calculator pass per range, not per day). Aggregate-period metrics need no
+ * extra handling: {@link MetricsService#calculateDailyMetrics} already expands ranges to full ISO
+ * weeks for those types.
  *
- * <p>Every write goes through {@link MetricsService#calculateDailyMetrics}, which owns both the
- * snapshot upsert guard and the coverage ledger. This service never marks coverage itself, so
- * a day can only be recorded as covered by the code that actually computed it.
+ * <p>All writes go through {@link MetricsService#calculateDailyMetrics}, which owns both the
+ * snapshot upsert guard and the coverage ledger — this service never marks coverage itself.
  */
 @Service
 @RequiredArgsConstructor
@@ -72,45 +64,40 @@ public class MetricBackfillService implements MetricBackfillTrigger {
     private final BackfillProperties properties;
 
     /**
-     * Users with a backfill pass currently running, so the nightly scheduler and a first
-     * collection landing at the same moment cannot compute the same days concurrently.
+     * Users with a backfill pass currently running, preventing the nightly scheduler and a
+     * first collection from computing the same days concurrently.
      *
-     * <p>The guard exists because {@code MetricSnapshotWriter.save} is read-then-write
-     * ({@code findExisting(...).orElseGet(...)}) and {@code metric_snapshots} carries no unique
-     * constraint, only the plain index from {@code V18}. Two concurrent transactions would both
-     * find nothing and both insert, producing the duplicate rows that aggregate incorrectly.
-     * The coverage ledger itself is safe either way — {@code markCovered} is a real
-     * {@code ON CONFLICT} upsert against a unique constraint.
+     * <p>Needed because {@code MetricSnapshotWriter.save} is read-then-write
+     * ({@code findExisting(...).orElseGet(...)}) and {@code metric_snapshots} has no unique
+     * constraint (only the plain {@code V18} index). Concurrent transactions could both find
+     * nothing and both insert, producing duplicates that skew aggregates. The coverage ledger
+     * is unaffected either way, since {@code markCovered} is a real {@code ON CONFLICT} upsert.
      *
-     * <p>In-process only, which is honest for this single-instance self-hosted deployment. A
-     * multi-instance deployment would need a database-level guard such as
-     * {@code pg_try_advisory_lock} keyed on the user id; that is deliberately not added here
-     * because no deployment of this system needs it.
+     * <p>In-process only — sufficient for this single-instance deployment. A multi-instance
+     * setup would need a DB-level guard (e.g. {@code pg_try_advisory_lock} on user id), but
+     * that's deliberately omitted since no current deployment needs it.
      */
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
     /**
      * Computes up to {@code maxDaysPerRun} missing days for one user, newest first.
      *
-     * <p>Deliberately not {@code @Transactional}: each contiguous block is committed by
-     * {@link MetricsService#calculateDailyMetrics}'s own transaction, so a block that fails
-     * rolls back only its own snapshots and coverage marks. An enclosing transaction would also
-     * be incompatible with continuing after a failed block — the inner transaction participates
-     * in the outer one and marks it rollback-only, so the outer commit would throw
-     * {@code UnexpectedRollbackException} and discard every block that had succeeded.
+     * <p>Deliberately not {@code @Transactional}: each contiguous block commits via
+     * {@link MetricsService#calculateDailyMetrics}'s own transaction, so a failed block rolls
+     * back only its own snapshots and coverage marks. An enclosing transaction would break this —
+     * the inner transaction would mark it rollback-only, causing the outer commit to throw
+     * {@code UnexpectedRollbackException} and discard already-succeeded blocks.
      *
-     * <p>A block that fails is logged and skipped so the run's other blocks still commit. That
-     * only helps when the batch splits into several blocks. For a new user with contiguous
-     * imported history — the case this service primarily exists to serve — the batch is a
-     * single block, so one reproducibly failing day means the run computes nothing, the next
-     * run assembles an identical batch, and the user's coverage stalls with every older day
-     * unreachable behind it. Such a run is logged at {@code ERROR} so the stall is observable;
-     * splitting blocks or quarantining days by attempt count is deliberately out of scope.
+     * <p>A failed block is logged and skipped, letting other blocks still commit — but this only
+     * helps when the batch has multiple blocks. For a new user with contiguous imported history
+     * (this service's primary case), the batch is one block, so a reproducibly failing day stalls
+     * the run entirely: nothing computes, the next run retries the same batch, and older days
+     * stay unreachable. Such stalls are logged at {@code ERROR} for observability; splitting
+     * blocks or quarantining bad days is out of scope.
      *
-     * <p>CPU- and database-bound over up to a month of history: must not be called from a
-     * request thread. The nightly backfill scheduler and the asynchronous collection path are
-     * the only callers. A call arriving while another run is already in flight for the same
-     * user returns {@link BackfillResult#empty()} without computing anything.
+     * <p>CPU- and database-bound over up to a month of history — must not run on a request
+     * thread. Only the nightly scheduler and async collection path call this. A concurrent call
+     * for the same user returns {@link BackfillResult#empty()} without computing anything.
      */
     public BackfillResult backfillUser(Long userId) {
         if (!inFlight.add(userId)) {

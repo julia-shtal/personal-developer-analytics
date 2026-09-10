@@ -11,15 +11,13 @@ public interface MetricBackfillTrigger {
 
     /**
      * Called once a data source completes its first successful collection. Clears the user's
-     * coverage — days computed before this repository existed were computed without it — and
-     * runs a bounded backfill pass immediately, so a newly attached repository does not wait
-     * for the nightly catch-up job.
+     * coverage (since prior days were computed without this repository) and immediately runs
+     * a bounded backfill, so a newly attached repository doesn't wait for the nightly job.
      *
-     * <p>The two steps are sequential, not atomic. The reset commits before any metric is
-     * recomputed, so a failure in the backfill leaves the user with their coverage cleared and
-     * not yet rebuilt. That state is recoverable — later runs refill it a capped batch at a
-     * time — but it is not a rollback, and implementations are expected to log the failure
-     * rather than hide it.
+     * <p>The two steps are sequential, not atomic: the reset commits before recomputation
+     * starts, so a backfill failure leaves coverage cleared but not rebuilt. This is
+     * recoverable — later runs refill it in capped batches — but not a rollback, and failures
+     * should be logged, not swallowed.
      *
      * <p>CPU- and database-bound over up to a month of history: callers must invoke this off
      * the request thread.

@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Modal } from './Modal';
 
 function Setup({ onClose = vi.fn() } = {}) {
@@ -69,5 +71,39 @@ describe('Modal accessibility', () => {
       </Modal>
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+describe('Modal focus stability', () => {
+  // Mirrors the real usage in TeamManagePage/AdminPage/SettingsPage: the component
+  // that owns the input state also creates the onClose closure, so onClose gets a
+  // fresh identity on every keystroke-triggered re-render.
+  function Host() {
+    const [value, setValue] = useState('');
+    return (
+      <Modal open onClose={() => setValue('')} title="Host modal">
+        <input aria-label="field" value={value} onChange={(e) => setValue(e.target.value)} />
+      </Modal>
+    );
+  }
+
+  it('keeps focus in a text field while typing when onClose identity changes each render', async () => {
+    const user = userEvent.setup();
+    render(<Host />);
+
+    const field = screen.getByLabelText('field') as HTMLInputElement;
+    field.focus();
+    await user.type(field, 'infra');
+
+    expect(field.value).toBe('infra');
+    expect(document.activeElement).toBe(field);
+  });
+
+  it('autofocuses the field marked autoFocus rather than the close button', () => {
+    render(
+      <Modal open onClose={() => {}} title="Autofocus modal">
+        <input aria-label="named" autoFocus />
+      </Modal>
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText('named'));
   });
 });
