@@ -31,11 +31,24 @@ public class RepoService {
                 .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
     }
 
-    /** Returns the repo if the user owns it or is subscribed to it; otherwise denies access. */
+    /**
+     * Returns the repo if the user can reach it over any of the owned, subscribed or team
+     * paths; otherwise denies access.
+     *
+     * <p>Entitlement comes from the {@code user_accessible_repos} view, the same source
+     * {@link #listAccessible} uses, so what this admits and what the selector offers cannot
+     * drift apart. The previous hand-rolled owned-or-subscribed test omitted the view's TEAM
+     * branch, which refused a team member any repo they had not also subscribed to
+     * individually — a repo the selector had just listed for them.
+     *
+     * <p>A missing repo still reports not-found rather than forbidden: callers pass ids that
+     * legitimately go stale (a deleted datasource, a reset database), and conflating that with
+     * a denial would mislabel the common case. Existence therefore remains distinguishable
+     * from entitlement.
+     */
     public GitRepositoryEntity getAccessibleRepo(Long userId, Long repoId) {
         GitRepositoryEntity repo = getById(repoId);
-        boolean owned = repo.getDataSourceConfig().getUser().getId().equals(userId);
-        if (!owned && !userRepoRegRepository.existsByUserIdAndRepositoryId(userId, repoId)) {
+        if (!gitRepoRepository.existsAccessibleRepo(userId, repoId)) {
             throw new ForbiddenException("Access denied to repository: " + repoId);
         }
         return repo;

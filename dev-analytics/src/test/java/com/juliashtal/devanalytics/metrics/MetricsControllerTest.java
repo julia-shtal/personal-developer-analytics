@@ -12,6 +12,7 @@ import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.service.JwtService;
+import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.service.UserService;
@@ -475,5 +476,50 @@ class MetricsControllerTest {
         mvc.perform(get("/api/metrics/freshness")).andExpect(status().isOk());
 
         verify(backfillService, never()).backfillUser(anyLong());
+    }
+
+    // =========================================================================
+    // repoId entitlement — a client-supplied id must be checked, not just looked up
+    // =========================================================================
+
+    @Test
+    @WithMockUser
+    void getDailyCommits_repoIdNotAccessible_returnsForbidden() throws Exception {
+        when(repoService.getAccessibleRepo(currentUser.getId(), 34L))
+                .thenThrow(new ForbiddenException("Access denied to repository: 34"));
+
+        mvc.perform(get("/api/metrics/daily-commits-count")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString())
+                        .param("repoId", "34"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser
+    void getPrLeadTime_repoIdNotAccessible_returnsForbidden() throws Exception {
+        when(repoService.getAccessibleRepo(currentUser.getId(), 34L))
+                .thenThrow(new ForbiddenException("Access denied to repository: 34"));
+
+        mvc.perform(get("/api/metrics/pr-lead-time")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString())
+                        .param("repoId", "34"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser
+    void getDailyCommits_repoIdGiven_neverResolvesRepoWithoutEntitlementCheck() throws Exception {
+        when(repoService.getAccessibleRepo(currentUser.getId(), 34L))
+                .thenThrow(new ForbiddenException("Access denied to repository: 34"));
+
+        mvc.perform(get("/api/metrics/daily-commits-count")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString())
+                        .param("repoId", "34"))
+                .andExpect(status().isForbidden());
+
+        verify(repoService, never()).getById(anyLong());
     }
 }

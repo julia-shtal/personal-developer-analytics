@@ -114,33 +114,54 @@ class RepoServiceAccessibleTest {
 
     // ── getAccessibleRepo ────────────────────────────────────────────────────
 
+    // Entitlement is the view's answer, so these cases assert delegation to it rather than
+    // re-deriving owned/subscribed/team here. The view itself is covered by its own migration
+    // test; what matters at this layer is that no branch bypasses it.
+
     @Test
     void getAccessibleRepo_owner_returnsRepo() {
         GitRepositoryEntity repo = repoOwnedBy(5L, USER_ID);
         when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+        when(gitRepoRepository.existsAccessibleRepo(USER_ID, 5L)).thenReturn(true);
 
         GitRepositoryEntity result = repoService.getAccessibleRepo(USER_ID, 5L);
 
         assertThat(result).isSameAs(repo);
-        verify(userRepoRegRepository, never()).existsByUserIdAndRepositoryId(any(), any());
     }
 
     @Test
     void getAccessibleRepo_subscribedNonOwner_returnsRepo() {
         GitRepositoryEntity repo = repoOwnedBy(5L, 99L);
         when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
-        when(userRepoRegRepository.existsByUserIdAndRepositoryId(USER_ID, 5L)).thenReturn(true);
+        when(gitRepoRepository.existsAccessibleRepo(USER_ID, 5L)).thenReturn(true);
 
         GitRepositoryEntity result = repoService.getAccessibleRepo(USER_ID, 5L);
 
         assertThat(result).isSameAs(repo);
     }
 
+    /**
+     * The regression the view fixes: a team repo the user never subscribed to individually.
+     * The old owned-or-subscribed test refused it, while listAccessible offered it.
+     */
     @Test
-    void getAccessibleRepo_neitherOwnerNorSubscribed_throwsForbidden() {
+    void getAccessibleRepo_teamRepoNotSubscribed_returnsRepo() {
         GitRepositoryEntity repo = repoOwnedBy(5L, 99L);
         when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
-        when(userRepoRegRepository.existsByUserIdAndRepositoryId(USER_ID, 5L)).thenReturn(false);
+        when(gitRepoRepository.existsAccessibleRepo(USER_ID, 5L)).thenReturn(true);
+
+        GitRepositoryEntity result = repoService.getAccessibleRepo(USER_ID, 5L);
+
+        assertThat(result).isSameAs(repo);
+        // Entitlement must come from the view, never from the registration table alone.
+        verify(userRepoRegRepository, never()).existsByUserIdAndRepositoryId(any(), any());
+    }
+
+    @Test
+    void getAccessibleRepo_notAccessibleByAnyPath_throwsForbidden() {
+        GitRepositoryEntity repo = repoOwnedBy(5L, 99L);
+        when(gitRepoRepository.findById(5L)).thenReturn(Optional.of(repo));
+        when(gitRepoRepository.existsAccessibleRepo(USER_ID, 5L)).thenReturn(false);
 
         assertThatThrownBy(() -> repoService.getAccessibleRepo(USER_ID, 5L))
                 .isInstanceOf(ForbiddenException.class);

@@ -49,5 +49,18 @@ public interface GitRepositoryEntityRepository extends JpaRepository<GitReposito
            """, nativeQuery = true)
     List<Long> findAccessibleRepoIdsByDataSource(@Param("userId") Long userId,
                                                  @Param("dataSourceId") Long dataSourceId);
+
+    /**
+     * Whether the user can reach one specific repo, over the same owned, subscribed and team
+     * paths the view already defines. Native because the view is not a JPA entity; EXISTS so a
+     * single-repo check does not load every accessible id just to test one membership.
+     */
+    @Query(value = """
+           SELECT EXISTS (
+               SELECT 1 FROM user_accessible_repos
+               WHERE user_id = :userId AND repo_id = :repoId
+           )
+           """, nativeQuery = true)
+    boolean existsAccessibleRepo(@Param("userId") Long userId, @Param("repoId") Long repoId);
 }
 

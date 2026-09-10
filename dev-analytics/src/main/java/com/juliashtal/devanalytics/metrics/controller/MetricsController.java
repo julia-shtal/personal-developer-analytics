@@ -371,7 +371,9 @@ public class MetricsController {
                     .toList();
         }
 
-        GitRepositoryEntity repo = repoService.getById(repoId);
+        // Entitlement check, not a lookup: a repoId arrives from the client, so the repo must be
+        // one this user may actually scope by. getById would answer for any id in the database.
+        GitRepositoryEntity repo = repoService.getAccessibleRepo(user.getId(), repoId);
         return metricSnapshotService
                 .getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to)
                 .stream()
@@ -400,7 +402,7 @@ public class MetricsController {
             rows = metricSnapshotService
                     .getMetricSnapshotsByUserAndMetricTypeInWindow(user, type, from, to);
         } else {
-            GitRepositoryEntity repo = repoService.getById(repoId);
+            GitRepositoryEntity repo = repoService.getAccessibleRepo(user.getId(), repoId);
             rows = metricSnapshotService
                     .getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(user, type, repo, from, to);
         }
