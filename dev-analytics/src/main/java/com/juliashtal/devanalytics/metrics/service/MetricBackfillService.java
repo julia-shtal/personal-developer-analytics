@@ -60,6 +60,7 @@ public class MetricBackfillService implements MetricBackfillTrigger {
     private final GitHubPullRequestRepository pullRequestRepository;
     private final IssueRepository issueRepository;
     private final MetricCoverageRepository coverageRepository;
+    private final UserMetricsPurger metricsPurger;
     private final MetricsService metricsService;
     private final BackfillProperties properties;
 
@@ -180,6 +181,27 @@ public class MetricBackfillService implements MetricBackfillTrigger {
         } catch (RuntimeException e) {
             log.error("Coverage was reset for userId={} but the follow-up backfill failed. "
                     + "The user has no coverage until later runs rebuild it.", userId, e);
+            throw e;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The delete is one transaction and the recomputation another, matching
+     * {@link #onFirstCollection}. Between them the user has no metrics at all; a dashboard
+     * loaded in that window shows an empty range rather than stale figures, which is the
+     * honest state given their identity just changed.
+     */
+    @Override
+    public void onAttributionChanged(Long userId) {
+        metricsPurger.purge(userId);
+        log.info("Attribution changed for userId={}: snapshots and coverage cleared, running backfill", userId);
+        try {
+            backfillUser(userId);
+        } catch (RuntimeException e) {
+            log.error("Snapshots and coverage were cleared for userId={} but the follow-up backfill "
+                    + "failed. The user has no metrics until later runs rebuild them.", userId, e);
             throw e;
         }
     }

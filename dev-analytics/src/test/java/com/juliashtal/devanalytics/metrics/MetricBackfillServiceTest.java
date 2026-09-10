@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.metrics.model.BackfillProperties;
 import com.juliashtal.devanalytics.metrics.model.BackfillResult;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
+import com.juliashtal.devanalytics.metrics.service.UserMetricsPurger;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
 import com.juliashtal.devanalytics.user.model.User;
@@ -59,6 +60,7 @@ class MetricBackfillServiceTest {
     @Mock GitHubPullRequestRepository pullRequestRepository;
     @Mock IssueRepository issueRepository;
     @Mock MetricCoverageRepository coverageRepository;
+    @Mock UserMetricsPurger metricsPurger;
     @Mock MetricsService metricsService;
 
     MetricBackfillService service;
@@ -106,8 +108,8 @@ class MetricBackfillServiceTest {
     /** A service configured with the given per-run cap; the cap is immutable after construction. */
     private MetricBackfillService newService(int maxDaysPerRun) {
         return new MetricBackfillService(userRepository, repoScopeResolver, commitRepository,
-                pullRequestRepository, issueRepository, coverageRepository, metricsService,
-                new BackfillProperties(maxDaysPerRun));
+                pullRequestRepository, issueRepository, coverageRepository, metricsPurger,
+                metricsService, new BackfillProperties(maxDaysPerRun));
     }
 
     /** Commits reach back {@code days} days before today, so the target range is {@code days} long. */

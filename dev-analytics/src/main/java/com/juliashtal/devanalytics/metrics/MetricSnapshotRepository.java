@@ -6,8 +6,10 @@ import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -251,4 +253,20 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             @Param("metricType") String metricType,
             @Param("periodFrom") LocalDate periodFrom,
             @Param("periodTo") LocalDate periodTo);
+
+    /**
+     * Deletes every snapshot belonging to a user, personal and team-scoped alike.
+     *
+     * <p>Used when the user's attribution identity changes. Recalculating over the existing
+     * rows would not be enough: calculators upsert only the days that produced data and never
+     * delete, so a narrowed identity leaves behind rows the old identity produced, and the
+     * coverage ledger marks those days computed so the backfill never revisits them.
+     *
+     * <p>Team-scoped rows are removed too, because they were attributed with the same identity.
+     * They are not recomputed here — the next team calculation the manager runs rebuilds them.
+     */
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM MetricSnapshot s WHERE s.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

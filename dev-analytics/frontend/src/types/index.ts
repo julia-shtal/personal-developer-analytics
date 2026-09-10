@@ -28,8 +28,17 @@ export interface UserProfile {
   role: Role;
   timezone?: string;
   githubLogin?: string;
+  /** True once the login has been resolved to a numeric GitHub account id. */
+  githubLoginVerified?: boolean;
+  jiraAccountId?: string;
   hasCustomAvatar?: boolean;
   avatarPreset?: string;
+}
+
+/** One address the user declares as theirs for commit attribution. */
+export interface CommitEmailDto {
+  id: number;
+  email: string;
 }
 
 export interface UpdateProfileRequest {
@@ -37,6 +46,7 @@ export interface UpdateProfileRequest {
   email?: string;
   timezone?: string;
   githubLogin?: string;
+  jiraAccountId?: string;
 }
 
 // ─── Data Sources ─────────────────────────────────────────────────────────────

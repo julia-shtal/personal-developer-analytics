@@ -14,7 +14,7 @@ import type { LogoVariant } from '@/lib/theme';
 import api from '@/lib/api';
 import { avatarApi } from '@/api/avatar';
 import { usersApi, type NotificationPrefsDto } from '@/api/users';
-import type { UserProfile } from '@/types';
+import type { CommitEmailDto, UpdateProfileRequest, UserProfile } from '@/types';
 
 // ─── Timezone helpers ─────────────────────────────────────────────────────────
 
@@ -77,6 +77,9 @@ export function SettingsPage() {
   const [email, setEmail] = useState(user?.email ?? '');
   const [tzSearch, setTzSearch] = useState('');
   const [tzOpen, setTzOpen] = useState(false);
+  const [jiraAccountId, setJiraAccountId] = useState(user?.jiraAccountId ?? '');
+  const [newCommitEmail, setNewCommitEmail] = useState('');
+  const [commitEmailError, setCommitEmailError] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveError, setSaveError] = useState('');
   const [avatarError, setAvatarError] = useState('');
@@ -102,6 +105,8 @@ export function SettingsPage() {
     setUsername(user?.username ?? '');
      
     setEmail(user?.email ?? '');
+     
+    setJiraAccountId(user?.jiraAccountId ?? '');
   }, [user]);
 
   useEffect(() => {
@@ -194,17 +199,55 @@ export function SettingsPage() {
 
   // ── Profile save ─────────────────────────────────────────────────────────
   const updateMutation = useMutation({
-    mutationFn: (body: { username?: string; email?: string; timezone?: string; githubLogin?: string }) =>
-      api.put<UserProfile>('/users/me', body),
+    mutationFn: (body: UpdateProfileRequest) => api.put<UserProfile>('/users/me', body),
     onSuccess: () => {
       setSaveStatus('success');
       setSaveError('');
       setTimeout(() => setSaveStatus('idle'), 3000);
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setSaveError(msg ?? 'Failed to save profile.');
+      const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+      // 422 means GitHub answered "no such login"; 409 means the account or Jira id is already
+      // linked elsewhere. Anything else keeps the server's message, including the 502 raised
+      // when GitHub could not be reached at all -- which must not read as "login not found".
+      const msg =
+        res?.status === 422 ? 'GitHub login not found.'
+        : res?.status === 409 ? 'Already linked to another account.'
+        : res?.data?.message ?? 'Failed to save profile.';
+      setSaveError(msg);
       setSaveStatus('error');
+    },
+  });
+
+  // ── Commit emails ────────────────────────────────────────────────────────
+  const { data: commitEmails } = useQuery({
+    queryKey: ['commit-emails'],
+    queryFn: () => usersApi.commitEmails.list().then((r) => r.data),
+    staleTime: 60_000,
+  });
+
+  const addCommitEmailMutation = useMutation({
+    mutationFn: (value: string) => usersApi.commitEmails.add(value),
+    onSuccess: () => {
+      setNewCommitEmail('');
+      setCommitEmailError('');
+      qc.invalidateQueries();
+    },
+    onError: (err: unknown) => {
+      const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+      setCommitEmailError(
+        res?.status === 409
+          ? 'Already linked to another account.'
+          : res?.data?.message ?? 'Could not add that address.',
+      );
+    },
+  });
+
+  const removeCommitEmailMutation = useMutation({
+    mutationFn: (id: number) => usersApi.commitEmails.remove(id),
+    onSuccess: () => {
+      setCommitEmailError('');
+      qc.invalidateQueries();
     },
   });
 
@@ -240,6 +283,7 @@ export function SettingsPage() {
       email: email || undefined,
       timezone: timezone || undefined,
       githubLogin: githubLogin || undefined,
+      jiraAccountId: jiraAccountId || undefined,
     });
   }
 
@@ -469,9 +513,73 @@ export function SettingsPage() {
                 <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ maxWidth: 380 }} />
               </div>
               <div>
-                <div className="t-label" style={{ marginBottom: 6 }}>github login</div>
+                <div className="row gap-2" style={{ marginBottom: 6, alignItems: 'center' }}>
+                  <div className="t-label">github login</div>
+                  {user?.githubLogin
+                    ? (user.githubLoginVerified
+                        ? <Chip color="emerald" dot>verified</Chip>
+                        : <Chip color="coral" dot>not found</Chip>)
+                    : null}
+                </div>
                 <input className="input" value={githubLogin} onChange={(e) => setGithubLogin(e.target.value)} placeholder="your-github-username" style={{ maxWidth: 380 }} />
-                <div className="t-label" style={{ marginTop: 4, fontSize: 10.5 }}>used to link commits and PRs to your account in shared repositories</div>
+                <div className="t-label" style={{ marginTop: 4, fontSize: 10.5 }}>
+                  github repositories match your commits, pull requests and reviews through your github account automatically
+                </div>
+              </div>
+
+              <div>
+                <div className="t-label" style={{ marginBottom: 6 }}>commit emails</div>
+                <div className="col gap-2" style={{ maxWidth: 380 }}>
+                  {(commitEmails ?? []).map((ce: CommitEmailDto) => (
+                    <div key={ce.id} className="row gap-2" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 13, wordBreak: 'break-all' }}>{ce.email}</span>
+                      <button
+                        type="button"
+                        aria-label={`remove ${ce.email}`}
+                        className="btn-icon"
+                        onClick={() => removeCommitEmailMutation.mutate(ce.id)}
+                        disabled={removeCommitEmailMutation.isPending}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  {(commitEmails ?? []).length === 0 && (
+                    <span className="t-label" style={{ fontSize: 10.5 }}>no addresses declared yet</span>
+                  )}
+                  <div className="row gap-2">
+                    <input
+                      className="input"
+                      type="email"
+                      value={newCommitEmail}
+                      onChange={(e) => setNewCommitEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => newCommitEmail.trim() && addCommitEmailMutation.mutate(newCommitEmail.trim())}
+                      disabled={addCommitEmailMutation.isPending || !newCommitEmail.trim()}
+                    >
+                      <Plus size={14} /> add
+                    </button>
+                  </div>
+                  {commitEmailError && (
+                    <span style={{ color: 'var(--coral)', fontSize: 11.5 }}>{commitEmailError}</span>
+                  )}
+                </div>
+                <div className="t-label" style={{ marginTop: 4, fontSize: 10.5 }}>
+                  for local repositories, add every address you commit with — including your github noreply address
+                </div>
+              </div>
+
+              <div>
+                <div className="t-label" style={{ marginBottom: 6 }}>jira account id</div>
+                <input className="input" value={jiraAccountId} onChange={(e) => setJiraAccountId(e.target.value)} placeholder="5b10a2844c20165700ede21g" style={{ maxWidth: 380 }} />
+                <div className="t-label" style={{ marginTop: 4, fontSize: 10.5 }}>
+                  filled in automatically when you connect jira with your own token
+                </div>
               </div>
               <div ref={tzRef}>
                 <div className="t-label" style={{ marginBottom: 6 }}>timezone</div>

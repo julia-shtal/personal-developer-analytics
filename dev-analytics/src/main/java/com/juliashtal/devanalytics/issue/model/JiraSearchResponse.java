@@ -43,11 +43,13 @@ public class JiraSearchResponse {
     }
 
     /**
-     * A Jira user (display name and email).
+     * A Jira user. {@code accountId} is the stable identifier attribution matches on;
+     * {@code displayName} is kept for display only.
      */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class JiraUser {
+        private String accountId;
         private String displayName;
         private String emailAddress;
     }
