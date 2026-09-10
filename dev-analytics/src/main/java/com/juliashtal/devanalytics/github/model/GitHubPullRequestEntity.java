@@ -41,6 +41,9 @@ public class GitHubPullRequestEntity {
 
     private String authorLogin;
 
+    /** Numeric GitHub account ID of the author; the attribution key. {@code authorLogin} is display only. */
+    private Long authorGithubId;
+
     private String state;       // open, closed
     private boolean merged;
     private Long leadTimeHours;

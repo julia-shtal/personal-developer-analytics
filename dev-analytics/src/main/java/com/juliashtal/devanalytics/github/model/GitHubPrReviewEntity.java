@@ -23,6 +23,9 @@ public class GitHubPrReviewEntity {
 
     private String reviewerLogin;
 
+    /** Numeric GitHub account ID of the reviewer; the attribution key. {@code reviewerLogin} is display only. */
+    private Long reviewerGithubId;
+
     private String state; // APPROVED, CHANGES_REQUESTED, COMMENTED
 
     private Instant submittedAt;

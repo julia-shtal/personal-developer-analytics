@@ -43,6 +43,18 @@ public class GitCommitEntity {
     private String parentHash;
 
     /**
+     * The GitHub account GitHub itself resolved from this commit's author email, plus that
+     * account's login at ingest time. Both null for local JGit commits, which never pass
+     * through the GitHub API, and for GitHub commits whose author email belongs to no account.
+     *
+     * <p>The ID is the attribution key; the login is a display value only, so renaming an
+     * account on GitHub cannot detach its commits from their author.
+     */
+    private Long authorGithubId;
+
+    private String authorGithubLogin;
+
+    /**
      * Enrichment state for per-commit stats (additions/deletions/filesChanged).
      * GitHub commits ingested from the list endpoint start as PENDING and are
      * enriched asynchronously via the detail endpoint.

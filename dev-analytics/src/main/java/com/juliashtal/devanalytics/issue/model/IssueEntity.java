@@ -60,6 +60,13 @@ public class IssueEntity {
     private String assignee;
     private String creator;
 
+    /**
+     * Numeric GitHub account IDs behind {@code assignee} and {@code creator}. Null for Jira
+     * issues, which carry {@code assigneeAccountId} / {@code reporterAccountId} instead.
+     */
+    private Long assigneeGithubId;
+    private Long creatorGithubId;
+
     private Instant createdAt;
     private Instant updatedAt;
     private Instant closedAt;

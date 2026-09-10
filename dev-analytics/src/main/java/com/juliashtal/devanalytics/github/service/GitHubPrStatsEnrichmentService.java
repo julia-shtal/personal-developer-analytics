@@ -232,7 +232,10 @@ public class GitHubPrStatsEnrichmentService {
 
                 GitHubPrReviewEntity review = new GitHubPrReviewEntity();
                 review.setPullRequest(pr);
-                review.setReviewerLogin(node.path("user").path("login").asText(null));
+                JsonNode reviewer = node.path("user");
+                review.setReviewerLogin(reviewer.path("login").asText(null));
+                review.setReviewerGithubId(reviewer.isObject() && reviewer.path("id").isNumber()
+                        ? reviewer.path("id").asLong() : null);
                 review.setState(node.path("state").asText(null));
                 review.setSubmittedAt(submittedAt);
                 reviews.add(review);

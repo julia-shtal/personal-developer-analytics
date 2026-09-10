@@ -67,6 +67,19 @@ public class GitRepositoryEntity {
     @Column(name = "issues_last_synced_at")
     private Instant issuesLastSyncedAt;
 
+    /**
+     * When this repository's stored records were confirmed to carry the numeric identity
+     * columns. Initialised for every newly created repository, because ingest has captured
+     * those IDs from the first page onwards.
+     *
+     * <p>Null marks a repository collected before author attribution existed: incremental
+     * ingest skips records it already holds, so their ID columns would never be filled by a
+     * normal collection run. {@code AttributionMigrationService} uses null as its work queue
+     * and stamps this only after every sub-step for the repository succeeded.
+     */
+    @Column(name = "identity_backfilled_at")
+    private Instant identityBackfilledAt = Instant.now();
+
     // for incremental collecting
     private String lastFetchedCommitHash;
 

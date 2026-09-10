@@ -98,6 +98,9 @@ public class GitHubIssuesCollector {
         issue.setState(gi.getState().name().toLowerCase());
         issue.setAssignee(gi.getAssignee() != null ? gi.getAssignee().getLogin() : null);
         issue.setCreator(gi.getUser() != null ? gi.getUser().getLogin() : null);
+        // Logins above are display values; these IDs are what issue metrics match on.
+        issue.setAssigneeGithubId(gi.getAssignee() != null ? gi.getAssignee().getId() : null);
+        issue.setCreatorGithubId(gi.getUser() != null ? gi.getUser().getId() : null);
         issue.setCreatedAt(gi.getCreatedAt());
         issue.setUpdatedAt(gi.getUpdatedAt());
         issue.setClosedAt(gi.getClosedAt());
