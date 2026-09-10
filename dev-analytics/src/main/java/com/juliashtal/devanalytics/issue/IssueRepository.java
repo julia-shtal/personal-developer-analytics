@@ -35,8 +35,19 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     long countByJiraProject_IdAndClosedAtIsNotNull(Long projectId);
 
     // -------------------------------------------------------------------------
-    // Team-repo variants: filter by explicit repo IDs, no author filter.
-    // Issues are project-level; all team members share them.
+    // Repo-scoped, author-filtered variants.
+    //
+    // These previously had no author filter at all: every issue in the repo scope was counted
+    // for every user. GitHub issues are collected repo-wide, so each subscriber was credited
+    // with everyone's issues, and the team rollup summed the members -- making the team's
+    // DAILY_ISSUES_CLOSED N times the real value for an N-member team.
+    //
+    // The filter is per source because the two systems identify people differently: GitHub by
+    // numeric account ID, Jira by accountId string. A user linked to only one of them matches
+    // only that source's issues, and a user linked to neither matches nothing.
+    //
+    // Nullable bind parameters are CAST explicitly: these are native queries, and PostgreSQL
+    // cannot infer a type for a bare NULL parameter in a comparison.
     //
     // COALESCE(i.repository_id, rm.repository_id) routes both
     // GitHub issues (direct repository_id FK) and Jira issues (via
@@ -52,12 +63,16 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     FROM   issues i
     LEFT   JOIN jira_project_repo_mappings rm ON rm.jira_project_id = i.jira_project_id
     WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
+      AND  ( (i.source = 'GITHUB' AND i.creator_github_id  = CAST(:githubUserId AS bigint))
+          OR   (i.source = 'JIRA'   AND i.reporter_account_id = CAST(:jiraAccountId AS text)) )
       AND  i.created_at BETWEEN :from AND :to
     GROUP  BY date(i.created_at), COALESCE(i.repository_id, rm.repository_id)
     ORDER  BY day, repoId
     """, nativeQuery = true)
-    List<DailyCountProjection> aggregateIssuesCreatedDailyByRepoIds(
+    List<DailyCountProjection> aggregateIssuesCreatedDailyByRepoIdsAndIdentity(
             @Param("repoIds") List<Long> repoIds,
+            @Param("githubUserId") Long githubUserId,
+            @Param("jiraAccountId") String jiraAccountId,
             @Param("from") Instant from,
             @Param("to") Instant to);
 
@@ -68,13 +83,17 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     FROM   issues i
     LEFT   JOIN jira_project_repo_mappings rm ON rm.jira_project_id = i.jira_project_id
     WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
+      AND  ( (i.source = 'GITHUB' AND i.assignee_github_id  = CAST(:githubUserId AS bigint))
+          OR   (i.source = 'JIRA'   AND i.assignee_account_id = CAST(:jiraAccountId AS text)) )
       AND  i.closed_at IS NOT NULL
       AND  i.closed_at BETWEEN :from AND :to
     GROUP  BY date(i.closed_at), COALESCE(i.repository_id, rm.repository_id)
     ORDER  BY day, repoId
     """, nativeQuery = true)
-    List<DailyCountProjection> aggregateIssuesClosedDailyByRepoIds(
+    List<DailyCountProjection> aggregateIssuesClosedDailyByRepoIdsAndIdentity(
             @Param("repoIds") List<Long> repoIds,
+            @Param("githubUserId") Long githubUserId,
+            @Param("jiraAccountId") String jiraAccountId,
             @Param("from") Instant from,
             @Param("to") Instant to);
 
@@ -85,12 +104,16 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     FROM   issues i
     LEFT   JOIN jira_project_repo_mappings rm ON rm.jira_project_id = i.jira_project_id
     WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
+      AND  ( (i.source = 'GITHUB' AND i.assignee_github_id  = CAST(:githubUserId AS bigint))
+          OR   (i.source = 'JIRA'   AND i.assignee_account_id = CAST(:jiraAccountId AS text)) )
       AND  i.created_at IS NOT NULL
       AND  i.closed_at IS NOT NULL
       AND  i.closed_at BETWEEN :from AND :to
     """, nativeQuery = true)
-    List<IssueLeadTimeProjection> findIssueLeadTimesByRepoIds(
+    List<IssueLeadTimeProjection> findIssueLeadTimesByRepoIdsAndIdentity(
             @Param("repoIds") List<Long> repoIds,
+            @Param("githubUserId") Long githubUserId,
+            @Param("jiraAccountId") String jiraAccountId,
             @Param("from") Instant from,
             @Param("to") Instant to);
 

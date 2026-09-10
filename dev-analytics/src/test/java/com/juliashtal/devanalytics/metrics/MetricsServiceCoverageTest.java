@@ -7,6 +7,7 @@ import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
+import com.juliashtal.devanalytics.user.service.AuthorIdentityResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +33,7 @@ class MetricsServiceCoverageTest {
     @Mock TeamRepository teamRepository;
     @Mock RepoScopeResolver repoScopeResolver;
     @Mock MetricCoverageRepository coverageRepository;
+    @Mock AuthorIdentityResolver authorIdentityResolver;
 
     MetricsService service;
     User user;
@@ -39,7 +41,7 @@ class MetricsServiceCoverageTest {
     @BeforeEach
     void setUp() {
         service = new MetricsService(registry, userRepository, teamRepository,
-                repoScopeResolver, coverageRepository);
+                repoScopeResolver, authorIdentityResolver, coverageRepository);
         user = new User();
         user.setId(1L);
         when(registry.all()).thenReturn(List.of());

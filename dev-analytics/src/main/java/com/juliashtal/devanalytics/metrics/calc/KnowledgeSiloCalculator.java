@@ -30,6 +30,9 @@ public class KnowledgeSiloCalculator implements MetricCalculator {
     @Override
     public void calculate(MetricCalcContext ctx) {
         if (ctx.repoIds().isEmpty()) return;
+        // Neither a declared address nor a GitHub account: attribute nothing rather
+        // than everything. A calculator without an identity must write no rows.
+        if (!ctx.identity().hasCommitIdentity()) return;
 
         Map<Long, Long> totalByRepo = new HashMap<>();
         for (RepoCountProjection row : commitRepository.countTotalCommitsByRepoIds(ctx.repoIds(), ctx.from(), ctx.to())) {
@@ -39,7 +42,10 @@ public class KnowledgeSiloCalculator implements MetricCalculator {
 
         Map<Long, Long> userByRepo = new HashMap<>();
         for (RepoCountProjection row : commitRepository
-                .countCommitsByRepoIdsAndAuthorEmail(ctx.repoIds(), ctx.user().getEmail(), ctx.from(), ctx.to())) {
+                .countCommitsByRepoIdsAndIdentity(ctx.repoIds(),
+                        ctx.identity().githubUserId(),
+                        CalcUtils.emailsOrSentinel(ctx.identity().commitEmails()),
+                        ctx.from(), ctx.to())) {
             userByRepo.put(row.getRepoId(), row.getCount());
         }
 

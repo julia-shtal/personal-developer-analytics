@@ -31,10 +31,10 @@ public class ReviewParticipationCalculator implements MetricCalculator {
         // Guard: no repos registered means no review data to query
         if (ctx.repoIds().isEmpty()) return;
         // Guard: attribution requires a GitHub login
-        if (ctx.user().getGithubLogin() == null) return;
+        if (!ctx.identity().hasGithubIdentity()) return;
 
         long count = prReviewRepository.countDistinctPrsReviewedByUser(
-                ctx.user().getGithubLogin(),
+                ctx.identity().githubUserId(),
                 ctx.repoIds(),
                 ctx.from(),
                 ctx.to());

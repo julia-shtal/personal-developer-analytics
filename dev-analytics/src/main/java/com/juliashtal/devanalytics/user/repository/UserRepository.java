@@ -17,6 +17,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
     Optional<User> findByEmail(String email);
 
+    /** Ownership check for identity claims: at most one user may hold a GitHub account. */
+    Optional<User> findByGithubUserId(Long githubUserId);
+
+    /** Ownership check for identity claims: at most one user may hold a Jira account. */
+    Optional<User> findByJiraAccountId(String jiraAccountId);
+
     @Query("SELECT u FROM User u WHERE LOWER(u.email) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(u.username) LIKE LOWER(CONCAT('%', :q, '%'))")
     List<User> searchByEmailOrUsername(String q);
 

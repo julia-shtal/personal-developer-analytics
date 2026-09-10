@@ -12,6 +12,7 @@ import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
+import com.juliashtal.devanalytics.user.service.AuthorIdentityResolver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -42,6 +43,7 @@ class MetricsServiceTest {
     @Mock UserRepository userRepository;
     @Mock TeamRepository teamRepository;
     @Mock RepoScopeResolver repoScopeResolver;
+    @Mock AuthorIdentityResolver authorIdentityResolver;
     @Mock MetricCoverageRepository coverageRepository;
 
     @InjectMocks MetricsService metricsService;

@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.user.model.AuthorIdentity;
 import com.juliashtal.devanalytics.user.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -31,6 +33,8 @@ class WipOpenPrAgeCalculatorTest {
     @Mock MetricSnapshotWriter writer;
     @InjectMocks WipOpenPrAgeCalculator calculator;
 
+    private static final AuthorIdentity ALICE = new AuthorIdentity(Set.of("alice@example.com"), 101L, null);
+
     private User user;
     private MetricCalcContext ctx;
 
@@ -42,7 +46,7 @@ class WipOpenPrAgeCalculatorTest {
         user.setGithubLogin("alice-gh");
 
         ctx = new MetricCalcContext(
-                user, null, List.of(10L, 11L),
+                user, null, List.of(10L, 11L), ALICE,
                 Instant.parse("2026-06-01T00:00:00Z"),
                 Instant.parse("2026-06-30T00:00:00Z"),
                 LocalDate.of(2026, 6, 1),
@@ -55,13 +59,14 @@ class WipOpenPrAgeCalculatorTest {
         GitHubPullRequestEntity pr = new GitHubPullRequestEntity();
         pr.setRepository(repo);
         pr.setAuthorLogin("alice-gh");
+        pr.setAuthorGithubId(101L);
         pr.setCreatedAt(Instant.now().minus(ageHours, ChronoUnit.HOURS));
         return pr;
     }
 
     @Test
     void calculate_openPrs_savesPerRepoMedianAge() {
-        when(pullRequestRepository.findOpenPrsByRepoIdsAndAuthorLogin(List.of(10L, 11L), "alice-gh"))
+        when(pullRequestRepository.findOpenPrsByRepoIdsAndAuthorGithubId(List.of(10L, 11L), 101L))
                 .thenReturn(List.of(openPr(10L, 24), openPr(10L, 72), openPr(11L, 5)));
         GitRepositoryEntity repo10 = new GitRepositoryEntity(); repo10.setId(10L);
         GitRepositoryEntity repo11 = new GitRepositoryEntity(); repo11.setId(11L);
@@ -86,7 +91,7 @@ class WipOpenPrAgeCalculatorTest {
 
     @Test
     void calculate_noOpenPrs_savesNothing() {
-        when(pullRequestRepository.findOpenPrsByRepoIdsAndAuthorLogin(List.of(10L, 11L), "alice-gh"))
+        when(pullRequestRepository.findOpenPrsByRepoIdsAndAuthorGithubId(List.of(10L, 11L), 101L))
                 .thenReturn(List.of());
 
         calculator.calculate(ctx);
@@ -95,10 +100,15 @@ class WipOpenPrAgeCalculatorTest {
     }
 
     @Test
-    void calculate_nullGithubLogin_skips() {
-        user.setGithubLogin(null);
+    void calculate_noGithubIdentity_skips() {
+        // Clearing the display login is no longer what stops attribution -- the numeric account
+        // ID is. An identity without one must produce no rows and touch no repository.
+        MetricCalcContext noIdentity = new MetricCalcContext(
+                user, null, List.of(10L, 11L),
+                new AuthorIdentity(Set.of("alice@example.com"), null, null),
+                ctx.from(), ctx.to(), ctx.fromDate(), ctx.toDate());
 
-        calculator.calculate(ctx);
+        calculator.calculate(noIdentity);
 
         verifyNoInteractions(pullRequestRepository, writer);
     }
@@ -106,7 +116,7 @@ class WipOpenPrAgeCalculatorTest {
     @Test
     void calculate_emptyRepoIds_skips() {
         MetricCalcContext emptyCtx = new MetricCalcContext(
-                user, null, List.of(),
+                user, null, List.of(), ALICE,
                 ctx.from(), ctx.to(), ctx.fromDate(), ctx.toDate());
 
         calculator.calculate(emptyCtx);

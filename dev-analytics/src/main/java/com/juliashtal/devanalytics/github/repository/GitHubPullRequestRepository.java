@@ -89,7 +89,12 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
             @Param("to") Instant to);
 
     // -------------------------------------------------------------------------
-    // Team-repo variants: filter by explicit repo IDs + PR author login
+    // Author-scoped variants: filter by explicit repo IDs + the author's numeric GitHub ID.
+    //
+    // Previously `p.authorLogin = :authorLogin`. A login is free text the user types into
+    // their profile: the comparison was case-sensitive, two users could enter the same value,
+    // and renaming an account on GitHub split one person's history into two identities. The
+    // numeric ID has none of those properties. authorLogin survives as a display value only.
     // -------------------------------------------------------------------------
 
     @Query("""
@@ -98,14 +103,14 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
            count(p.id)       as count
     from GitHubPullRequestEntity p
     where p.repository.id IN :repoIds
-      and p.authorLogin = :authorLogin
+      and p.authorGithubId = :githubUserId
       and p.createdAt between :from and :to
     group by date(p.createdAt), p.repository.id
     order by day, repoId
     """)
-    List<DailyCountProjection> aggregatePrCreatedDailyByRepoIdsAndAuthorLogin(
+    List<DailyCountProjection> aggregatePrCreatedDailyByRepoIdsAndAuthorGithubId(
             @Param("repoIds") List<Long> repoIds,
-            @Param("authorLogin") String authorLogin,
+            @Param("githubUserId") Long githubUserId,
             @Param("from") Instant from,
             @Param("to") Instant to);
 
@@ -115,15 +120,15 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
            count(p.id)      as count
     from GitHubPullRequestEntity p
     where p.repository.id IN :repoIds
-      and p.authorLogin = :authorLogin
+      and p.authorGithubId = :githubUserId
       and p.merged = true
       and p.mergedAt between :from and :to
     group by date(p.mergedAt), p.repository.id
     order by day, repoId
     """)
-    List<DailyCountProjection> aggregatePrMergedDailyByRepoIdsAndAuthorLogin(
+    List<DailyCountProjection> aggregatePrMergedDailyByRepoIdsAndAuthorGithubId(
             @Param("repoIds") List<Long> repoIds,
-            @Param("authorLogin") String authorLogin,
+            @Param("githubUserId") Long githubUserId,
             @Param("from") Instant from,
             @Param("to") Instant to);
 
@@ -133,13 +138,13 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
            p.mergedAt      as mergedAt
     from GitHubPullRequestEntity p
     where p.repository.id IN :repoIds
-      and p.authorLogin = :authorLogin
+      and p.authorGithubId = :githubUserId
       and p.merged = true
       and p.mergedAt between :from and :to
     """)
-    List<PrLeadTimeProjection> findMergedLeadTimesByRepoIdsAndAuthorLogin(
+    List<PrLeadTimeProjection> findMergedLeadTimesByRepoIdsAndAuthorGithubId(
             @Param("repoIds") List<Long> repoIds,
-            @Param("authorLogin") String authorLogin,
+            @Param("githubUserId") Long githubUserId,
             @Param("from") Instant from,
             @Param("to") Instant to);
 
@@ -147,18 +152,18 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     select p
     from GitHubPullRequestEntity p
     where p.repository.id IN :repoIds
-      and p.authorLogin = :authorLogin
+      and p.authorGithubId = :githubUserId
       and p.merged = true
       and p.mergedAt between :from and :to
     """)
-    List<GitHubPullRequestEntity> findMergedPrsByRepoIdsAndAuthorLogin(
+    List<GitHubPullRequestEntity> findMergedPrsByRepoIdsAndAuthorGithubId(
             @Param("repoIds") List<Long> repoIds,
-            @Param("authorLogin") String authorLogin,
+            @Param("githubUserId") Long githubUserId,
             @Param("from") Instant from,
             @Param("to") Instant to);
 
     /**
-     * Currently-open PRs (not merged, not closed) authored by the given login within the repo
+     * Currently-open PRs (not merged, not closed) authored by the given GitHub account within the repo
      * scope. Unlike every other PR query this has no date bound: a PR opened before the reporting
      * window still counts if it is open now. Used by WipOpenPrAgeCalculator.
      */
@@ -166,13 +171,13 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     select p
     from GitHubPullRequestEntity p
     where p.repository.id IN :repoIds
-      and p.authorLogin = :authorLogin
+      and p.authorGithubId = :githubUserId
       and p.mergedAt is null
       and p.closedAt is null
     """)
-    List<GitHubPullRequestEntity> findOpenPrsByRepoIdsAndAuthorLogin(
+    List<GitHubPullRequestEntity> findOpenPrsByRepoIdsAndAuthorGithubId(
             @Param("repoIds") List<Long> repoIds,
-            @Param("authorLogin") String authorLogin);
+            @Param("githubUserId") Long githubUserId);
 
     /**
      * Returns the next batch of PRs needing stats enrichment for a specific repository,

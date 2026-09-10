@@ -36,11 +36,11 @@ public class WipOpenPrAgeCalculator implements MetricCalculator {
     @Override
     public void calculate(MetricCalcContext ctx) {
         if (ctx.repoIds().isEmpty()) return;
-        if (ctx.user().getGithubLogin() == null) return;
+        if (!ctx.identity().hasGithubIdentity()) return;
 
         Instant now = Instant.now();
         List<GitHubPullRequestEntity> openPrs = pullRequestRepository
-                .findOpenPrsByRepoIdsAndAuthorLogin(ctx.repoIds(), ctx.user().getGithubLogin());
+                .findOpenPrsByRepoIdsAndAuthorGithubId(ctx.repoIds(), ctx.identity().githubUserId());
         if (openPrs.isEmpty()) return;
 
         Map<Long, List<Long>> agesByRepo = new HashMap<>();

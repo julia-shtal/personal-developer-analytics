@@ -11,4 +11,5 @@ public class UpdateProfileRequest {
     private String email;
     private String timezone;
     private String githubLogin;
+    private String jiraAccountId;
 }

@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.model.request.UpdateProfileRequest;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
+import com.juliashtal.devanalytics.user.service.AuthorIdentityService;
 import com.juliashtal.devanalytics.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +21,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,6 +32,7 @@ class UserServiceTest {
 
     @Mock UserRepository repository;
     @Mock PasswordEncoder passwordEncoder;
+    @Mock AuthorIdentityService authorIdentityService;
     @InjectMocks UserService service;
 
     @Test
@@ -72,14 +76,64 @@ class UserServiceTest {
         req.setUsername("newname");
         req.setEmail("new@example.com");
         req.setTimezone("Europe/Berlin");
-        req.setGithubLogin("octocat");
 
         User result = service.updateProfile(1L, req);
 
         assertThat(result.getUsername()).isEqualTo("newname");
         assertThat(result.getEmail()).isEqualTo("new@example.com");
         assertThat(result.getTimezone()).isEqualTo("Europe/Berlin");
-        assertThat(result.getGithubLogin()).isEqualTo("octocat");
+    }
+
+    @Test
+    void updateProfile_githubLoginProvided_delegatesToIdentityService() {
+        User user = new User();
+        user.setId(1L);
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setGithubLogin("octocat");
+
+        service.updateProfile(1L, req);
+
+        // The login is no longer assigned here. It has to be resolved to a numeric GitHub
+        // account first -- which can fail (422) or collide with another user (409) -- and the
+        // canonical spelling GitHub returns is what gets stored, not what the user typed.
+        verify(authorIdentityService).setGithubIdentity(1L, "octocat");
+    }
+
+    @Test
+    void updateProfile_githubLoginUnchangedAndAlreadyVerified_skipsResolution() {
+        User user = new User();
+        user.setId(1L);
+        user.setGithubLogin("octocat");
+        user.setGithubUserId(101L);
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setGithubLogin("octocat");
+
+        service.updateProfile(1L, req);
+
+        // Re-saving an unchanged, already-resolved login must not spend a GitHub API call --
+        // nor risk publishing an identity-changed event that would wipe and recompute metrics.
+        verify(authorIdentityService, never()).setGithubIdentity(anyLong(), anyString());
+    }
+
+    @Test
+    void updateProfile_jiraAccountIdProvided_delegatesToIdentityService() {
+        User user = new User();
+        user.setId(1L);
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setJiraAccountId("5b10a2844c20165700ede21g");
+
+        service.updateProfile(1L, req);
+
+        verify(authorIdentityService).setJiraAccountId(1L, "5b10a2844c20165700ede21g");
     }
 
     @Test

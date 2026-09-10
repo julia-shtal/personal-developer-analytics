@@ -38,10 +38,10 @@ public class MergeWithoutReviewCalculator implements MetricCalculator {
     @Override
     public void calculate(MetricCalcContext ctx) {
         if (ctx.repoIds().isEmpty()) return;
-        if (ctx.user().getGithubLogin() == null) return;
+        if (!ctx.identity().hasGithubIdentity()) return;
 
         List<GitHubPullRequestEntity> prs = pullRequestRepository
-                .findMergedPrsByRepoIdsAndAuthorLogin(ctx.repoIds(), ctx.user().getGithubLogin(), ctx.from(), ctx.to());
+                .findMergedPrsByRepoIdsAndAuthorGithubId(ctx.repoIds(), ctx.identity().githubUserId(), ctx.from(), ctx.to());
         if (prs.isEmpty()) return;
 
         List<Long> prIds = prs.stream().map(GitHubPullRequestEntity::getId).toList();
