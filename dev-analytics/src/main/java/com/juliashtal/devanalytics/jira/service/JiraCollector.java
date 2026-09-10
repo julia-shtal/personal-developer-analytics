@@ -200,7 +200,9 @@ public class JiraCollector {
         }
     }
 
-    private void upsertJiraIssue(JiraProjectEntity project, JiraSearchResponse.JiraIssue jiraIssue) {
+    // Package-private for JiraIssueUpsertTest: the only other route here is a live Jira,
+    // and storing both accountIds is what makes Jira issues attributable at all.
+    void upsertJiraIssue(JiraProjectEntity project, JiraSearchResponse.JiraIssue jiraIssue) {
         String sourceIssueKey = jiraIssue.getKey();
 
         IssueEntity issue = issueRepository

@@ -23,7 +23,8 @@ FOR each repo R in :repoIds:
   user_commits(R) =
     COUNT(*) FROM git_commits
     WHERE repository_id = R
-      AND author_email  = user.email
+      AND ( author_github_id = user.githubUserId
+         OR lower(author_email) IN user.commitEmails )
       AND author_date  >= from AND author_date < to+1
 
   share(R) = user_commits(R) / total_commits(R)   -- denominator guard: skip if total = 0
@@ -31,7 +32,7 @@ FOR each repo R in :repoIds:
 knowledge_silo_score = MAX(share(R)) over all R with total_commits(R) > 0
 ```
 
-- Attribution for numerator: `author_email = user.email`.
+- Attribution for numerator: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. The denominator counts every author and is not attributed. See [author-attribution.md](author-attribution.md).
 - Denominator: all commits regardless of author — no email filter.
 - Bot exclusion: **not applied** in the current implementation. Bot commits count toward the denominator (`total_commits`) and, if authored with the user's email (unusual), toward the numerator. This is intentional: bot commits represent real repository activity and dilute the silo score.
 - Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`, `repository = null`.

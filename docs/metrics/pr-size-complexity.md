@@ -22,7 +22,7 @@ pr_size_complexity_score =
   grouped per repository_id
 ```
 
-- Attribution: `author_login = user.githubLogin`. **Requires `User.githubLogin` to be set.**
+- Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Window: `merged_at >= from` AND `merged_at < to+1`.
 - Bot exclusion: `author_login NOT LIKE '%[bot]'`.
 - `MAX(commits_count, 1)`: guards against squash-merged PRs where `commits_count = 0` (the PR appears as a single synthesised commit after squash). Treating such PRs as 1 commit prevents division by zero and reflects the squash as a single-commit review unit.
@@ -32,7 +32,7 @@ pr_size_complexity_score =
 
 ## Edge cases
 
-- **`githubLogin` not set**: metric skipped; no snapshot written.
+- **GitHub account not linked**: metric skipped; no snapshot written.
 - **No merged PRs in window**: no snapshot written.
 - **Squash merge with `commits_count = 0`**: treated as 1 commit (denominator guard). `size_score = additions + deletions`.
 - **Unenriched PRs (`stats_status = PENDING`)**: `additions = 0`, `deletions = 0` → `size_score = 0`. These pull the median down until enrichment completes.

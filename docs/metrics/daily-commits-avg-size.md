@@ -19,13 +19,14 @@ FOR each calendar day D in [from, to):
     AVG(additions + deletions)
     FROM git_commits
     WHERE repository_id IN :repoIds
-      AND author_email  = user.email
+      AND ( author_github_id = user.githubUserId
+         OR lower(author_email) IN user.commitEmails )
       AND author_date  >= D 00:00:00 UTC
       AND author_date   < D+1 00:00:00 UTC
       AND author_name NOT LIKE '%[bot]%'
 ```
 
-- Attribution: `author_email = user.email`.
+- Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name LIKE '%[bot]%'` excluded.
 - The query (`aggregateCommitsDailyByRepoIdsAndAuthorEmail`) returns `AVG(c.additions + c.deletions)` alongside the daily commit count; a single DB round-trip produces both `DAILY_COMMITS_COUNT` and `DAILY_COMMITS_AVG_SIZE`.
 - For GitHub-sourced commits, `additions` and `deletions` are populated by `CommitStatsEnrichmentScheduler`. Until enrichment completes, those commits contribute 0 to the average, making the value unreliable. The metric is saved regardless; users should treat values close to 0 for recent days as provisional.

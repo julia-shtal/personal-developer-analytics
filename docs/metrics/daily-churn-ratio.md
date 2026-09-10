@@ -15,8 +15,8 @@ The fraction of changed lines that are deletions on a given calendar day, comput
 
 ```
 FOR each calendar day D in [from, to):
-  total_additions = SUM(additions)  FROM git_commits WHERE author_email = user.email AND day = D
-  total_deletions = SUM(deletions)  FROM git_commits WHERE author_email = user.email AND day = D
+  total_additions = SUM(additions)  FROM git_commits WHERE <attributed to user> AND day = D
+  total_deletions = SUM(deletions)  FROM git_commits WHERE <attributed to user> AND day = D
   total_changes   = total_additions + total_deletions
 
   daily_churn_ratio(D) =
@@ -25,7 +25,7 @@ FOR each calendar day D in [from, to):
       ELSE 0.0                             -- denominator guard; no snapshot saved when 0 commits
 ```
 
-- Attribution: `author_email = user.email`.
+- Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`.
 - Denominator guard: if `total_changes = 0` (no commits or all enrichment still PENDING), no snapshot is saved for that day.
 - For GitHub-sourced commits: enrichment via `CommitStatsEnrichmentScheduler` must complete before `additions`/`deletions` are reliable. Until then, both are 0 and the ratio would be 0.0. The implementation saves the snapshot with whatever stats are available; the value is provisional until all commits on that day reach `stats_status = COMPLETE`.

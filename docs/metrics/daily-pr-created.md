@@ -19,20 +19,20 @@ FOR each calendar day D in [from, to):
     COUNT(*)
     FROM github_pull_requests
     WHERE repository_id IN :repoIds
-      AND author_login  = user.githubLogin    -- attribution guard
+      AND author_github_id = user.githubUserId -- attribution guard
       AND created_at   >= D 00:00:00 UTC
       AND created_at    < D+1 00:00:00 UTC
       AND author_login NOT LIKE '%[bot]'      -- bot exclusion
 ```
 
-- Attribution: `author_login = user.githubLogin`. **Requires `User.githubLogin` to be set.** If unset, `calcDailyPrs` returns immediately and no snapshots are written.
+- Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_login` ending with `[bot]` excluded.
 - Includes PRs in any state (open, closed, merged) as long as `created_at` falls within the window. A PR that is later rejected still represents initiated work.
 - Time window: UTC calendar day boundaries applied to `created_at`.
 
 ## Edge cases
 
-- **`githubLogin` not set**: metric is skipped entirely — no 0-valued snapshots are written. The UI displays "—" until the user configures their GitHub login in Settings.
+- **GitHub account not linked**: metric is skipped entirely — no 0-valued snapshots are written. The UI displays "—" until the login is saved in Settings and resolved to an account ID.
 - **Draft PRs**: counted; draft state is not filtered. Draft PRs represent initiated work and their creation is a valid activity signal.
 - **Reopened PRs**: `created_at` is the original creation timestamp. Reopening does not generate a new event in the current data model.
 - **Multiple repos**: one snapshot per repo per day; read side sums across repos.

@@ -17,7 +17,8 @@ The longest unbroken run of consecutive calendar days on which the user made at 
 commit_days = SORTED SET OF DISTINCT CAST(author_date AS date)
   FROM git_commits
   WHERE repository_id IN :repoIds
-    AND author_email  = user.email
+    AND ( author_github_id = user.githubUserId
+       OR lower(author_email) IN user.commitEmails )
     AND author_date  >= from
     AND author_date   < to+1
     AND author_name NOT LIKE '%[bot]%'
@@ -38,7 +39,7 @@ for (LocalDate day : days) {
 }
 ```
 
-- Attribution: `author_email = user.email`.
+- Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`.
 - **Weekends and holidays count against the streak**: a commit-free Saturday breaks a Monday–Friday streak, resulting in a maximum possible 5-day streak in a standard work week without weekend commits.
 - Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`, `repository = null` (across all repos combined).

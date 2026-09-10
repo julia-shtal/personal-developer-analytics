@@ -19,23 +19,23 @@ FOR each calendar day D in [from, to):
     COUNT(*)
     FROM github_pull_requests
     WHERE repository_id IN :repoIds
-      AND author_login  = user.githubLogin
+      AND author_github_id = user.githubUserId
       AND merged_at    >= D 00:00:00 UTC
       AND merged_at     < D+1 00:00:00 UTC
       AND state         = 'MERGED'
       AND author_login NOT LIKE '%[bot]'
 ```
 
-- Attribution: `author_login = user.githubLogin`. **Requires `User.githubLogin` to be set.**
+- Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Time window: UTC calendar day boundaries applied to `merged_at`.
 - Only PRs with `state = MERGED` (i.e. `merged_at IS NOT NULL`) are counted.
 - Bot exclusion: `author_login` ending with `[bot]` excluded.
 
 ## Edge cases
 
-- **`githubLogin` not set**: metric is skipped; no snapshots written.
+- **GitHub account not linked**: metric is skipped; no snapshots written.
 - **PR closed without merge**: excluded. Only `merged_at IS NOT NULL` rows are counted.
-- **Merge by another user**: `author_login` refers to the PR author, not the user who clicked "Merge". A developer who opens a PR and a manager who merges it — the PR counts for the developer's `DAILY_PR_MERGED`, not the manager's.
+- **Merge by another user**: `author_github_id` refers to the PR author, not the user who clicked "Merge". A developer who opens a PR and a manager who merges it — the PR counts for the developer's `DAILY_PR_MERGED`, not the manager's.
 - **Multiple repos**: one snapshot per repo per day; read side sums.
 
 ## Validation (thesis §8.3)

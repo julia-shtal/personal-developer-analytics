@@ -1,4 +1,7 @@
-docs/
+docs/*
+!docs/metrics/
+docs/metrics/*
+!docs/metrics/author-attribution.md
 .claude/
 .agents/
 .idea

@@ -78,7 +78,10 @@ public class GitHubIssuesCollector {
         }
     }
 
-    private IssueEntity buildIssueEntity(DataSourceConfig config,
+    // Package-private for GitHubIssueIdentityMappingTest: reaching this through
+    // collectIssuesForRepo would need a live GitHub client, and the mapping of GHUser ids
+    // onto creator/assignee columns is exactly what needs pinning.
+    IssueEntity buildIssueEntity(DataSourceConfig config,
                                          GitRepositoryEntity repo,
                                          GHIssue gi) throws IOException {
         String sourceIssueKey = repo.getRepoFullName() + "#" + gi.getNumber();
