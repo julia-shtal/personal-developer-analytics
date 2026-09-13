@@ -1067,6 +1067,16 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 
 **`MetricBackfillScheduler`** — `@Scheduled(cron = "0 0 3 * * ?", zone = "UTC")` (daily 03:00 UTC). Iterates users and calls `backfillUser`; per-user failures logged without aborting the run.
 
+**`StatsCoverageService`** — Answers how much of a window's ingested history carries line-count
+statistics, per record type. Line-count metrics (`DAILY_CHURN_RATIO`, `DAILY_COMMITS_AVG_SIZE`,
+`REFACTOR_RATIO`, `PR_SIZE_COMPLEXITY_SCORE`) are computed only over records whose stats were
+retrieved, so their excluded set must be reportable rather than assumed. Groups `git_commits` and
+`github_pull_requests` by `(stats_status, stats_skip_reason)` and converts each group to a share of
+its own record type. Window bounds and repo scope mirror `MetricsService`, so a coverage figure
+describes the same population the metrics were calculated over. An empty repo scope returns no rows
+rather than querying, since Hibernate renders an empty `IN` collection as SQL PostgreSQL rejects.
+Read-only; behind `GET /api/metrics/stats-coverage`.
+
 #### DTOs
 
 | Class | Fields |
@@ -1077,10 +1087,11 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 | `MemberSummaryDto` | `userId`, `username`, `metrics: Map<MetricType, Double>`, `hasCustomAvatar`, `avatarPreset`, `lastActiveAt?`, `email?` |
 | `MetricsFreshnessDto` | `metricsComputedThrough?`, `coverageFrom?`, `coverageTo?`, `daysRemaining` |
 | `BackfillResult` | `daysComputed`, `daysRemaining`, `coverageFrom?`, `coverageTo?` — record; service-level, not exposed at the controller boundary |
+| `StatsCoverageDto` | `recordType`, `statsStatus`, `statsSkipReason?`, `recordCount`, `share` — record; `share` is within a record type, so commit and PR shares each sum to 1 |
 
 #### Controllers
 
-**`MetricsController`** — `/api/metrics`, `@PreAuthorize("isAuthenticated()")` (class-level), injects: `MetricSnapshotService`, `MetricsService`, `MetricsAnomalyService`, `MetricBackfillService`, `RepoService`, `CheckHelper`. Personal endpoints only (team endpoints extracted to `MetricsTeamController`).
+**`MetricsController`** — `/api/metrics`, `@PreAuthorize("isAuthenticated()")` (class-level), injects: `MetricSnapshotService`, `MetricsService`, `MetricsAnomalyService`, `MetricBackfillService`, `StatsCoverageService`, `RepoService`, `CheckHelper`. Personal endpoints only (team endpoints extracted to `MetricsTeamController`).
 
 **Personal endpoints:**
 
@@ -1094,6 +1105,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 | GET | `/daily-issues-created` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
 | GET | `/daily-issues-closed` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
 | GET | `/daily-churn-ratio` | `from`, `to`, `repoId?` | `List<MetricPointDto>` |
+| GET | `/stats-coverage` | `from`, `to`, `repoId?` | `List<StatsCoverageDto>` |
 | GET | `/pr-lead-time` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/pr-first-commit-to-merge-lead-time` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/review-response-time` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
@@ -1514,6 +1526,7 @@ Selected notable endpoints:
 | POST | `/api/ai/conversations/{conversationId}/messages` | 201 | Send a follow-up message in a conversation |
 | GET | `/api/metrics/anomalies` | 200 | Per-metric anomaly flags using 2σ rule |
 | GET | `/api/metrics/review-participation` | 200 | Code review participation (distinct PRs reviewed, cross-repo) |
+| GET | `/api/metrics/stats-coverage` | 200 | Enrichment coverage per state and skip reason, for commits and PRs in the range |
 | GET | `/api/teams/{teamId}/members/{memberId}/export` | 200 text/markdown | 1:1 meeting prep document for a team member with AI insights and anomaly highlights |
 | GET | `/api/invitations/generate` | 200 | Generate invite token with optional email |
 | POST | `/api/invitations/redeem` | 201 | Redeem invite token to join team |

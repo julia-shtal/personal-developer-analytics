@@ -43,3 +43,20 @@ FOR each calendar day D in [from, to):
 - **Expected range**: 10–200 changed lines/commit for typical feature work; refactoring sessions may spike to 500+.
 - **Comparison baseline**: `git log --author=<email> --stat --after=<from> --before=<to>` and manually compute the average.
 - **Controlled-change test**: push a single commit touching exactly 10 lines (5 added, 5 deleted) on a day with no other commits → `daily_commits_avg_size` for that day must equal 10.
+
+## Population and exclusions
+
+Computed over commits whose per-commit statistics were retrieved — `stats_status = 'COMPLETE'`.
+Commits whose enrichment was abandoned carry `stats_skip_reason`, which separates the two causes
+because they bear on validity in opposite directions: `DIFF_TOO_LARGE` means GitHub refused to
+render a diff above its size cap, which is itself evidence about the repository's commit-size
+distribution, while `RECORD_UNAVAILABLE` means the detail endpoint returned 404 or 422, which is
+evidence about API access and says nothing about the commit. `UNKNOWN` marks rows skipped before
+the two were distinguished. `GET /api/metrics/stats-coverage` reports each count for a window, so
+the size of the exclusion can be quoted rather than asserted.
+
+`DIFF_TOO_LARGE` is expected to be near-zero in practice. GitHub documents *Get a commit* as
+returning 200, 404, 409, 422, 500 or 503 — 403 is not a documented response — and says only that
+larger diffs may time out with a 5xx. A genuinely oversized commit therefore surfaces as repeated
+5xx that exhaust the retry budget and lands in `FAILED`, which the coverage endpoint reports as its
+own group. The exclusion is four counts, not three.

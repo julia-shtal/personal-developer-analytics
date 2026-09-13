@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.StatsSkipReason;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
@@ -66,14 +67,17 @@ class GitHubPrStatsEnrichmentServiceTest {
     // ── max attempts exceeded → FAILED ─────────────────────────────────────
 
     @Test
-    void enrichSingle_maxAttemptsExceeded_marksFailed() {
-        // MAX_ATTEMPTS = 3; after increment: 3+1=4 > 3 → FAILED
+    void enrichSingle_maxAttemptsExceeded_marksFailedAndClearsSkipReason() {
+        // MAX_ATTEMPTS = 3; after increment: 3+1=4 > 3 → FAILED. The reason is seeded, because an
+        // assertion that nothing ever set one cannot fail.
         GitHubPullRequestEntity pr = pr(1, 3);
+        pr.setStatsSkipReason(StatsSkipReason.UNKNOWN);
 
         service.enrichSingle(pr, wmBaseUrl, "token", REPO_NAME);
 
         assertThat(pr.getStatsAttempts()).isEqualTo(4);
         assertThat(pr.getStatsStatus()).isEqualTo(StatsStatus.FAILED);
+        assertThat(pr.getStatsSkipReason()).isNull();
         assertThat(pr.getStatsFetchedAt()).isNotNull();
     }
 
@@ -97,6 +101,7 @@ class GitHubPrStatsEnrichmentServiceTest {
         assertThat(pr.getChangedFiles()).isEqualTo(3);
         assertThat(pr.getCommitsCount()).isEqualTo(2);
         assertThat(pr.getStatsFetchedAt()).isNotNull();
+        assertThat(pr.getStatsSkipReason()).isNull();
     }
 
     // ── reviews fetched and persisted ──────────────────────────────────────
@@ -129,17 +134,22 @@ class GitHubPrStatsEnrichmentServiceTest {
     // ── 403 too large → SKIPPED ────────────────────────────────────────────
 
     @Test
-    void enrichSingle_403TooLarge_marksSkipped() {
+    void enrichSingle_403TooLarge_marksSkippedWithDiffTooLarge() {
         stubReviewsEmpty(10);
         stubFor(get(urlPathEqualTo("/repos/owner/test-repo/pulls/10"))
                 .willReturn(aResponse().withStatus(403)
-                        .withBody("diff is too large to process")));
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {"message":"Sorry, this diff is too large to display.",
+                                 "documentation_url":"https://docs.github.com/rest"}""")));
 
         GitHubPullRequestEntity pr = pr(10, 0);
         service.enrichSingle(pr, wmBaseUrl, "token", REPO_NAME);
 
         assertThat(pr.getStatsStatus()).isEqualTo(StatsStatus.SKIPPED);
+        assertThat(pr.getStatsSkipReason()).isEqualTo(StatsSkipReason.DIFF_TOO_LARGE);
         assertThat(pr.getStatsFetchedAt()).isNotNull();
+        assertThat(pr.getStatsAttempts()).isEqualTo(1);
     }
 
     // ── 403 secondary rate limit → leave PENDING ───────────────────────────
@@ -156,12 +166,13 @@ class GitHubPrStatsEnrichmentServiceTest {
 
         assertThat(pr.getStatsStatus()).isEqualTo(StatsStatus.PENDING);
         assertThat(pr.getStatsFetchedAt()).isNull();
+        assertThat(pr.getStatsSkipReason()).isNull();
     }
 
     // ── 404 → SKIPPED ──────────────────────────────────────────────────────
 
     @Test
-    void enrichSingle_404_marksSkipped() {
+    void enrichSingle_404_marksSkippedWithRecordUnavailable() {
         stubReviewsEmpty(20);
         stubFor(get(urlPathEqualTo("/repos/owner/test-repo/pulls/20"))
                 .willReturn(aResponse().withStatus(404)));
@@ -170,12 +181,14 @@ class GitHubPrStatsEnrichmentServiceTest {
         service.enrichSingle(pr, wmBaseUrl, "token", REPO_NAME);
 
         assertThat(pr.getStatsStatus()).isEqualTo(StatsStatus.SKIPPED);
+        assertThat(pr.getStatsSkipReason()).isEqualTo(StatsSkipReason.RECORD_UNAVAILABLE);
+        assertThat(pr.getStatsAttempts()).isEqualTo(1);
     }
 
     // ── 422 → SKIPPED ──────────────────────────────────────────────────────
 
     @Test
-    void enrichSingle_422_marksSkipped() {
+    void enrichSingle_422_marksSkippedWithRecordUnavailable() {
         stubReviewsEmpty(21);
         stubFor(get(urlPathEqualTo("/repos/owner/test-repo/pulls/21"))
                 .willReturn(aResponse().withStatus(422)));
@@ -184,6 +197,31 @@ class GitHubPrStatsEnrichmentServiceTest {
         service.enrichSingle(pr, wmBaseUrl, "token", REPO_NAME);
 
         assertThat(pr.getStatsStatus()).isEqualTo(StatsStatus.SKIPPED);
+        assertThat(pr.getStatsSkipReason()).isEqualTo(StatsSkipReason.RECORD_UNAVAILABLE);
+        assertThat(pr.getStatsAttempts()).isEqualTo(1);
+    }
+
+    // ── reason is cleared once a record reaches COMPLETE ────────────────────
+
+    @Test
+    void enrichSingle_previouslySkippedThenSucceeds_clearsSkipReason() {
+        // Skipped records are not retried, so this is defensive: the invariant "a reason exists
+        // only alongside SKIPPED" must hold however the entity arrives here.
+        stubReviewsEmpty(43);
+        stubFor(get(urlPathEqualTo("/repos/owner/test-repo/pulls/43"))
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {"additions":1,"deletions":1,"changed_files":1,"commits":1}""")));
+
+        GitHubPullRequestEntity pr = pr(43, 0);
+        pr.setStatsStatus(StatsStatus.SKIPPED);
+        pr.setStatsSkipReason(StatsSkipReason.UNKNOWN);
+
+        service.enrichSingle(pr, wmBaseUrl, "token", REPO_NAME);
+
+        assertThat(pr.getStatsStatus()).isEqualTo(StatsStatus.COMPLETE);
+        assertThat(pr.getStatsSkipReason()).isNull();
     }
 
     // ── unexpected status → stays PENDING ──────────────────────────────────

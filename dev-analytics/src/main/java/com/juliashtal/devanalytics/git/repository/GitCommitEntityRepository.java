@@ -7,6 +7,7 @@ import com.juliashtal.devanalytics.metrics.model.CommitDetailProjection;
 import com.juliashtal.devanalytics.metrics.model.DailyChurnProjection;
 import com.juliashtal.devanalytics.metrics.model.DailyCommitsProjection;
 import com.juliashtal.devanalytics.metrics.model.RepoCountProjection;
+import com.juliashtal.devanalytics.metrics.model.StatsCoverageProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -239,5 +240,25 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
             @Param("status") StatsStatus status,
             @Param("repositoryId") Long repositoryId,
             Pageable pageable);
+
+    /**
+     * Enrichment state of every commit in the window, grouped by status and skip reason.
+     *
+     * <p>Window bounds match the metric calculators' so the counts describe the same population
+     * the line-count metrics were computed over.</p>
+     */
+    @Query("""
+    select c.statsStatus     as statsStatus,
+           c.statsSkipReason as statsSkipReason,
+           count(c)          as recordCount
+    from GitCommitEntity c
+    where c.repository.id in :repoIds
+      and c.authorDate between :from and :to
+    group by c.statsStatus, c.statsSkipReason
+    """)
+    List<StatsCoverageProjection> countByStatsStateInRange(
+            @Param("repoIds") List<Long> repoIds,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
 }
 

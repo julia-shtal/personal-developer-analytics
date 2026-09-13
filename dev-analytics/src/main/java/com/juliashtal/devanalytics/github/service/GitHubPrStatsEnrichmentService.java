@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.github.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.juliashtal.devanalytics.git.model.StatsSkipReason;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.github.model.GitHubPrReviewEntity;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
@@ -21,6 +22,7 @@ import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.*;
 
 /**
@@ -160,6 +162,7 @@ public class GitHubPrStatsEnrichmentService {
         if (pr.getStatsAttempts() > MAX_ATTEMPTS) {
             log.warn("Giving up on PR #{} in {}: too many failed attempts", pr.getNumber(), repoFullName);
             pr.setStatsStatus(StatsStatus.FAILED);
+            pr.setStatsSkipReason(null);
             pr.setStatsFetchedAt(Instant.now());
             return;
         }
@@ -281,16 +284,18 @@ public class GitHubPrStatsEnrichmentService {
             pr.setChangedFiles(detail.path("changed_files").asInt(0));
             pr.setCommitsCount(detail.path("commits").asInt(0));
             pr.setStatsStatus(StatsStatus.COMPLETE);
+            pr.setStatsSkipReason(null);
             pr.setStatsFetchedAt(Instant.now());
             return;
         }
 
         if (status == 403) {
-            String body = response.body() != null ? response.body().toLowerCase() : "";
+            // Distinguish a size refusal from a secondary rate limit by body text; Locale.ROOT
+            // because under a Turkish default "Maximum" lowercases to "maxımum" and would miss.
+            String body = response.body() != null ? response.body().toLowerCase(Locale.ROOT) : "";
             if (body.contains("too large") || body.contains("maximum")) {
                 log.warn("Diff too large for PR #{} in {}, marking SKIPPED", pr.getNumber(), repoFullName);
-                pr.setStatsStatus(StatsStatus.SKIPPED);
-                pr.setStatsFetchedAt(Instant.now());
+                markSkipped(pr, StatsSkipReason.DIFF_TOO_LARGE);
             } else {
                 log.warn("Secondary rate limit for PR #{} in {}, will retry", pr.getNumber(), repoFullName);
             }
@@ -300,12 +305,18 @@ public class GitHubPrStatsEnrichmentService {
         if (status == 404 || status == 422) {
             log.warn("PR #{} not found/unprocessable in {} ({}), marking SKIPPED",
                     pr.getNumber(), repoFullName, status);
-            pr.setStatsStatus(StatsStatus.SKIPPED);
-            pr.setStatsFetchedAt(Instant.now());
+            markSkipped(pr, StatsSkipReason.RECORD_UNAVAILABLE);
             return;
         }
 
         log.warn("Unexpected status {} enriching PR #{} in {}", status, pr.getNumber(), repoFullName);
+    }
+
+    /** Single writer of SKIPPED, so the status and its reason cannot be set apart. */
+    private static void markSkipped(GitHubPullRequestEntity pr, StatsSkipReason reason) {
+        pr.setStatsStatus(StatsStatus.SKIPPED);
+        pr.setStatsSkipReason(reason);
+        pr.setStatsFetchedAt(Instant.now());
     }
 
     // -------------------------------------------------------------------------

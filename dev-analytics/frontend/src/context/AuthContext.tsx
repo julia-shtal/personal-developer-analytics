@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useQueryClient } from '@tanstack/react-query';
 import { clearTokens, setAccessToken } from '@/lib/api';
 import api from '@/lib/api';
+import { clearRepoScope } from '@/lib/repoScopeSignal';
 import type { UserProfile, LoginRequest, RegisterRequest, AuthResponse } from '@/types';
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // mirrors backend access-token TTL
@@ -133,8 +134,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!data.accessToken) {
       throw new Error('No access token in response');
     }
-    // Clear any cached data from a previous user before activating the new session.
+    // Clear any cached data from a previous user before activating the new session. The
+    // repo scope is persisted, so it outlives the cache and would otherwise let this
+    // account inherit the previous one's selection — and 404 on every request carrying it.
     qc.clear();
+    clearRepoScope();
     setAccessToken(data.accessToken);
     // refresh_token is in the httpOnly cookie — no localStorage write needed.
     try {

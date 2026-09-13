@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
+import com.juliashtal.devanalytics.metrics.service.StatsCoverageService;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.service.JwtService;
@@ -47,6 +48,7 @@ class ReviewParticipationControllerTest {
     @MockBean CheckHelper checkHelper;
     @MockBean MetricSnapshotRepository snapshotRepository;
     @MockBean MetricBackfillService backfillService;
+    @MockBean StatsCoverageService statsCoverageService;
     @MockBean JwtService jwtService;
     @MockBean CustomUserDetailsService customUserDetailsService;
 

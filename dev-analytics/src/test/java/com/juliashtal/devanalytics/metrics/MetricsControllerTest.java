@@ -1,14 +1,21 @@
 package com.juliashtal.devanalytics.metrics;
 
+import com.jayway.jsonpath.JsonPath;
+import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.StatsSkipReason;
+import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.metrics.controller.MetricsController;
 import com.juliashtal.devanalytics.metrics.model.BackfillResult;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.model.StatsCoverageDto;
+import com.juliashtal.devanalytics.metrics.model.StatsCoverageRecordType;
 import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
+import com.juliashtal.devanalytics.metrics.service.StatsCoverageService;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import com.juliashtal.devanalytics.security.service.JwtService;
@@ -31,6 +38,7 @@ import java.util.NoSuchElementException;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -59,6 +67,7 @@ class MetricsControllerTest {
     @MockBean CheckHelper checkHelper;
     @MockBean MetricSnapshotRepository snapshotRepository;
     @MockBean MetricBackfillService backfillService;
+    @MockBean StatsCoverageService statsCoverageService;
     @MockBean JwtService jwtService;
     @MockBean CustomUserDetailsService customUserDetailsService;
 
@@ -540,5 +549,80 @@ class MetricsControllerTest {
                 .andExpect(status().isNotFound());
 
         verify(repoService, never()).getById(anyLong());
+    }
+
+    // ── stats coverage ─────────────────────────────────────────────────────
+
+    @Test
+    @WithMockUser
+    void getStatsCoverage_mixedStates_countsSumToRecordsInRange() throws Exception {
+        when(statsCoverageService.describeCoverage(currentUser, FROM, TO, null)).thenReturn(List.of(
+                new StatsCoverageDto(StatsCoverageRecordType.COMMIT,
+                        StatsStatus.COMPLETE, null, 75L, 0.75),
+                new StatsCoverageDto(StatsCoverageRecordType.COMMIT,
+                        StatsStatus.SKIPPED, StatsSkipReason.DIFF_TOO_LARGE, 15L, 0.15),
+                new StatsCoverageDto(StatsCoverageRecordType.COMMIT,
+                        StatsStatus.SKIPPED, StatsSkipReason.RECORD_UNAVAILABLE, 10L, 0.10)));
+
+        String json = mvc.perform(get("/api/metrics/stats-coverage")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].statsStatus").value("COMPLETE"))
+                .andExpect(jsonPath("$[0].statsSkipReason").doesNotExist())
+                .andExpect(jsonPath("$[1].statsSkipReason").value("DIFF_TOO_LARGE"))
+                .andExpect(jsonPath("$[2].statsSkipReason").value("RECORD_UNAVAILABLE"))
+                .andExpect(jsonPath("$[1].recordCount").value(15))
+                .andExpect(jsonPath("$[1].share").value(0.15))
+                .andReturn().getResponse().getContentAsString();
+
+        // The spec's criterion: the reported states partition the range rather than overlap it.
+        List<Integer> counts = JsonPath.read(json, "$[*].recordCount");
+        assertThat(counts.stream().mapToLong(Integer::longValue).sum()).isEqualTo(100L);
+    }
+
+    @Test
+    @WithMockUser
+    void getStatsCoverage_repoIdGiven_checksEntitlementBeforeQuerying() throws Exception {
+        GitRepositoryEntity repo = new GitRepositoryEntity();
+        repo.setId(7L);
+        when(repoService.getAccessibleRepo(1L, 7L)).thenReturn(repo);
+        when(statsCoverageService.describeCoverage(currentUser, FROM, TO, 7L)).thenReturn(List.of());
+
+        mvc.perform(get("/api/metrics/stats-coverage")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString())
+                        .param("repoId", "7"))
+                .andExpect(status().isOk());
+
+        verify(repoService).getAccessibleRepo(1L, 7L);
+    }
+
+    @Test
+    @WithMockUser
+    void getStatsCoverage_inaccessibleRepo_doesNotReachTheService() throws Exception {
+        when(repoService.getAccessibleRepo(1L, 99L))
+                .thenThrow(new NoSuchElementException("Repository not accessible"));
+
+        mvc.perform(get("/api/metrics/stats-coverage")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString())
+                        .param("repoId", "99"))
+                .andExpect(status().isNotFound());
+
+        verify(statsCoverageService, never()).describeCoverage(any(), any(), any(), any());
+    }
+
+    @Test
+    @WithMockUser
+    void getStatsCoverage_emptyScope_returnsEmptyArray() throws Exception {
+        when(statsCoverageService.describeCoverage(currentUser, FROM, TO, null)).thenReturn(List.of());
+
+        mvc.perform(get("/api/metrics/stats-coverage")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
     }
 }

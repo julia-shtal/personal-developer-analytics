@@ -5,6 +5,7 @@ import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.StatsSkipReason;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,14 +58,16 @@ class GitHubCommitStatsEnrichmentServiceTest {
     // ── max attempts exceeded → FAILED ─────────────────────────────────────
 
     @Test
-    void enrichSingle_maxAttemptsExceeded_marksFailed() {
+    void enrichSingle_maxAttemptsExceeded_marksFailedAndClearsSkipReason() {
         // MAX_ATTEMPTS = 3; attempts starts at 3, incremented to 4 → 4 > 3 → FAILED
         GitCommitEntity commit = commit(3);
+        commit.setStatsSkipReason(StatsSkipReason.UNKNOWN);
 
         service.enrichSingle(commit, wmBaseUrl, "token", REPO_NAME);
 
         assertThat(commit.getStatsAttempts()).isEqualTo(4);
         assertThat(commit.getStatsStatus()).isEqualTo(StatsStatus.FAILED);
+        assertThat(commit.getStatsSkipReason()).isNull();
         assertThat(commit.getStatsFetchedAt()).isNotNull();
     }
 
@@ -92,16 +95,21 @@ class GitHubCommitStatsEnrichmentServiceTest {
     // ── 403 "too large" → SKIPPED ──────────────────────────────────────────
 
     @Test
-    void enrichSingle_403TooLarge_marksSkipped() {
+    void enrichSingle_403TooLarge_marksSkippedWithDiffTooLarge() {
         stubFor(get(urlPathEqualTo("/repos/owner/test-repo/commits/" + SHA))
                 .willReturn(aResponse().withStatus(403)
-                        .withBody("diff is too large to process")));
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {"message":"Sorry, this diff is too large to display.",
+                                 "documentation_url":"https://docs.github.com/rest"}""")));
 
         GitCommitEntity commit = commit(0);
         service.enrichSingle(commit, wmBaseUrl, "token", REPO_NAME);
 
         assertThat(commit.getStatsStatus()).isEqualTo(StatsStatus.SKIPPED);
+        assertThat(commit.getStatsSkipReason()).isEqualTo(StatsSkipReason.DIFF_TOO_LARGE);
         assertThat(commit.getStatsFetchedAt()).isNotNull();
+        assertThat(commit.getStatsAttempts()).isEqualTo(1);
     }
 
     // ── 403 secondary rate limit → leave PENDING ───────────────────────────
@@ -117,12 +125,13 @@ class GitHubCommitStatsEnrichmentServiceTest {
 
         assertThat(commit.getStatsStatus()).isEqualTo(StatsStatus.PENDING);
         assertThat(commit.getStatsFetchedAt()).isNull();
+        assertThat(commit.getStatsSkipReason()).isNull();
     }
 
     // ── 404 → SKIPPED ──────────────────────────────────────────────────────
 
     @Test
-    void enrichSingle_404_marksSkipped() {
+    void enrichSingle_404_marksSkippedWithRecordUnavailable() {
         stubFor(get(urlPathEqualTo("/repos/owner/test-repo/commits/" + SHA))
                 .willReturn(aResponse().withStatus(404).withBody("not found")));
 
@@ -130,12 +139,14 @@ class GitHubCommitStatsEnrichmentServiceTest {
         service.enrichSingle(commit, wmBaseUrl, "token", REPO_NAME);
 
         assertThat(commit.getStatsStatus()).isEqualTo(StatsStatus.SKIPPED);
+        assertThat(commit.getStatsSkipReason()).isEqualTo(StatsSkipReason.RECORD_UNAVAILABLE);
+        assertThat(commit.getStatsAttempts()).isEqualTo(1);
     }
 
     // ── 422 → SKIPPED ──────────────────────────────────────────────────────
 
     @Test
-    void enrichSingle_422_marksSkipped() {
+    void enrichSingle_422_marksSkippedWithRecordUnavailable() {
         stubFor(get(urlPathEqualTo("/repos/owner/test-repo/commits/" + SHA))
                 .willReturn(aResponse().withStatus(422).withBody("unprocessable entity")));
 
@@ -143,6 +154,8 @@ class GitHubCommitStatsEnrichmentServiceTest {
         service.enrichSingle(commit, wmBaseUrl, "token", REPO_NAME);
 
         assertThat(commit.getStatsStatus()).isEqualTo(StatsStatus.SKIPPED);
+        assertThat(commit.getStatsSkipReason()).isEqualTo(StatsSkipReason.RECORD_UNAVAILABLE);
+        assertThat(commit.getStatsAttempts()).isEqualTo(1);
     }
 
     // ── unexpected status → stays PENDING ──────────────────────────────────
@@ -206,6 +219,28 @@ class GitHubCommitStatsEnrichmentServiceTest {
 
         assertThat(commit.getStatsStatus()).isEqualTo(StatsStatus.COMPLETE);
         assertThat(commit.getAdditions()).isEqualTo(5);
+    }
+
+    // ── reason is cleared once a record reaches COMPLETE ────────────────────
+
+    @Test
+    void enrichSingle_previouslySkippedThenSucceeds_clearsSkipReason() {
+        // Skipped records are not retried, so this is defensive: the invariant "a reason exists
+        // only alongside SKIPPED" must hold however the entity arrives here.
+        stubFor(get(urlPathEqualTo("/repos/owner/test-repo/commits/" + SHA))
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {"stats":{"additions":1,"deletions":1},"files":[]}""")));
+
+        GitCommitEntity commit = commit(0);
+        commit.setStatsStatus(StatsStatus.SKIPPED);
+        commit.setStatsSkipReason(StatsSkipReason.UNKNOWN);
+
+        service.enrichSingle(commit, wmBaseUrl, "token", REPO_NAME);
+
+        assertThat(commit.getStatsStatus()).isEqualTo(StatsStatus.COMPLETE);
+        assertThat(commit.getStatsSkipReason()).isNull();
     }
 
     // ── processPendingBatchForRepo: empty batch → returns 0 ────────────────
