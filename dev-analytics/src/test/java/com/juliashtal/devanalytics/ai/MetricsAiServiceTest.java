@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.ai.model.TeamMetricsContext;
 import com.juliashtal.devanalytics.ai.service.AiContextBuilderService;
 import com.juliashtal.devanalytics.ai.service.MetricSummaryPersistenceService;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
+import com.juliashtal.devanalytics.ai.service.PromptVersionProvider;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
@@ -61,7 +62,8 @@ class MetricsAiServiceTest {
     @BeforeEach
     void setUp() {
         service = new MetricsAiService(contextBuilder, repoService, teamService, userService, llmClient,
-                new ObjectMapper().registerModule(new JavaTimeModule()), persistenceService);
+                new ObjectMapper().registerModule(new JavaTimeModule()), persistenceService,
+                new PromptVersionProvider());
         ReflectionTestUtils.setField(service, "model", MODEL);
 
         // Return minimal empty contexts so toJson() does not throw.
@@ -259,6 +261,27 @@ class MetricsAiServiceTest {
         assertThat(dto.getContextRepoName()).isEqualTo("dev-analytics");
         assertThat(userPromptCaptor.getValue()).contains("for repository dev-analytics");
         verify(persistenceService).savePersonal(user, dto);
+    }
+
+    @Test
+    void generateSummary_personalScope_stampsThePersonalPromptVersion() {
+        when(llmClient.complete(eq(MODEL), any(), any(), anyBoolean())).thenReturn(VALID_JSON);
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getPromptVersion()).isEqualTo(new PromptVersionProvider().hashFor("PERSONAL"));
+    }
+
+    @Test
+    void generateTeamSummary_teamScope_stampsTheTeamPromptVersion() {
+        User manager = userWithRole(1L, Role.MANAGER);
+        Team team = team(10L, manager, manager);
+        when(teamService.getById(10L)).thenReturn(team);
+        when(llmClient.complete(eq(MODEL), any(), any(), anyBoolean())).thenReturn(VALID_JSON);
+
+        MetricsSummaryDto dto = service.generateTeamSummary(manager, 10L, from, to);
+
+        assertThat(dto.getPromptVersion()).isEqualTo(new PromptVersionProvider().hashFor("TEAM"));
     }
 
     @Test

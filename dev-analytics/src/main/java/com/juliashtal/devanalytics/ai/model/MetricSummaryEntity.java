@@ -71,6 +71,10 @@ public class MetricSummaryEntity {
     @Column(length = 64)
     private String modelName;
 
+    /** First 16 hex characters of the sha256 of the system prompt that produced the summary. */
+    @Column(nullable = false, length = 16)
+    private String promptVersion;
+
     @Column(nullable = false)
     private Instant generatedAt;
 

@@ -16,6 +16,7 @@ const mockSummary: MetricsSummaryDto = {
   insights: [],
   recommendations: [],
   modelName: 'llama3.2',
+  promptVersion: '20df573026957922',
   from: '2026-06-01',
   to: '2026-06-29',
   generatedAt: new Date().toISOString(),

@@ -30,6 +30,8 @@ public class MetricsSummaryDto {
     private List<String> recommendations;
     private String rawModelOutput;
     private String modelName;
+    /** First 16 hex characters of the sha256 of the system prompt that produced the summary. */
+    private String promptVersion;
     private Instant generatedAt;
 
     /**

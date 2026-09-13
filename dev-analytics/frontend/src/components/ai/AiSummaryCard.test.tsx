@@ -31,6 +31,7 @@ const SUMMARY: MetricsSummaryDto = {
   recommendations: ['Keep going.'],
   rawModelOutput: '{}',
   modelName: 'llama3.2',
+  promptVersion: 'eded29f49ed62b99',
   generatedAt: '2026-06-08T09:00:00Z',
 };
 
