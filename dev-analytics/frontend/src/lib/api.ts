@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { notifyRepoScopeRejected, rejectedRepoScope } from './repoScopeSignal';
 
 // Access token lives in memory only — never in localStorage.
 let _accessToken: string | null = null;
@@ -37,6 +38,12 @@ api.interceptors.response.use(
     // Network error (no response) — backend is down; don't attempt refresh
     if (!error.response) {
       return Promise.reject(error);
+    }
+    // A scoped request answered 404 is the server reporting that scope is gone. The repo
+    // list is the usual evidence, but it is unavailable in precisely the cases that matter.
+    const deadScope = rejectedRepoScope(error);
+    if (deadScope != null) {
+      notifyRepoScopeRejected(deadScope);
     }
     const original = error.config;
     if (error.response?.status === 401 && !original._retry) {

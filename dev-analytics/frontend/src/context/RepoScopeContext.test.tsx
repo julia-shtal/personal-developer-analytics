@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { RepoDto } from '@/types';
+import { clearRepoScope, notifyRepoScopeRejected } from '@/lib/repoScopeSignal';
 import { RepoScopeProvider, useRepoScope } from './RepoScopeContext';
 
 vi.mock('@/api/repos', () => ({
@@ -142,5 +143,60 @@ describe('RepoScopeContext — stale scope reconciliation', () => {
     await waitFor(() => expect(mockedList()).toHaveBeenCalled());
     expect(screen.getByTestId('value').textContent).toBe('34');
     expect(localStorage.getItem(STORAGE_KEY)).toBe('34');
+  });
+});
+
+describe('RepoScopeContext — scope rejected by the server', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+  });
+  afterEach(() => localStorage.clear());
+
+  it('clears the persisted repo id when a scoped request 404s while the repo list is unavailable', async () => {
+    // The deadlock: the list is the only evidence the reconcile effect accepts, so while
+    // it keeps failing a dead id survives and every scoped request 404s forever. A 404 on
+    // the scoped request is itself evidence, and breaks the cycle without weakening the
+    // rule that a failed list proves nothing.
+    localStorage.setItem(STORAGE_KEY, '35');
+    mockedList().mockRejectedValue(new Error('rate limited'));
+
+    renderProvider();
+    await waitFor(() => expect(mockedList()).toHaveBeenCalled());
+    expect(screen.getByTestId('value').textContent).toBe('35');
+
+    act(() => notifyRepoScopeRejected(35));
+
+    await waitFor(() => expect(screen.getByTestId('value').textContent).toBe('null'));
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('forgets a repo scope the session has cleared, even though it is still accessible', async () => {
+    // Login clears the scope so one account cannot inherit another's selection from the
+    // same browser. Accessibility is not the question here — ownership of the session is.
+    localStorage.setItem(STORAGE_KEY, '42');
+    mockedList().mockResolvedValue({ data: [repo(42)] });
+
+    renderProvider();
+    await waitFor(() => expect(mockedList()).toHaveBeenCalled());
+    expect(screen.getByTestId('value').textContent).toBe('42');
+
+    act(() => clearRepoScope());
+
+    await waitFor(() => expect(screen.getByTestId('value').textContent).toBe('null'));
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('keeps the persisted repo id when the rejection names a different repo', async () => {
+    localStorage.setItem(STORAGE_KEY, '42');
+    mockedList().mockResolvedValue({ data: [repo(42)] });
+
+    renderProvider();
+    await waitFor(() => expect(mockedList()).toHaveBeenCalled());
+
+    act(() => notifyRepoScopeRejected(35));
+
+    expect(screen.getByTestId('value').textContent).toBe('42');
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('42');
   });
 });

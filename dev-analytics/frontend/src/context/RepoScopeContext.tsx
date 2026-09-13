@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { reposApi } from '@/api/repos';
+import { REPO_SCOPE_STORAGE_KEY, onRepoScopeRejected, onRepoScopeReset } from '@/lib/repoScopeSignal';
 
-const STORAGE_KEY = 'da-repo-scope-v1';
+const STORAGE_KEY = REPO_SCOPE_STORAGE_KEY;
 
 interface RepoScopeContextValue {
   repoId: number | null;
@@ -40,6 +41,20 @@ export function RepoScopeProvider({ children }: { children: ReactNode }) {
       setRepoId(null);
     }
   }, [repoId, repos]);
+
+  // The list is unavailable in exactly the cases that strand a dead id — a rate-limited or
+  // failed fetch leaves the effect above with nothing to judge, so the scope survives and
+  // every request it taints 404s. A 404 naming the scope is the evidence that list cannot give.
+  useEffect(
+    () => onRepoScopeRejected((rejected) => {
+      if (rejected === repoId) setRepoId(null);
+    }),
+    [repoId]
+  );
+
+  // A new session owns its own scope. The storage entry is already gone by the time this
+  // runs; this drops the copy held in memory.
+  useEffect(() => onRepoScopeReset(() => setRepoIdState(null)), []);
 
   function setRepoId(id: number | null) {
     setRepoIdState(id);
