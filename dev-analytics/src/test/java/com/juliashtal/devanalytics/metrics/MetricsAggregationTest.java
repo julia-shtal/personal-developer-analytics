@@ -8,6 +8,7 @@ import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
+import com.juliashtal.devanalytics.metrics.service.StatsCoverageService;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.security.TeamAccessGuard;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
@@ -56,6 +57,7 @@ class MetricsAggregationTest {
     @MockBean CheckHelper checkHelper;
     @MockBean MetricSnapshotRepository snapshotRepository;
     @MockBean MetricBackfillService backfillService;
+    @MockBean StatsCoverageService statsCoverageService;
     @MockBean TeamAccessGuard teamAccessGuard;
     @MockBean JwtService jwtService;
     @MockBean CustomUserDetailsService customUserDetailsService;

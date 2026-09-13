@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsAnomalyService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
+import com.juliashtal.devanalytics.metrics.service.StatsCoverageService;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.user.model.User;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,6 +43,7 @@ public class MetricsController {
     private final RepoService repoService;
     private final CheckHelper checkHelper;
     private final MetricBackfillService metricBackfillService;
+    private final StatsCoverageService statsCoverageService;
 
     // =========================================================================
     // Personal endpoints — team IS NULL snapshots only
@@ -115,6 +117,21 @@ public class MetricsController {
             @RequestParam(required = false) Long repoId
     ) {
         return getPersonalDailySeries(DAILY_CHURN_RATIO, from, to, repoId);
+    }
+
+    @Operation(summary = "Stats-enrichment coverage for the current user's records in a range")
+    @GetMapping("/stats-coverage")
+    public List<StatsCoverageDto> getStatsCoverage(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        User user = checkHelper.currentUser();
+        if (repoId != null) {
+            // Entitlement check, not a lookup: the service would answer for any id in the database.
+            repoService.getAccessibleRepo(user.getId(), repoId);
+        }
+        return statsCoverageService.describeCoverage(user, from, to, repoId);
     }
 
     @Operation(summary = "PR Lead Time (median hours) for the current user")

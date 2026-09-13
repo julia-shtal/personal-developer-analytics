@@ -64,6 +64,11 @@ public class GitCommitEntity {
     @Column(nullable = false, length = 20)
     private StatsStatus statsStatus = StatsStatus.COMPLETE;
 
+    /** Why enrichment was skipped; null unless {@code statsStatus} is SKIPPED. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private StatsSkipReason statsSkipReason;
+
     /** Timestamp when stats were successfully fetched or definitively skipped/failed. */
     private Instant statsFetchedAt;
 

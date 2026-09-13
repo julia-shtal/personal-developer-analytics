@@ -43,3 +43,20 @@ pr_size_complexity_score =
 - **Expected range**: 20–200 changed lines/commit for typical feature PRs; >500 indicates very large commits that are difficult to review.
 - **Comparison baseline**: for a specific PR, compute `(additions + deletions) / commits` manually from the GitHub PR diff stats.
 - **Controlled-change test**: merge one PR with 100 total changes across 5 commits → score must equal 20.0. Merge a second PR with 50 total changes as a squash (commits_count = 0 → treated as 1) → scores of [20.0, 50.0] → median = 35.0.
+
+## Population and exclusions
+
+Computed over pull requests whose per-PR size statistics were retrieved — `stats_status = 'COMPLETE'`.
+Pull requests whose enrichment was abandoned carry `stats_skip_reason`, which separates the two
+causes because they bear on validity in opposite directions: `DIFF_TOO_LARGE` means GitHub refused
+to render a diff above its size cap, which is itself evidence about the repository's
+pull-request-size distribution, while `RECORD_UNAVAILABLE` means the detail endpoint returned 404
+or 422, which is evidence about API access and says nothing about the pull request. `UNKNOWN` marks
+rows skipped before the two were distinguished. `GET /api/metrics/stats-coverage` reports each count
+for a window, so the size of the exclusion can be quoted rather than asserted.
+
+`DIFF_TOO_LARGE` is expected to be near-zero in practice. GitHub documents *Get a pull request* as
+returning 200, 304, 404, 406, 500 or 503 — neither 403 nor 422 is a documented response. A genuinely
+oversized pull request therefore surfaces as repeated 5xx that exhaust the retry budget and lands in
+`FAILED`, which the coverage endpoint reports as its own group. The exclusion is four counts, not
+three.

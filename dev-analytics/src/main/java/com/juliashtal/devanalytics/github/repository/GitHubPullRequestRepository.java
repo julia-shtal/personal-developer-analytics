@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.metrics.model.DailyCountProjection;
 import com.juliashtal.devanalytics.metrics.model.PrLeadTimeProjection;
+import com.juliashtal.devanalytics.metrics.model.StatsCoverageProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -201,5 +202,23 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     where p.statsStatus = :status
     """)
     List<Long> findRepositoryIdsWithStatsStatus(@Param("status") StatsStatus status);
+
+    /**
+     * Enrichment state of every pull request in the window, grouped by status and skip reason.
+     * Windowed on createdAt, matching {@code findEarliestCreatedAt} and the PR calculators.
+     */
+    @Query("""
+    select p.statsStatus     as statsStatus,
+           p.statsSkipReason as statsSkipReason,
+           count(p)          as recordCount
+    from GitHubPullRequestEntity p
+    where p.repository.id in :repoIds
+      and p.createdAt between :from and :to
+    group by p.statsStatus, p.statsSkipReason
+    """)
+    List<StatsCoverageProjection> countByStatsStateInRange(
+            @Param("repoIds") List<Long> repoIds,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
 }
 

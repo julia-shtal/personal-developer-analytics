@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.github.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juliashtal.devanalytics.git.model.GitCommitEntity;
+import com.juliashtal.devanalytics.git.model.StatsSkipReason;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.*;
 
 /**
@@ -163,6 +165,7 @@ public class GitHubCommitStatsEnrichmentService {
         if (commit.getStatsAttempts() > MAX_ATTEMPTS) {
             log.warn("Giving up on commit {}/{}: too many failed attempts", repoFullName, commit.getHash());
             commit.setStatsStatus(StatsStatus.FAILED);
+            commit.setStatsSkipReason(null);
             commit.setStatsFetchedAt(Instant.now());
             return;
         }
@@ -203,18 +206,18 @@ public class GitHubCommitStatsEnrichmentService {
             JsonNode files = detail.path("files");
             commit.setFilesChanged(files.isArray() ? files.size() : 0);
             commit.setStatsStatus(StatsStatus.COMPLETE);
+            commit.setStatsSkipReason(null);
             commit.setStatsFetchedAt(Instant.now());
             return;
         }
 
         if (status == 403) {
-            // Distinguish "diff too large" (no Retry-After, body mentions "too large")
-            // from a secondary rate limit (body mentions "rate limit" or "secondary").
-            String body = response.body() != null ? response.body().toLowerCase() : "";
+            // Distinguish a size refusal from a secondary rate limit by body text; Locale.ROOT
+            // because under a Turkish default "Maximum" lowercases to "maxımum" and would miss.
+            String body = response.body() != null ? response.body().toLowerCase(Locale.ROOT) : "";
             if (body.contains("too large") || body.contains("maximum")) {
                 log.warn("Diff too large for {}/{}, marking SKIPPED", repoFullName, commit.getHash());
-                commit.setStatsStatus(StatsStatus.SKIPPED);
-                commit.setStatsFetchedAt(Instant.now());
+                markSkipped(commit, StatsSkipReason.DIFF_TOO_LARGE);
             } else {
                 // Rate limit — leave as PENDING for retry.
                 log.warn("Secondary rate limit for {}/{}, will retry", repoFullName, commit.getHash());
@@ -226,13 +229,19 @@ public class GitHubCommitStatsEnrichmentService {
             // Unprocessable or not found — no point retrying.
             log.warn("Unprocessable/not-found ({}) for {}/{}, marking SKIPPED",
                     status, repoFullName, commit.getHash());
-            commit.setStatsStatus(StatsStatus.SKIPPED);
-            commit.setStatsFetchedAt(Instant.now());
+            markSkipped(commit, StatsSkipReason.RECORD_UNAVAILABLE);
             return;
         }
 
         log.warn("Unexpected status {} enriching {}/{}", status, repoFullName, commit.getHash());
         // Leave as PENDING for retry.
+    }
+
+    /** Single writer of SKIPPED, so the status and its reason cannot be set apart. */
+    private static void markSkipped(GitCommitEntity commit, StatsSkipReason reason) {
+        commit.setStatsStatus(StatsStatus.SKIPPED);
+        commit.setStatsSkipReason(reason);
+        commit.setStatsFetchedAt(Instant.now());
     }
 
     // -------------------------------------------------------------------------

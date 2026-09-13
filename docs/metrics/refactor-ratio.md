@@ -46,3 +46,20 @@ refactor_ratio =
 - **Expected range**: 0.1–0.4 during normal development; >0.5 during dedicated refactoring or technical-debt reduction sprints.
 - **Comparison baseline**: `git log --author=<email> --numstat` — count commits where total deletions > total additions.
 - **Controlled-change test**: push one commit with 5 additions and 10 deletions (`stats_status = COMPLETE`) and one commit with 10 additions and 5 deletions → `refactor_ratio` must equal 0.5.
+
+## Population and exclusions
+
+Computed over commits whose per-commit statistics were retrieved — `stats_status = 'COMPLETE'`.
+Commits whose enrichment was abandoned carry `stats_skip_reason`, which separates the two causes
+because they bear on validity in opposite directions: `DIFF_TOO_LARGE` means GitHub refused to
+render a diff above its size cap, which is itself evidence about the repository's commit-size
+distribution, while `RECORD_UNAVAILABLE` means the detail endpoint returned 404 or 422, which is
+evidence about API access and says nothing about the commit. `UNKNOWN` marks rows skipped before
+the two were distinguished. `GET /api/metrics/stats-coverage` reports each count for a window, so
+the size of the exclusion can be quoted rather than asserted.
+
+`DIFF_TOO_LARGE` is expected to be near-zero in practice. GitHub documents *Get a commit* as
+returning 200, 404, 409, 422, 500 or 503 — 403 is not a documented response — and says only that
+larger diffs may time out with a 5xx. A genuinely oversized commit therefore surfaces as repeated
+5xx that exhaust the retry budget and lands in `FAILED`, which the coverage endpoint reports as its
+own group. The exclusion is four counts, not three.

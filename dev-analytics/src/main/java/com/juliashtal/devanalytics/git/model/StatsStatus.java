@@ -10,7 +10,7 @@ package com.juliashtal.devanalytics.git.model;
  *   <li>PENDING  — saved from list endpoint, stats not yet fetched</li>
  *   <li>COMPLETE — stats successfully fetched from GitHub detail endpoint</li>
  *   <li>FAILED   — detail call failed after max attempts (stats remain 0)</li>
- *   <li>SKIPPED  — diff too large or commit excluded from enrichment window</li>
+ *   <li>SKIPPED  — enrichment abandoned; {@link StatsSkipReason} records which cause applied</li>
  * </ul>
  */
 public enum StatsStatus {

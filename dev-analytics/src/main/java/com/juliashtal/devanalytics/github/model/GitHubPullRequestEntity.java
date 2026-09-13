@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.github.model;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
+import com.juliashtal.devanalytics.git.model.StatsSkipReason;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -70,6 +71,11 @@ public class GitHubPullRequestEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private StatsStatus statsStatus = StatsStatus.COMPLETE;
+
+    /** Why enrichment was skipped; null unless {@code statsStatus} is SKIPPED. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private StatsSkipReason statsSkipReason;
 
     private Instant statsFetchedAt;
 
