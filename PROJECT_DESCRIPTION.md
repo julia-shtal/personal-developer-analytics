@@ -144,7 +144,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 - **`collectTaskExecutor`** — `ThreadPoolTaskExecutor`: corePoolSize=2, maxPoolSize=4, queueCapacity=20. Used by `@Async("collectTaskExecutor")` on `AsyncDataSourceCollectService`.
 
 #### `CacheConfig` (`@Configuration`, `@EnableCaching`)
-- Registers a Caffeine-backed `CacheManager`. Named cache: **`ai_summaries`** — used by `MetricsAiService` to cache AI summary responses keyed by `(userId, from, to, repoId)` or `("team", teamId, from, to)`.
+- Registers a Caffeine-backed `CacheManager`. Named cache: **`ai_summaries`** — used by `MetricsAiService` to cache AI summary responses keyed by `(userId, from, to, repoId, promptVersion)` or `("team", teamId, from, to, promptVersion)`. The prompt version is part of the key so a prompt edit is never answered out of the cache with text the previous prompt produced.
 
 #### `RestTemplateConfig` (`@Configuration`)
 - **`restTemplate`** — `RestTemplate` with `MappingJackson2HttpMessageConverter`. Used by Jira collector and Ollama client.
@@ -1163,9 +1163,10 @@ The AI layer generates natural-language summaries and metric explanations from p
 | `recommendations` | TEXT | JSON array of strings |
 | `model_name` | VARCHAR(255) | e.g. `llama3.2` |
 | `raw_model_output` | TEXT | Verbatim model response |
+| `prompt_version` | VARCHAR(16) NOT NULL | First 16 hex chars of the sha256 of the system prompt that produced the summary; `PRE_VERSIONING` for rows written before V64 |
 | `generated_at` | TIMESTAMPTZ DEFAULT now() | When the summary was generated |
 
-Unique index: `(COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,''))` — one summary per scope identity.
+Unique index: `(COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,''), prompt_version)` — one summary per scope identity **per prompt version**, so two prompt revisions can hold a row for the same scope and period and be compared against each other.
 
 **`AiConversationEntity`** — Table `ai_conversations`
 
@@ -1200,7 +1201,7 @@ Index: `(conversation_id, created_at)`.
 - `buildTeamContext(Team, members, from, to)` → `TeamMetricsContext` — per-member `{username, metrics: Map<MetricType, aggregatedValue>}`.
 - **Routing**: one window query per metric type, then the result is partitioned by **stored row shape** — DAILY rows contribute one value per day, AGGREGATE rows one value per stored window (cross-repository rows combined first). Routing is *not* driven by `MetricType` flags: the flag-driven exact-period query matched nothing for the seven-day window the weekly job asks for, so the five period-stored context metrics were dropped from every scheduled summary.
 
-**`MetricsAiService`** — Core AI service. `@Cacheable(value = "ai_summaries", key = "{#user.id, #from, #to, #repoId}")`.
+**`MetricsAiService`** — Core AI service. `@Cacheable(value = "ai_summaries", key = "{#user.id, #from, #to, #repoId, @promptVersionProvider.hashFor('PERSONAL')}")`.
 
 - **Context metric types used**: all 12 `MetricType` values with `inAiContext=true`, in the presentation order declared by `AiContextBuilderService.CONTEXT_METRIC_TYPES` (activity, flow and lead time, collaboration, wellness): `DAILY_COMMITS_COUNT`, `DAILY_PR_CREATED`, `DAILY_PR_MERGED`, `DAILY_ISSUES_CREATED`, `DAILY_ISSUES_CLOSED`, `DAILY_CHURN_RATIO`, `PR_LEAD_TIME_HOURS_MEDIAN`, `PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN`, `ISSUE_LEAD_TIME_HOURS_MEDIAN`, `REVIEW_RESPONSE_TIME_HOURS_MEDIAN`, `REVIEW_PARTICIPATION_COUNT`, `FOCUS_RATIO_DAYS_TASKS`.
 
@@ -1209,14 +1210,16 @@ Index: `(conversation_id, created_at)`.
   2. Serialises context to JSON, builds structured system + user prompt.
   3. Calls `LlmClient.complete(model, systemPrompt, userPrompt)`.
   4. Parses JSON response into `MetricsSummaryDto` with headline, overview, insights, recommendations; strips markdown code fences if present.
-  5. Persists to `metric_summaries` table; result cached in `ai_summaries` by `(userId, from, to, repoId)`.
+  5. Persists to `metric_summaries` table; result cached in `ai_summaries` by `(userId, from, to, repoId, promptVersion)`.
 
 - **`generateTeamSummary(User requestingUser, Long teamId, from, to)`** — team scope (MANAGER or ADMIN only):
   1. Delegates to `AiContextBuilderService.buildTeamContext()` → `TeamMetricsContext`.
   2. Same prompt/parse flow as personal summary; generates team-scoped `metric_summaries` row with `team_id` set, `user_id = NULL`.
-  3. Cached by `("team", teamId, from, to)`.
+  3. Cached by `("team", teamId, from, to, promptVersion)`.
 
 - **`generateMemberSummary(User requestingUser, Long teamId, Long memberId, from, to)`** — per-member AI summary used by the 1:1 meeting prep export.
+
+- **Prompt versioning**: the two system prompts live in `SystemPrompts` (constants only); `PromptVersionProvider` hashes them at construction and `hashFor(scope)` returns the first 16 hex characters of the sha256. That version is stamped on every generated `MetricsSummaryDto`, persisted on the row, returned by the API, and folded into the cache key, so a stored summary is attributable to the instruction that produced it. `PromptVersionProviderTest` pins the committed versions, so editing a prompt fails the build until the expected values are updated deliberately.
 
 - **System prompt design**: instructs the model to return only a JSON object with fields `headline` (1-sentence), `overview`, `insights` (5–8 items with kind/text/metric), `recommendations` (3–5 items). Priority order for insights: Churn Ratio → Focus Ratio → anomalies → remaining metrics. No markdown, no extra text.
 
@@ -1230,7 +1233,7 @@ Index: `(conversation_id, created_at)`.
 - `saveSummary(User, from, to, scope, repoName, summary)` → persists `MetricSummaryEntity`.
 - `getLatestSummary(User)` → most recent personal summary.
 - `getLatestTeamSummary(Team)` → most recent team summary.
-- Uses upsert guard with functional index on `(COALESCE(user_id,-1), ...)` to deduplicate by scope identity.
+- Uses upsert guard with functional index on `(COALESCE(user_id,-1), ...)` to deduplicate by scope identity; `prompt_version` is part of the lookup, so a summary generated under a revised prompt inserts a new row rather than overwriting one that belongs to the previous prompt.
 
 **`OllamaLlmClient`** (`LlmClient` impl) — Posts to `{ollamaBaseUrl}/api/chat` with model, messages, stream=false, seed, num_predict. Extracts `message.content` from response.
 
@@ -1460,6 +1463,11 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 | V57 | `V57__rename_merge_frequency_metric.sql` | Rewrite `MERGE_TO_MAIN_FREQUENCY_PER_WEEK` to `COMMITS_PER_WEEK_AVG` in `metric_snapshots.metric_type` and `user_goals.metric_type`; restate the `metric_snapshots` table comment written by V40 — `MetricType` is persisted by name, so the rename is a data migration |
 | V58 | `V58__delete_non_week_aligned_aggregate_snapshots.sql` | DELETE `metric_snapshots` rows for the five `aggregatePeriod` types whose `period_from` is not an ISO Monday or whose `period_to` is not that Monday + 6. Reads resolve by containment rather than exact match, so a legacy one-day row would be read alongside the week that already covers it — harmless for a median, but `REVIEW_PARTICIPATION_COUNT` sums its windows. Rows are regenerated at week grain by the next calculation pass |
 | V59 | `V59__metric_coverage.sql` | Create `metric_coverage` (id, user_id FK CASCADE, date, computed_at TIMESTAMPTZ DEFAULT now()), UNIQUE (user_id, date) — the ledger of days personal metrics have actually been computed for, so the backfill's per-run cap resumes instead of truncating. Deliberately no separate `(user_id, date)` index: the unique constraint's btree already serves the range predicate. Seeds itself from `SELECT DISTINCT user_id, date FROM metric_snapshots WHERE team_id IS NULL` with `ON CONFLICT DO NOTHING`, so an existing installation does not recompute history it already holds |
+| V60 | `V60__commit_author_identity.sql` | Create `user_commit_emails` (id, user_id FK CASCADE, email, created_at) with a **global** UNIQUE on `email` — one address identifies exactly one person, so a second user claiming it is a 409 rather than a row, which would otherwise attribute the same commit to two users and double-count it in team rollups — plus a CHECK enforcing `email = lower(btrim(email))` so the expression index below is comparable. Seeds each existing user's account email with `ON CONFLICT DO NOTHING`. ALTER `git_commits` ADD `author_github_id`, `author_github_login`. Commit metrics had matched the single account email, dropping commits made via the GitHub web UI, a second machine, or with email privacy on — 99 of 276 commits (36%) and 42% of churn on the reference installation. Login is stored beside the ID for display only, so a rename leaves the match intact. Replaces V23's `ix_git_commits_repo_email_date` with one on `(repository_id, lower(author_email), author_date)`, since the predicate is now `lower(author_email) IN (:emails)` |
+| V61 | `V61__github_user_ids.sql` | ALTER `users` ADD `github_user_id`; partial UNIQUE index `uq_users_github_user_id` WHERE NOT NULL (null means "not linked" and those rows must not collide). ALTER `github_pull_requests` ADD `author_github_id`, `github_pr_reviews` ADD `reviewer_github_id`, `issues` ADD `creator_github_id` / `assignee_github_id`. PR and review metrics had matched `author_login`, a free-text profile value: the comparison was case-sensitive, two users could enter the same login, and a GitHub rename split one person into two identities. The numeric account ID is stable across renames, unique by construction, and already present in every payload the collectors parse. Replaces the two V23 login indexes with `(repository_id, author_github_id, created_at)` and `(..., merged_at)`; adds `ix_github_pr_reviews_reviewer_submitted`. Also ADD `git_repositories.identity_backfilled_at`, seeded asymmetrically — non-GitHub repos are complete by definition, GitHub repos start NULL as the backfill job's work queue, because incremental ingest would never revisit existing rows and their new ID columns would stay null forever |
+| V62 | `V62__jira_identity.sql` | ALTER `users` ADD `jira_account_id` VARCHAR(128); partial UNIQUE index WHERE NOT NULL. ALTER `issues` ADD `assignee_account_id`, `reporter_account_id`; indexes on `(jira_project_id, assignee_account_id)` and `(jira_project_id, reporter_account_id)`, mirroring how closed-issue/lead-time metrics filter by assignee and created-issue metrics by reporter. Jira issues could not be attributed at all: `buildJql` narrowed the fetch to the token owner's `accountId`, and the canonical project row is collected with whichever user's token owns it, so every subscriber to that project was credited with the owner's issues — unrecoverable after the fact, since only display names were stored. Storing `accountId` per issue moves the filter out of the JQL and into the metric queries, where it can differ per user. Until re-collection fills the columns, Jira issues match nobody, which is the correct failure direction — previously they matched everybody |
+| V63 | `V63__stats_skip_reason.sql` | ALTER `git_commits` and `github_pull_requests` ADD `stats_skip_reason` VARCHAR(32); backfill rows already `stats_status = 'SKIPPED'` to `UNKNOWN`. SKIPPED was set for two unrelated causes, so the line-count metrics' exclusion set could not be characterised: an oversized diff is evidence about the repository's commit-size distribution, a missing detail record is evidence about API access. A nullable reason column rather than new `StatsStatus` values keeps every query, projection and metric filter testing `= 'SKIPPED'` working and leaves the status enum a four-state lifecycle. Partial indexes `ix_git_commits_skip_reason` / `ix_github_prs_skip_reason` on `(repository_id, stats_skip_reason) WHERE stats_status = 'SKIPPED'` serve the breakdown of skipped rows without indexing the COMPLETE majority |
+| V64 | `V64__metric_summaries_prompt_version.sql` | ALTER `metric_summaries` ADD `prompt_version` VARCHAR(16) NOT NULL; backfill existing rows to `PRE_VERSIONING`; rebuild `uix_metric_summaries_identity` with `prompt_version` as the last key column. A summary recorded `model_name` but nothing about the instruction that produced it, so any figure computed over stored summaries spanned an unknown mixture of prompt revisions. Rows predating the column genuinely cannot be attributed, so they are labelled rather than backfilled with a hash |
 
 ### 4.2 Entity-Relationship Overview
 
@@ -1697,8 +1705,9 @@ Aggregate metrics (lead times, review time) use an exact `periodFrom/periodTo` q
 ### 9.4 Caching
 
 Spring Cache (`ai_summaries`) is backed by Caffeine. Cache keys:
-- Personal: `{userId, from, to, repoId}`
-- Team: `{"team", teamId, from, to}`
+- Personal: `{userId, from, to, repoId, promptVersion}`
+- Team: `{"team", teamId, from, to, promptVersion}`
+- Member: `{"member", teamId, memberId, from, to, promptVersion}`
 
 The weekly scheduler calls `metricsAiService.generateSummary()` which hits the cache; pre-generated entries serve dashboard requests with zero Ollama latency.
 

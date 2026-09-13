@@ -16,6 +16,7 @@ const SAMPLE: MetricsSummaryDto = {
   recommendations: ['Protect focus time on Mondays.', 'Review large PRs earlier.'],
   rawModelOutput: '{}',
   modelName: 'llama3.2',
+  promptVersion: 'eded29f49ed62b99',
   generatedAt: '2026-06-08T09:00:00Z',
 };
 
@@ -69,7 +70,7 @@ describe('summaryToHtml escaping', () => {
       overview: 'a < b & c > d',
       insights: [{ kind: 'risk', text: '<img src=x onerror=1>', metric: '<b>' }],
       recommendations: ['<iframe>'],
-      rawModelOutput: '{}', modelName: 'llama3.2',
+      rawModelOutput: '{}', modelName: 'llama3.2', promptVersion: 'eded29f49ed62b99',
     } as import('@/types/ai').MetricsSummaryDto;
     const html = summaryToHtml(hostile);
     expect(html).not.toContain('<script>alert(1)</script>');

@@ -36,6 +36,9 @@ class MetricSummaryPersistenceServiceTest {
     private final LocalDate from = LocalDate.of(2024, 1, 1);
     private final LocalDate to   = LocalDate.of(2024, 1, 31);
 
+    private static final String VERSION = "aaaaaaaaaaaaaaaa";
+    private static final String OTHER_VERSION = "bbbbbbbbbbbbbbbb";
+
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
@@ -47,7 +50,7 @@ class MetricSummaryPersistenceServiceTest {
         User user = new User();
         user.setId(1L);
 
-        when(summaryRepository.findByIdentity(eq(1L), isNull(), eq(from), eq(to), eq("PERSONAL"), isNull()))
+        when(summaryRepository.findByIdentity(eq(1L), isNull(), eq(from), eq(to), eq("PERSONAL"), isNull(), eq(VERSION)))
                 .thenReturn(Optional.empty());
         when(summaryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -73,7 +76,7 @@ class MetricSummaryPersistenceServiceTest {
         MetricSummaryEntity existing = new MetricSummaryEntity();
         existing.setId(42L);
 
-        when(summaryRepository.findByIdentity(eq(1L), isNull(), eq(from), eq(to), eq("PERSONAL"), isNull()))
+        when(summaryRepository.findByIdentity(eq(1L), isNull(), eq(from), eq(to), eq("PERSONAL"), isNull(), eq(VERSION)))
                 .thenReturn(Optional.of(existing));
         when(summaryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -90,7 +93,7 @@ class MetricSummaryPersistenceServiceTest {
         Team team = new Team();
         team.setId(7L);
 
-        when(summaryRepository.findByIdentity(isNull(), eq(7L), eq(from), eq(to), eq("TEAM"), eq("Alpha")))
+        when(summaryRepository.findByIdentity(isNull(), eq(7L), eq(from), eq(to), eq("TEAM"), eq("Alpha"), eq(VERSION)))
                 .thenReturn(Optional.empty());
         when(summaryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -302,6 +305,51 @@ class MetricSummaryPersistenceServiceTest {
         assertThat(dto.getRecommendations()).isEmpty();
     }
 
+    @Test
+    void savePersonal_sameScopeAndPeriodUnderTwoPromptVersions_insertsSecondRow() {
+        User user = new User();
+        user.setId(1L);
+
+        MetricSummaryEntity firstVersionRow = new MetricSummaryEntity();
+        firstVersionRow.setId(42L);
+        when(summaryRepository.findByIdentity(eq(1L), isNull(), eq(from), eq(to), eq("PERSONAL"),
+                isNull(), eq(VERSION))).thenReturn(Optional.of(firstVersionRow));
+        when(summaryRepository.findByIdentity(eq(1L), isNull(), eq(from), eq(to), eq("PERSONAL"),
+                isNull(), eq(OTHER_VERSION))).thenReturn(Optional.empty());
+        when(summaryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.savePersonal(user, dto("PERSONAL", null));
+        MetricsSummaryDto revised = dto("PERSONAL", null);
+        revised.setPromptVersion(OTHER_VERSION);
+        service.savePersonal(user, revised);
+
+        ArgumentCaptor<MetricSummaryEntity> captor = ArgumentCaptor.forClass(MetricSummaryEntity.class);
+        verify(summaryRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues().get(0).getId()).isEqualTo(42L);
+        assertThat(captor.getAllValues().get(1).getId()).isNull();
+        assertThat(captor.getAllValues().get(1).getPromptVersion()).isEqualTo(OTHER_VERSION);
+    }
+
+    @Test
+    void findLatestPersonal_entityWithPromptVersion_surfacesItOnTheDto() {
+        User user = new User();
+        user.setId(1L);
+
+        MetricSummaryEntity entity = new MetricSummaryEntity();
+        entity.setId(42L);
+        entity.setUser(user);
+        entity.setPeriodFrom(from);
+        entity.setPeriodTo(to);
+        entity.setScope("PERSONAL");
+        entity.setHeadline("Great week");
+        entity.setPromptVersion(VERSION);
+        entity.setGeneratedAt(Instant.now());
+
+        when(summaryRepository.findTopByUser_IdOrderByGeneratedAtDesc(1L)).thenReturn(Optional.of(entity));
+
+        assertThat(service.findLatestPersonal(user).orElseThrow().getPromptVersion()).isEqualTo(VERSION);
+    }
+
     private MetricsSummaryDto dto(String scope, String contextName) {
         return MetricsSummaryDto.builder()
                 .from(from).to(to)
@@ -314,6 +362,7 @@ class MetricSummaryPersistenceServiceTest {
                 .recommendations(List.of("action 1"))
                 .rawModelOutput("{}")
                 .modelName("llama3.2")
+                .promptVersion(VERSION)
                 .build();
     }
 }

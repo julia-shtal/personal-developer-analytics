@@ -73,7 +73,8 @@ public class MetricSummaryPersistenceService {
         Long teamId = team != null ? team.getId() : null;
 
         MetricSummaryEntity entity = summaryRepository
-                .findByIdentity(userId, teamId, dto.getFrom(), dto.getTo(), dto.getScope(), dto.getContextRepoName())
+                .findByIdentity(userId, teamId, dto.getFrom(), dto.getTo(), dto.getScope(),
+                        dto.getContextRepoName(), dto.getPromptVersion())
                 .orElseGet(MetricSummaryEntity::new);
 
         entity.setUser(user);
@@ -85,6 +86,7 @@ public class MetricSummaryPersistenceService {
         entity.setHeadline(dto.getHeadline());
         entity.setOverview(dto.getOverview());
         entity.setModelName(dto.getModelName());
+        entity.setPromptVersion(dto.getPromptVersion());
         entity.setRawModelOutput(dto.getRawModelOutput());
         entity.setGeneratedAt(Instant.now());
 
@@ -130,6 +132,7 @@ public class MetricSummaryPersistenceService {
                 .recommendations(recommendations)
                 .rawModelOutput(entity.getRawModelOutput())
                 .modelName(entity.getModelName())
+                .promptVersion(entity.getPromptVersion())
                 .generatedAt(entity.getGeneratedAt())
                 .build();
     }

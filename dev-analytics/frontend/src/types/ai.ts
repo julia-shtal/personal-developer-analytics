@@ -16,6 +16,8 @@ export interface MetricsSummaryDto {
   recommendations: string[];
   rawModelOutput: string;
   modelName: string;
+  /** First 16 hex chars of the sha256 of the system prompt that produced the summary. */
+  promptVersion: string;
   generatedAt?: string;
 }
 

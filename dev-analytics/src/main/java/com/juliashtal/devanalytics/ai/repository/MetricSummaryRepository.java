@@ -36,6 +36,7 @@ public interface MetricSummaryRepository extends JpaRepository<MetricSummaryEnti
               AND period_to = :to
               AND scope = :scope
               AND context_repo_name IS NOT DISTINCT FROM :contextName
+              AND prompt_version = :promptVersion
             LIMIT 1
             """, nativeQuery = true)
     Optional<MetricSummaryEntity> findByIdentity(
@@ -44,6 +45,7 @@ public interface MetricSummaryRepository extends JpaRepository<MetricSummaryEnti
             @Param("from") LocalDate from,
             @Param("to") LocalDate to,
             @Param("scope") String scope,
-            @Param("contextName") String contextName
+            @Param("contextName") String contextName,
+            @Param("promptVersion") String promptVersion
     );
 }
