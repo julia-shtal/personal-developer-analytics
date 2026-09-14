@@ -117,6 +117,21 @@ public class MetricSnapshotService {
         return repository.findMaxPersonalDate(userId);
     }
 
+    /** Most recent calculation date for a personal point-in-time metric. */
+    public Optional<LocalDate> findLatestPersonalDate(Long userId, MetricType metricType) {
+        return repository.findLatestPersonalDate(userId, metricType);
+    }
+
+    public List<MetricSnapshot> getPersonalSnapshotsByMetricTypeAndDate(
+            User user, MetricType metricType, LocalDate date) {
+        return repository.findPersonalByMetricTypeAndDate(user, metricType, date);
+    }
+
+    public List<MetricSnapshot> getPersonalSnapshotsByMetricTypeAndRepositoryAndDate(
+            User user, MetricType metricType, GitRepositoryEntity repo, LocalDate date) {
+        return repository.findPersonalByMetricTypeAndRepositoryAndDate(user, metricType, repo, date);
+    }
+
     public MetricSnapshot getExisting(
             Long userId,
             Long teamId,

@@ -328,16 +328,52 @@ class MetricsControllerTest {
 
     @Test
     @WithMockUser
-    void getWipOpenPrAge_returnsAggregate() throws Exception {
-        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
-                any(), eq(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN), eq(FROM), eq(TO)))
-                .thenReturn(List.of(aggregateSnapshot(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, 48.0, FROM, TO)));
+    void getWipOpenPrAge_noWindowParameters_returnsLatestValueWithItsCalculationDate() throws Exception {
+        LocalDate calculatedAt = LocalDate.of(2026, 3, 8);
+        when(snapshotService.findLatestPersonalDate(currentUser.getId(),
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).thenReturn(Optional.of(calculatedAt));
+        when(snapshotService.getPersonalSnapshotsByMetricTypeAndDate(
+                currentUser, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, calculatedAt))
+                .thenReturn(List.of(
+                        aggregateSnapshot(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, 24.0, calculatedAt, calculatedAt),
+                        aggregateSnapshot(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, 72.0, calculatedAt, calculatedAt)));
+
+        mvc.perform(get("/api/metrics/wip-open-pr-age"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metricType").value("WIP_OPEN_PR_AGE_HOURS_MEDIAN"))
+                .andExpect(jsonPath("$.value").value(48.0))
+                .andExpect(jsonPath("$.calculatedAt").value("2026-03-08"))
+                .andExpect(jsonPath("$.periodFrom").doesNotExist())
+                .andExpect(jsonPath("$.periodTo").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser
+    void getWipOpenPrAge_withFromAndTo_ignoresThemRatherThanClaimingAWindow() throws Exception {
+        LocalDate calculatedAt = LocalDate.of(2026, 3, 8);
+        when(snapshotService.findLatestPersonalDate(currentUser.getId(),
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).thenReturn(Optional.of(calculatedAt));
+        when(snapshotService.getPersonalSnapshotsByMetricTypeAndDate(
+                currentUser, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, calculatedAt))
+                .thenReturn(List.of(
+                        aggregateSnapshot(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, 24.0, calculatedAt, calculatedAt)));
 
         mvc.perform(get("/api/metrics/wip-open-pr-age")
-                        .param("from", FROM.toString())
-                        .param("to", TO.toString()))
+                        .param("from", "2020-01-01").param("to", "2020-01-31"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.value").value(48.0));
+                .andExpect(jsonPath("$.calculatedAt").value("2026-03-08"));
+    }
+
+    @Test
+    @WithMockUser
+    void getWipOpenPrAge_neverCalculated_returnsZeroWithNoCalculationDate() throws Exception {
+        when(snapshotService.findLatestPersonalDate(currentUser.getId(),
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).thenReturn(Optional.empty());
+
+        mvc.perform(get("/api/metrics/wip-open-pr-age"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value(0.0))
+                .andExpect(jsonPath("$.calculatedAt").doesNotExist());
     }
 
     @Test

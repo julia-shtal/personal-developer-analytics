@@ -128,7 +128,13 @@ describe('DashboardPage — WIP open PR age tile', () => {
 
   it('shows the median open PR age with an hour unit when data is present', async () => {
     const { metricsApi } = await import('@/api/metrics');
-    vi.mocked(metricsApi.wipOpenPrAge).mockResolvedValue({ data: { value: 48 } } as never);
+    vi.mocked(metricsApi.wipOpenPrAge).mockResolvedValue({
+      data: {
+        metricType: 'WIP_OPEN_PR_AGE_HOURS_MEDIAN',
+        value: 48,
+        calculatedAt: '2026-03-08',
+      },
+    } as never);
 
     render(<DashboardPage />, { wrapper: Wrapper });
 

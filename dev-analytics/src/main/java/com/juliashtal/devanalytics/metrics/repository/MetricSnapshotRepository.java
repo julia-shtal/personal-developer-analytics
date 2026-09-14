@@ -174,6 +174,51 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
 
+    // -------------------------------------------------------------------------
+    // Point-in-time reads — a metric that describes a moment, not a window. The pair is
+    // "which calculation was last" then "everything that calculation wrote", because the
+    // writer emits one row per repository and the cross-repo figure reduces across them.
+    // -------------------------------------------------------------------------
+
+    /** Most recent calculation date for a personal point-in-time metric. */
+    @Query("""
+            SELECT MAX(s.date) FROM MetricSnapshot s
+            WHERE s.user.id = :userId
+              AND s.team IS NULL
+              AND s.metricType = :metricType
+            """)
+    Optional<LocalDate> findLatestPersonalDate(
+            @Param("userId") Long userId,
+            @Param("metricType") MetricType metricType);
+
+    /** Every personal row a single calculation wrote for a metric, one per repository. */
+    @Query("""
+            SELECT s FROM MetricSnapshot s
+            WHERE s.user = :user
+              AND s.team IS NULL
+              AND s.metricType = :metricType
+              AND s.date = :date
+            """)
+    List<MetricSnapshot> findPersonalByMetricTypeAndDate(
+            @Param("user") User user,
+            @Param("metricType") MetricType metricType,
+            @Param("date") LocalDate date);
+
+    /** Repository-scoped variant of {@link #findPersonalByMetricTypeAndDate}. */
+    @Query("""
+            SELECT s FROM MetricSnapshot s
+            WHERE s.user = :user
+              AND s.team IS NULL
+              AND s.metricType = :metricType
+              AND s.repository = :repository
+              AND s.date = :date
+            """)
+    List<MetricSnapshot> findPersonalByMetricTypeAndRepositoryAndDate(
+            @Param("user") User user,
+            @Param("metricType") MetricType metricType,
+            @Param("repository") GitRepositoryEntity repository,
+            @Param("date") LocalDate date);
+
     /** Team-scoped equivalent of {@link #findPersonalInWindow}, for the manager team summary. */
     @Query("""
             SELECT s FROM MetricSnapshot s

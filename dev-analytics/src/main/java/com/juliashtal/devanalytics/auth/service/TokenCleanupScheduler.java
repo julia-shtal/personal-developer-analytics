@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.auth.service;
 import com.juliashtal.devanalytics.auth.repository.PasswordResetTokenRepository;
 import com.juliashtal.devanalytics.auth.repository.RefreshTokenRepository;
 import com.juliashtal.devanalytics.config.SystemClock;
+import com.juliashtal.devanalytics.invite.InviteTokenRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -12,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 
 /**
- * Scheduled job that deletes expired refresh and password-reset tokens nightly.
+ * Scheduled job that deletes expired refresh, password-reset and invite tokens nightly.
  */
 @Slf4j
 @Component
@@ -21,6 +22,7 @@ public class TokenCleanupScheduler {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final InviteTokenRepository inviteTokenRepository;
     private final SystemClock systemClock;
 
     @Scheduled(cron = "0 0 2 * * ?", zone = "UTC")
@@ -30,6 +32,7 @@ public class TokenCleanupScheduler {
         Instant now = systemClock.now();
         refreshTokenRepository.deleteExpiredTokens(now);
         passwordResetTokenRepository.deleteExpiredOrUsedTokens(now);
-        log.info("Token cleanup scheduler finished — expired and used tokens removed");
+        inviteTokenRepository.deleteExpiredOrRedeemed(now);
+        log.info("Token cleanup scheduler finished — expired, used and redeemed tokens removed");
     }
 }
