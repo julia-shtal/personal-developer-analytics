@@ -1,7 +1,7 @@
 package com.juliashtal.devanalytics.metrics.service;
 
 import com.juliashtal.devanalytics.exception.ForbiddenException;
-import com.juliashtal.devanalytics.metrics.MetricCoverageRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;

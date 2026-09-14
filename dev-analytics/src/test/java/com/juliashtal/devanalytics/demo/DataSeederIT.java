@@ -1,6 +1,6 @@
 package com.juliashtal.devanalytics.demo;
 
-import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

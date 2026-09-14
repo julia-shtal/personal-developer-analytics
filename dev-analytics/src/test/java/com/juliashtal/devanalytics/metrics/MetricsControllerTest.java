@@ -11,6 +11,7 @@ import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.metrics.model.StatsCoverageDto;
 import com.juliashtal.devanalytics.metrics.model.StatsCoverageRecordType;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
@@ -67,7 +68,8 @@ class MetricsControllerTest {
     @MockBean RepoService repoService;
     @MockBean UserService userService;
     @MockBean CheckHelper checkHelper;
-    @MockBean MetricSnapshotRepository snapshotRepository;
+    @MockBean
+    MetricSnapshotRepository snapshotRepository;
     @MockBean MetricBackfillService backfillService;
     @MockBean StatsCoverageService statsCoverageService;
     @MockBean JwtService jwtService;

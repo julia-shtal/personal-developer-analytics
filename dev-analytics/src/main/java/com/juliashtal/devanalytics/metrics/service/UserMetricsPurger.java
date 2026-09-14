@@ -1,7 +1,7 @@
 package com.juliashtal.devanalytics.metrics.service;
 
-import com.juliashtal.devanalytics.metrics.MetricCoverageRepository;
-import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

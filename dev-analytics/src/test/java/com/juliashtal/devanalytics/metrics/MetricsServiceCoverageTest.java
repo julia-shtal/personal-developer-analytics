@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.metrics;
 
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;
+import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
 import com.juliashtal.devanalytics.user.model.Team;
@@ -32,7 +33,8 @@ class MetricsServiceCoverageTest {
     @Mock UserRepository userRepository;
     @Mock TeamRepository teamRepository;
     @Mock RepoScopeResolver repoScopeResolver;
-    @Mock MetricCoverageRepository coverageRepository;
+    @Mock
+    MetricCoverageRepository coverageRepository;
     @Mock AuthorIdentityResolver authorIdentityResolver;
 
     MetricsService service;

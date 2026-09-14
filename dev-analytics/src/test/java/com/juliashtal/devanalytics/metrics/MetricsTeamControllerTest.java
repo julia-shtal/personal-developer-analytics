@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.metrics.controller.MetricsTeamController;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
@@ -59,7 +60,8 @@ class MetricsTeamControllerTest {
     @MockBean TeamService teamService;
     @MockBean UserService userService;
     @MockBean CheckHelper checkHelper;
-    @MockBean MetricSnapshotRepository snapshotRepository;
+    @MockBean
+    MetricSnapshotRepository snapshotRepository;
     @MockBean TeamAccessGuard teamAccessGuard;
     @MockBean JwtService jwtService;
     @MockBean CustomUserDetailsService customUserDetailsService;

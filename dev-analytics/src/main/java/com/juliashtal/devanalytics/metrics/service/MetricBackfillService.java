@@ -4,7 +4,7 @@ import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
-import com.juliashtal.devanalytics.metrics.MetricCoverageRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
 import com.juliashtal.devanalytics.metrics.model.BackfillProperties;
 import com.juliashtal.devanalytics.metrics.model.BackfillResult;
 import com.juliashtal.devanalytics.user.model.User;

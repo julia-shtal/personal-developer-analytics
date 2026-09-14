@@ -111,7 +111,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | `git/` | Local Git repo registration, JGit commit collection, repo subscription |
 | `github/` | GitHub repo registration, two-phase commit/PR collection, stats enrichment |
 | `issue/` | Unified Jira + GitHub issue collection and retrieval |
-| `metrics/` | 20-metric calculation engine (registry-based dispatch), snapshot persistence and retrieval |
+| `metrics/` | 21-metric calculation engine (registry-based dispatch), snapshot persistence and retrieval |
 | `ai/` | LLM context building, Ollama client, personal/team summaries, weekly scheduler |
 | `security/` | JWT filter, token service, user details, AES-256-GCM token encryption, legacy migration runner |
 | `email/` | SMTP password reset email |
@@ -119,7 +119,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | `exception/` | GlobalExceptionHandler, domain exceptions |
 | `notification/` | Async notification dispatch service, gated by user prefs |
 | `messaging/` | 1:1 direct message service and controller, conversation/inbox API |
-| `invitation/` | Token-based team invitation issuance and redemption |
+| `invite/` | Token-based team invitation issuance and redemption |
 
 ---
 
@@ -984,7 +984,7 @@ Each value carries three boolean flags: `(inAiContext, dailySum, aggregatePeriod
 | `REVIEW_PARTICIPATION_COUNT` | `(true, false, true)` | Count of distinct PRs the user reviewed (excluding self-reviews) in the calculation window |
 | `WIP_OPEN_PR_AGE_HOURS_MEDIAN` | `(false, false, false)` | Median age in hours of the user's currently-open PRs — point-in-time WIP queue signal |
 
-#### Repository
+#### Repositories (`metrics/repository/`)
 
 **`MetricSnapshotRepository`**
 - Standard JPQL finders by user/team/metricType/date/repo.
@@ -993,6 +993,11 @@ Each value carries three boolean flags: `(inAiContext, dailySum, aggregatePeriod
 - `findPersonalInWindow(user, type, from, to)` / `findPersonalByRepositoryInWindow(...)` — window resolution. Returns DAILY rows dated inside the window **plus** AGGREGATE rows whose `[periodFrom, periodTo]` the window fully contains. The shape test lives in the predicate, so callers never need a list of which types are period-stored.
 - `findPersonalAggregateCovering(user, type, from, to)` / `...CoveringByRepository(...)` — fallback for a request narrower than the grain the metric was computed on: returns the AGGREGATE row whose window covers the request.
 - `findByUserIdsAndTeamIdAndMetricTypeInWindow(...)` / `findByUserAndTeamAndMetricTypeInWindow(...)` — team-scoped window resolution for the manager summary views.
+
+**`MetricCoverageRepository`**
+- `findDatesInRange(userId, from, to)` — the days personal metrics have already been computed for; the backfill subtracts this from its target range.
+- `markCovered(userId, date)` — native `INSERT … ON CONFLICT DO UPDATE`, because JPQL cannot express `ON CONFLICT`; re-marking a day refreshes `computed_at`.
+- `deleteByUserId(userId)` — carries its own `@Transactional`, since the backfill resets coverage outside any enclosing transaction.
 
 #### Metric Calculator Infrastructure
 
@@ -1361,7 +1366,12 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 ---
 
-### 3.16 Invitation Domain
+### 3.16 Invite Domain
+
+Package `invite/`; the DTOs and the entity live in `invite/model/`. There is no dedicated
+invite controller — issuance hangs off `AdminController` and lookup/redemption off
+`AuthController`, because an invite is only ever created by an admin and only ever consumed
+during registration.
 
 #### Entities
 
@@ -1370,37 +1380,47 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 | Column | Type | Notes |
 |---|---|---|
 | `id` | BIGSERIAL PK | |
-| `token` | VARCHAR(64) UNIQUE NOT NULL | Random token |
+| `token` | VARCHAR(64) UNIQUE NOT NULL | Random UUID |
 | `email` | VARCHAR(256) NOT NULL | Invitee email |
 | `role` | VARCHAR(16) DEFAULT 'DEVELOPER' | Pre-assigned role |
 | `team_id` | FK → teams SET NULL | Optional team auto-join |
 | `created_by` | FK → users CASCADE NOT NULL | Inviter user |
-| `expires_at` | TIMESTAMP NOT NULL | 7-day TTL |
-| `used_at` | TIMESTAMP | Set when redeemed |
-| `created_at` | TIMESTAMP DEFAULT now() | |
+| `expires_at` | TIMESTAMPTZ NOT NULL | 7-day TTL |
+| `used_at` | TIMESTAMPTZ | Set when redeemed |
+| `created_at` | TIMESTAMPTZ DEFAULT now() | |
+
+#### Repository
+
+**`InviteTokenRepository`** — `findByToken(String token)`.
 
 #### Services
 
-**`InvitationService`** — Token-based team invitation.
-- `generateToken(User inviter, String email, Role role, Long teamId?)` → `InviteTokenEntity` with 7-day expiry.
-- `redeemToken(String token, User redeemer)` → validates not expired, not used; if `teamId` set, adds redeemer to team; marks `used_at = now()`.
-- `getPendingInvites(User inviter)` → list unused tokens created by inviter.
+**`InviteService`** — Token-based team invitation, 7-day TTL.
+- `createInvite(User admin, String email, Role role, Long teamId?)` → `InviteTokenDto`; the DTO carries the shareable URL `${app.frontend-url}/register?invite={token}`, which the admin distributes manually — nothing is emailed.
+- `validateInvite(String token)` → `InviteInfoDto`; rejects an unknown, used, or expired token with `BadRequestException`.
+- `redeemInvite(String token, User newUser)` → re-validates, sets `used_at = now()`, and adds the new user to the invite's team if one was set.
 
-#### Controller
+#### DTOs (`invite/model/`)
 
-**`InvitationController`** — `/api/invitations`, `@PreAuthorize("isAuthenticated()")`
+- **`CreateInviteRequest`** — `{email, role, teamId}`, all optional; the role defaults to `DEVELOPER`.
+- **`InviteTokenDto`** (record) — `{token, email, role, expiresAt, inviteUrl}`.
+- **`InviteInfoDto`** (record) — `{email, role, teamName}`; the public view shown on the registration page.
 
-| Method | Path | Response | Description |
-|---|---|---|---|
-| POST | `/generate` | 201 InviteTokenDto | Generate invite token `{email?, role?, teamId?}` |
-| POST | `/redeem` | 201 UserDto | Redeem token `{token}` (unauthenticated) |
-| GET | `/pending` | 200 List<InviteTokenDto> | List pending invites sent by user |
+#### Endpoints
+
+| Method | Path | Auth | Response | Description |
+|---|---|---|---|---|
+| POST | `/api/admin/invites` | ADMIN | 201 InviteTokenDto | Create an invite token and return its URL |
+| GET | `/api/auth/invite/{token}` | Public | 200 InviteInfoDto / 400 | Look up an invite; 400 if unknown, used, or expired |
+
+Redemption has no endpoint of its own: `POST /api/auth/register` with `inviteToken` set
+validates the invite, creates the user, and calls `redeemInvite`.
 
 ---
 
 ## 4. Database Design
 
-### 4.1 Schema Evolution — 59 Flyway Migrations
+### 4.1 Schema Evolution — 65 Flyway Migrations
 
 | Version | File | What it does |
 |---|---|---|
@@ -1468,6 +1488,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 | V62 | `V62__jira_identity.sql` | ALTER `users` ADD `jira_account_id` VARCHAR(128); partial UNIQUE index WHERE NOT NULL. ALTER `issues` ADD `assignee_account_id`, `reporter_account_id`; indexes on `(jira_project_id, assignee_account_id)` and `(jira_project_id, reporter_account_id)`, mirroring how closed-issue/lead-time metrics filter by assignee and created-issue metrics by reporter. Jira issues could not be attributed at all: `buildJql` narrowed the fetch to the token owner's `accountId`, and the canonical project row is collected with whichever user's token owns it, so every subscriber to that project was credited with the owner's issues — unrecoverable after the fact, since only display names were stored. Storing `accountId` per issue moves the filter out of the JQL and into the metric queries, where it can differ per user. Until re-collection fills the columns, Jira issues match nobody, which is the correct failure direction — previously they matched everybody |
 | V63 | `V63__stats_skip_reason.sql` | ALTER `git_commits` and `github_pull_requests` ADD `stats_skip_reason` VARCHAR(32); backfill rows already `stats_status = 'SKIPPED'` to `UNKNOWN`. SKIPPED was set for two unrelated causes, so the line-count metrics' exclusion set could not be characterised: an oversized diff is evidence about the repository's commit-size distribution, a missing detail record is evidence about API access. A nullable reason column rather than new `StatsStatus` values keeps every query, projection and metric filter testing `= 'SKIPPED'` working and leaves the status enum a four-state lifecycle. Partial indexes `ix_git_commits_skip_reason` / `ix_github_prs_skip_reason` on `(repository_id, stats_skip_reason) WHERE stats_status = 'SKIPPED'` serve the breakdown of skipped rows without indexing the COMPLETE majority |
 | V64 | `V64__metric_summaries_prompt_version.sql` | ALTER `metric_summaries` ADD `prompt_version` VARCHAR(16) NOT NULL; backfill existing rows to `PRE_VERSIONING`; rebuild `uix_metric_summaries_identity` with `prompt_version` as the last key column. A summary recorded `model_name` but nothing about the instruction that produced it, so any figure computed over stored summaries spanned an unknown mixture of prompt revisions. Rows predating the column genuinely cannot be attributed, so they are labelled rather than backfilled with a hash |
+| V65 | `V65__remaining_timestamps_to_timestamptz.sql` | ALTER the remaining `Instant`-backed columns from TIMESTAMP to TIMESTAMPTZ across `ai_conversations`, `ai_messages`, `git_commits`, `git_repositories`, `github_pr_reviews`, `github_pull_requests`, `invite_tokens`, `messages`, `password_reset_tokens`, `refresh_tokens` and `teams`, reinterpreting existing values as UTC — the zone the application writes in, now pinned by `hibernate.jdbc.time_zone`. V55 converted the first four such columns; these are the rest. A type change rewrites the table and discards its statistics, so the migration ends with `ANALYZE` on the four largest tables, otherwise the planner stops choosing the partial stats indexes until autovacuum catches up |
 
 ### 4.2 Entity-Relationship Overview
 
@@ -1536,9 +1557,8 @@ Selected notable endpoints:
 | GET | `/api/metrics/review-participation` | 200 | Code review participation (distinct PRs reviewed, cross-repo) |
 | GET | `/api/metrics/stats-coverage` | 200 | Enrichment coverage per state and skip reason, for commits and PRs in the range |
 | GET | `/api/teams/{teamId}/members/{memberId}/export` | 200 text/markdown | 1:1 meeting prep document for a team member with AI insights and anomaly highlights |
-| GET | `/api/invitations/generate` | 200 | Generate invite token with optional email |
-| POST | `/api/invitations/redeem` | 201 | Redeem invite token to join team |
-| GET | `/api/invitations/pending` | 200 | List pending invites sent by current user |
+| POST | `/api/admin/invites` | 201 | Create an invite token; returns the URL for the admin to share manually |
+| GET | `/api/auth/invite/{token}` | 200 / 400 | Look up an invite (email, role, team name); 400 if unknown, used, or expired |
 
 *(Full endpoint tables are in Section 3 per domain.)*
 
@@ -1767,9 +1787,9 @@ Built with React 18 + Vite + TypeScript. Built into `src/main/resources/static/`
 
 **`MessagesPage`** — 1:1 direct messaging interface. Two-column layout: left sidebar with inbox (conversation list with latest message preview, unread badge, recipient avatar). Right column with message thread. Thread header shows recipient name + "active" status badge via `lastActiveAt`. Message list with sender/recipient attribution. Input area at bottom with text field and send button. Loads message thread on mount (`GET /api/messages/conversations/{userId}`); marks incoming messages as read. Inbox fetched from `GET /api/messages/conversations`; unread count via `GET /api/messages/unread-count` (badge on sidebar). Send message: `POST /api/messages` with `{recipientId, body}`.
 
-**`SettingsPage`** — Editorial `.page.narrow` layout. **Appearance card**: theme toggle (light/dark), `AccentSwatches` + hex input, live preview strip, **logo picker** (4 clickable cards calling `setTheme({ logo })` from `useTheme()`; "reset to default" reverts to `ACTIVE_LOGO`). **Avatar card**: upload via `avatarApi.upload`, preset grid via `avatarApi.setPreset`, remove via `avatarApi.delete`. **Profile card**: username, email, GitHub login, timezone picker with `Chip(emerald, dot) "auto"` badge when tz matches browser tz, role chip. Save → `PUT /users/me`. **Security card**: session JWT info, collapsible password change form; refresh token now in httpOnly cookie, access token in JS memory. **Notifications card**: four toggle switches plus a "default contact method" (in-app/email) selector, all wired to `GET/PUT /api/users/me/notifications` (ai_brief, sync_failures, after_hours, new_team_member, default_contact_method); toggles fire `notifMutation` on change and update React Query cache optimistically. **Team invitations card**: button to generate invite link with optional email input; generated link expires in 7 days; shows list of pending invites with copy-to-clipboard button. **Danger zone**: "delete account" button opens a confirmation `Modal` requiring the user to type their email exactly; on confirm calls `DELETE /api/users/me`, then `logout()`, then redirects to `/login`; 409 last-admin guard surfaces as an inline error in the modal.
+**`SettingsPage`** — Editorial `.page.narrow` layout. **Appearance card**: theme toggle (light/dark), `AccentSwatches` + hex input, live preview strip, **logo picker** (4 clickable cards calling `setTheme({ logo })` from `useTheme()`; "reset to default" reverts to `ACTIVE_LOGO`). **Avatar card**: upload via `avatarApi.upload`, preset grid via `avatarApi.setPreset`, remove via `avatarApi.delete`. **Profile card**: username, email, GitHub login, timezone picker with `Chip(emerald, dot) "auto"` badge when tz matches browser tz, role chip. Save → `PUT /users/me`. **Security card**: session JWT info, collapsible password change form; refresh token now in httpOnly cookie, access token in JS memory. **Notifications card**: four toggle switches plus a "default contact method" (in-app/email) selector, all wired to `GET/PUT /api/users/me/notifications` (ai_brief, sync_failures, after_hours, new_team_member, default_contact_method); toggles fire `notifMutation` on change and update React Query cache optimistically. **Danger zone**: "delete account" button opens a confirmation `Modal` requiring the user to type their email exactly; on confirm calls `DELETE /api/users/me`, then `logout()`, then redirects to `/login`; 409 last-admin guard surfaces as an inline error in the modal.
 
-**`AdminPage`** — ADMIN only (redirects to `/dashboard` if not admin). Hero `N users` headline. KPI strip: `users` count (from `/admin/users`); `active 24h`, `db size` (formatted as MB), `ai calls today` — all live from `GET /admin/stats` via `useQuery(['admin-stats'])`. Users table: email, role dropdown (`RoleDropdown` — inline `useMutation` per row), delete button. **Invite modal**: visual placeholder, `TODO(admin-invites-backend)`. **Promote-to-admin modal**: search input calls `GET /admin/users?q=` (B5.2) with `enabled: adminOpen`; results list shows non-admin users; selecting one highlights it; "promote" button calls `PUT /admin/users/{id}/role` with ADMIN. Current user cannot be deleted.
+**`AdminPage`** — ADMIN only (redirects to `/dashboard` if not admin). Hero `N users` headline. KPI strip: `users` count (from `/admin/users`); `active 24h`, `db size` (formatted as MB), `ai calls today` — all live from `GET /admin/stats` via `useQuery(['admin-stats'])`. Users table: email, role dropdown (`RoleDropdown` — inline `useMutation` per row), delete button. **Invite modal**: email input plus a DEVELOPER/MANAGER/ADMIN role picker; "generate link" calls `POST /admin/invites` and swaps the footer for a copy-to-clipboard button holding the returned `inviteUrl` (valid 7 days). The link is shared manually — nothing is emailed. **Promote-to-admin modal**: search input calls `GET /admin/users?q=` (B5.2) with `enabled: adminOpen`; results list shows non-admin users; selecting one highlights it; "promote" button calls `PUT /admin/users/{id}/role` with ADMIN. Current user cannot be deleted.
 
 ### 10.3 Components
 
@@ -2015,4 +2035,4 @@ Ollama must be running separately: `ollama serve` (and `ollama pull llama3.2` on
 
 ---
 
-*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 21-metric calculation engine (registry-based dispatch via `MetricCalculatorRegistry`, 17 `MetricCalculator` beans) with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries, 2σ anomaly detection, 1:1 meeting prep export, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (23 controllers, 59 Flyway migrations, 18+ repositories).*
+*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 21-metric calculation engine (registry-based dispatch via `MetricCalculatorRegistry`, 17 `MetricCalculator` beans) with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries, 2σ anomaly detection, 1:1 meeting prep export, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (25 controllers, 65 Flyway migrations, 25 repositories).*

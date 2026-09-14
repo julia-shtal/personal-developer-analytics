@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
 import com.juliashtal.devanalytics.user.model.Role;
@@ -44,7 +45,8 @@ class MetricsServiceTest {
     @Mock TeamRepository teamRepository;
     @Mock RepoScopeResolver repoScopeResolver;
     @Mock AuthorIdentityResolver authorIdentityResolver;
-    @Mock MetricCoverageRepository coverageRepository;
+    @Mock
+    MetricCoverageRepository coverageRepository;
 
     @InjectMocks MetricsService metricsService;
 

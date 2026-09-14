@@ -5,7 +5,7 @@ import com.juliashtal.devanalytics.auth.model.request.LoginRequest;
 import com.juliashtal.devanalytics.auth.model.RefreshToken;
 import com.juliashtal.devanalytics.auth.model.request.RegisterRequest;
 import com.juliashtal.devanalytics.auth.service.RefreshTokenService;
-import com.juliashtal.devanalytics.invite.InviteInfoDto;
+import com.juliashtal.devanalytics.invite.model.InviteInfoDto;
 import com.juliashtal.devanalytics.invite.InviteService;
 import com.juliashtal.devanalytics.security.model.CustomUserDetails;
 import com.juliashtal.devanalytics.security.service.JwtService;

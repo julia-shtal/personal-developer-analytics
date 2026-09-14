@@ -1,8 +1,8 @@
 package com.juliashtal.devanalytics.user.controller;
 
-import com.juliashtal.devanalytics.invite.CreateInviteRequest;
+import com.juliashtal.devanalytics.invite.model.CreateInviteRequest;
 import com.juliashtal.devanalytics.invite.InviteService;
-import com.juliashtal.devanalytics.invite.InviteTokenDto;
+import com.juliashtal.devanalytics.invite.model.InviteTokenDto;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.user.model.AdminStatsDto;
 import com.juliashtal.devanalytics.user.model.Role;

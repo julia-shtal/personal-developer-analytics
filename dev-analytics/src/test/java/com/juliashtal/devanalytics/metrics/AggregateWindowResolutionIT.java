@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.ai.model.AggregatedMetricsContext;
 import com.juliashtal.devanalytics.ai.service.AiContextBuilderService;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.User;
@@ -33,7 +34,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AggregateWindowResolutionIT {
 
     @Autowired UserRepository userRepository;
-    @Autowired MetricSnapshotRepository snapshotRepository;
+    @Autowired
+    MetricSnapshotRepository snapshotRepository;
     @Autowired MetricSnapshotService metricSnapshotService;
     @Autowired AiContextBuilderService contextBuilder;
 
