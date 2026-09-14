@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.metrics.controller.MetricsController;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
@@ -56,7 +57,8 @@ class MetricsAggregationTest {
     @MockBean TeamService teamService;
     @MockBean UserService userService;
     @MockBean CheckHelper checkHelper;
-    @MockBean MetricSnapshotRepository snapshotRepository;
+    @MockBean
+    MetricSnapshotRepository snapshotRepository;
     @MockBean MetricBackfillService backfillService;
     @MockBean StatsCoverageService statsCoverageService;
     @MockBean TeamAccessGuard teamAccessGuard;

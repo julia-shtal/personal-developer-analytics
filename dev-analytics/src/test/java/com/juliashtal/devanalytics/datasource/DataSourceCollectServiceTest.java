@@ -24,7 +24,6 @@ class DataSourceCollectServiceTest {
     @Mock DataSourceConfigRepository configRepository;
     @Mock DataSourceService dataSourceService;
     @Mock SourceCollectorRegistry collectorRegistry;
-    @Mock SyncJobTracker tracker;
 
     @InjectMocks DataSourceCollectService collectService;
 

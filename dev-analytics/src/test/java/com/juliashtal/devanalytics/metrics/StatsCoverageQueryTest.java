@@ -128,6 +128,9 @@ class StatsCoverageQueryTest {
         // SET LOCAL, not SET: a plain SET outlives the rollback on the pooled connection and
         // would silently change the plan for every later test in the run.
         jdbc.execute("SET LOCAL enable_seqscan = off");
+        // The planner needs statistics for this fixture to prefer the narrower partial index;
+        // without it the assertion passes or fails on whenever autovacuum last ran.
+        jdbc.execute("ANALYZE git_commits");
         String plan = String.join(" ", jdbc.queryForList(
                 "EXPLAIN SELECT stats_skip_reason, COUNT(*) FROM git_commits "
                         + "WHERE repository_id = " + repoId + " AND stats_status = 'SKIPPED' "

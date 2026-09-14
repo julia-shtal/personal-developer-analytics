@@ -20,7 +20,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Logo } from '@/components/brand/Logo';
 import { Avatar } from '@/components/ui/Avatar';
-import { APP_VERSION } from '@/config/branding';
+import { useAppVersion } from '@/hooks/useAppVersion';
 import { messagingApi } from '@/api/messaging';
 import { teamsApi } from '@/api/teams';
 
@@ -82,6 +82,7 @@ function NavItem({ to, icon, label, badge }: { to: string; icon: ReactNode; labe
 }
 
 export function Sidebar() {
+  const appVersion = useAppVersion();
   const { user, logout, isManager, isAdmin } = useAuth();
   const { logo, theme, setTheme } = useTheme();
   const navigate = useNavigate();
@@ -130,7 +131,7 @@ export function Sidebar() {
             <span className="dot dot-live" style={{ marginRight: 6, verticalAlign: 'middle' }} />
             ALL SYSTEMS LIVE
           </span>
-          <span className="kbd">{APP_VERSION}</span>
+          {appVersion && <span className="kbd">{appVersion}</span>}
         </div>
       </div>
 

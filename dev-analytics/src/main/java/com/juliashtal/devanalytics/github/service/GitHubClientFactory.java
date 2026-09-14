@@ -7,6 +7,8 @@ import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GitHubBuilder;
 import org.springframework.stereotype.Component;
 
+import static com.juliashtal.devanalytics.helper.ParsingHelper.resolveApiBase;
+
 /**
  * Builds authenticated GitHub API clients, decrypting the stored token per data source.
  */
@@ -31,15 +33,8 @@ public class GitHubClientFactory {
         }
 
         try {
-            String endpoint = cfg.getBaseUrl();
-            if (endpoint == null || endpoint.isBlank()) {
-                endpoint = "https://api.github.com";
-            }
-            if (endpoint.startsWith("https://github.com")) {
-                endpoint = "https://api.github.com";
-            }
             return new GitHubBuilder()
-                    .withEndpoint(endpoint)
+                    .withEndpoint(resolveApiBase(cfg.getBaseUrl()))
                     .withOAuthToken(token)
                     .build();
         } catch (Exception e) {

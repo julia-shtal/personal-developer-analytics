@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics;
 
+import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class MetricCoverageRepositoryTest {
 
-    @Autowired MetricCoverageRepository repository;
+    @Autowired
+    MetricCoverageRepository repository;
     @Autowired JdbcTemplate jdbc;
 
     private Long userId;

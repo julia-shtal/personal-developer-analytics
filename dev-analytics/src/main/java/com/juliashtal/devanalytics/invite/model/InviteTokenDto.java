@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.invite;
+package com.juliashtal.devanalytics.invite.model;
 
 import java.time.Instant;
 

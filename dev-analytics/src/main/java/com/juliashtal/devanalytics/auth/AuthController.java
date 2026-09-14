@@ -3,7 +3,7 @@ package com.juliashtal.devanalytics.auth;
 import com.juliashtal.devanalytics.auth.model.*;
 import com.juliashtal.devanalytics.auth.model.request.*;
 import com.juliashtal.devanalytics.auth.service.PasswordResetService;
-import com.juliashtal.devanalytics.invite.InviteInfoDto;
+import com.juliashtal.devanalytics.invite.model.InviteInfoDto;
 import com.juliashtal.devanalytics.invite.InviteService;
 import com.juliashtal.devanalytics.security.model.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;

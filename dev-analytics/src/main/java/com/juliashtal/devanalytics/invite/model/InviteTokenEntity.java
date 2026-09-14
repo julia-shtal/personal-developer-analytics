@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.invite;
+package com.juliashtal.devanalytics.invite.model;
 
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;

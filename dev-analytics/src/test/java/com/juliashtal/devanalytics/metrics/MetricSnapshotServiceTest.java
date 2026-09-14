@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.metrics;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.service.MetricSnapshotService;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
@@ -27,7 +28,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MetricSnapshotServiceTest {
 
-    @Mock MetricSnapshotRepository repository;
+    @Mock
+    MetricSnapshotRepository repository;
     @InjectMocks MetricSnapshotService service;
 
     private static final LocalDate FROM = LocalDate.of(2024, 1, 1);

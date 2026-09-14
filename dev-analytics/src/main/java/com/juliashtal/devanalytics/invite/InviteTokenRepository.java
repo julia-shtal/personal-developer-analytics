@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.invite;
 
+import com.juliashtal.devanalytics.invite.model.InviteTokenEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

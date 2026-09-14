@@ -11,6 +11,7 @@ import com.juliashtal.devanalytics.metrics.calc.KnowledgeSiloCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
 import com.juliashtal.devanalytics.metrics.calc.MetricSnapshotWriter;
 import com.juliashtal.devanalytics.metrics.model.*;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.user.model.AuthorIdentity;
 import com.juliashtal.devanalytics.user.model.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +44,8 @@ import static org.mockito.Mockito.*;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class MetricsProjectionTest {
 
-    @Mock MetricSnapshotRepository snapshotRepository;
+    @Mock
+    MetricSnapshotRepository snapshotRepository;
     @Mock GitCommitEntityRepository commitRepository;
     @Mock GitRepositoryEntityRepository gitRepoRepository;
 

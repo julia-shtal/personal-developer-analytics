@@ -9,7 +9,7 @@ import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
-import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.model.*;
 import com.juliashtal.devanalytics.metrics.service.AggregateWindowResolver;
 import com.juliashtal.devanalytics.user.model.AuthorIdentity;

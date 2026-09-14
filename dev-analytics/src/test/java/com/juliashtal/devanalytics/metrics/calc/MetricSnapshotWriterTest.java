@@ -1,6 +1,6 @@
 package com.juliashtal.devanalytics.metrics.calc;
 
-import com.juliashtal.devanalytics.metrics.MetricSnapshotRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.user.model.User;

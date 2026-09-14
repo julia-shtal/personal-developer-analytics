@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
 import com.juliashtal.devanalytics.metrics.model.BackfillProperties;
+import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
 import com.juliashtal.devanalytics.metrics.service.AuthorIdentityChangedListener;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillTrigger;
@@ -80,7 +81,8 @@ class AttributionRecomputeTest {
         @Mock GitCommitEntityRepository commitRepository;
         @Mock GitHubPullRequestRepository pullRequestRepository;
         @Mock IssueRepository issueRepository;
-        @Mock MetricCoverageRepository coverageRepository;
+        @Mock
+        MetricCoverageRepository coverageRepository;
         @Mock UserMetricsPurger metricsPurger;
         @Mock MetricsService metricsService;
 

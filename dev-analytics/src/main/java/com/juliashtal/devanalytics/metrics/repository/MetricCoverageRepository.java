@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.metrics;
+package com.juliashtal.devanalytics.metrics.repository;
 
 import com.juliashtal.devanalytics.metrics.model.MetricCoverage;
 import org.springframework.data.jpa.repository.JpaRepository;
