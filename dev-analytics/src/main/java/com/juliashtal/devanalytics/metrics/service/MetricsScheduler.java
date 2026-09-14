@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics.service;
 
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,11 +23,12 @@ public class MetricsScheduler {
 
     private final MetricsService metricsService;
     private final UserRepository userRepository;
+    private final SystemClock systemClock;
 
-    /** Runs every day at 01:00 server time. */
-    @Scheduled(cron = "0 0 1 * * ?")
+    /** Runs every day at 01:00 UTC. */
+    @Scheduled(cron = "0 0 1 * * ?", zone = "UTC")
     public void calculateYesterday() {
-        LocalDate yesterday = LocalDate.now().minusDays(1);
+        LocalDate yesterday = systemClock.yesterday();
         log.info("Nightly metrics scheduler started for {}", yesterday);
 
         userRepository.findAll().forEach(user -> {

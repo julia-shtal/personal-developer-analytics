@@ -26,7 +26,7 @@ FOR each calendar day D in [from, to):
       AND author_name NOT LIKE '%[bot]%'      -- bot exclusion
 ```
 
-- Time window: calendar day boundaries in UTC.
+- Time window: calendar day boundaries in UTC. See [timezone.md](timezone.md).
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name` ending with `[bot]` is excluded. Applied in metric formula, not at ingestion.
 - Result: one `MetricSnapshot` row per (user, repo, day) triplet where count > 0. Days with zero commits produce no row.

@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.metrics;
 
 import com.juliashtal.devanalytics.git.service.RepoService;
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.metrics.controller.MetricsController;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
@@ -34,7 +35,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(MetricsController.class)
-@Import(AggregateWindowResolver.class)   // pure computation — a mock would defeat the assertions
+@Import({AggregateWindowResolver.class, SystemClock.class})   // pure computation — a mock would defeat the assertions
 @AutoConfigureMockMvc(addFilters = false)
 class ReviewParticipationControllerTest {
 

@@ -28,7 +28,7 @@ FOR each calendar day D in [from, to):
 - Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_login` ending with `[bot]` excluded.
 - Includes PRs in any state (open, closed, merged) as long as `created_at` falls within the window. A PR that is later rejected still represents initiated work.
-- Time window: UTC calendar day boundaries applied to `created_at`.
+- Time window: UTC calendar day boundaries applied to `created_at`. See [timezone.md](timezone.md).
 
 ## Edge cases
 

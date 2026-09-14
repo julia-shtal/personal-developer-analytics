@@ -3,20 +3,26 @@ package com.juliashtal.devanalytics.ai;
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.scheduler.MetricsSummaryScheduler;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.notification.NotificationDispatchService;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.TimeZone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,8 +33,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * The weekly job summarised a window it never computed. Combined with the exact-period read,
- * that is what dropped the five period-stored metrics from every scheduled summary.
+ * Pins two properties of the weekly job: it computes the window it then summarises, and that
+ * window is the seven UTC days ending yesterday rather than a server-zone reading of them.
  */
 @ExtendWith(MockitoExtension.class)
 class MetricsSummarySchedulerTest {
@@ -38,7 +44,25 @@ class MetricsSummarySchedulerTest {
     @Mock MetricsAiService metricsAiService;
     @Mock NotificationDispatchService notificationDispatch;
 
-    @InjectMocks MetricsSummaryScheduler scheduler;
+    /** A Monday 08:00 UTC firing, the cron this job is registered under. */
+    private static final Instant FIXED = Instant.parse("2026-03-16T08:00:00Z");
+    private static final LocalDate TO   = LocalDate.of(2026, 3, 15);
+    private static final LocalDate FROM = LocalDate.of(2026, 3, 9);
+
+    MetricsSummaryScheduler scheduler;
+
+    private final TimeZone originalZone = TimeZone.getDefault();
+
+    @AfterEach
+    void restoreZone() {
+        TimeZone.setDefault(originalZone);
+    }
+
+    @BeforeEach
+    void setUp() {
+        scheduler = new MetricsSummaryScheduler(userRepository, metricsService, metricsAiService,
+                notificationDispatch, new SystemClock(Clock.fixed(FIXED, ZoneOffset.UTC)));
+    }
 
     @Test
     void generateWeeklySummaries_computesTheSummarisedWindowBeforeGeneratingIt() {
@@ -73,7 +97,8 @@ class MetricsSummarySchedulerTest {
 
         assertThat(calcFrom.getValue()).isEqualTo(aiFrom.getValue());
         assertThat(calcTo.getValue()).isEqualTo(aiTo.getValue());
-        assertThat(calcFrom.getValue()).isEqualTo(calcTo.getValue().minusDays(6));
+        assertThat(calcFrom.getValue()).isEqualTo(FROM);
+        assertThat(calcTo.getValue()).isEqualTo(TO);
     }
 
     @Test
@@ -90,6 +115,26 @@ class MetricsSummarySchedulerTest {
 
         verify(metricsAiService, times(1)).generateSummary(eq(healthy), any(), any(), eq(null));
         verify(metricsAiService, org.mockito.Mockito.never()).generateSummary(eq(failing), any(), any(), any());
+    }
+
+    /**
+     * The job fires at 08:00 UTC, an hour at which Auckland has already entered the next day and
+     * Los Angeles is still in the previous one; the summarised week must not move with either.
+     */
+    @Test
+    void generateWeeklySummaries_serverZoneEastOrWestOfUtc_summarisesTheSameWeek() {
+        User user = user(1L);
+        when(userRepository.findAll()).thenReturn(List.of(user));
+        when(metricsAiService.generateSummary(any(), any(), any(), any()))
+                .thenReturn(MetricsSummaryDto.builder().headline("h").build());
+
+        TimeZone.setDefault(TimeZone.getTimeZone("Pacific/Auckland"));
+        scheduler.generateWeeklySummaries();
+
+        TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"));
+        scheduler.generateWeeklySummaries();
+
+        verify(metricsAiService, times(2)).generateSummary(user, FROM, TO, null);
     }
 
     private static User user(Long id) {

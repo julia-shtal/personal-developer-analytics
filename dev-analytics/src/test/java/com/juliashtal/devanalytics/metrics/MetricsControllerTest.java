@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.metrics;
 
 import com.jayway.jsonpath.JsonPath;
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.StatsSkipReason;
 import com.juliashtal.devanalytics.git.model.StatsStatus;
@@ -33,6 +34,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Map;
@@ -70,18 +72,26 @@ class MetricsControllerTest {
     @MockBean StatsCoverageService statsCoverageService;
     @MockBean JwtService jwtService;
     @MockBean CustomUserDetailsService customUserDetailsService;
+    @MockBean SystemClock systemClock;
 
     private static final LocalDate FROM = LocalDate.of(2024, 1, 1);
     private static final LocalDate TO = LocalDate.of(2024, 1, 31);
     private static final LocalDate DAY = LocalDate.of(2024, 1, 15);
 
+    /** The backfill guard reads the current day in the requester's zone, so the slice fixes it. */
+    private static final LocalDate TODAY = LocalDate.of(2024, 2, 1);
+    private static final LocalDate YESTERDAY = TODAY.minusDays(1);
+
     private User currentUser;
 
     @BeforeEach
-    void stubUser() {
+    void stubCurrentUserAndClock() {
         currentUser = new User();
         currentUser.setId(1L);
+        // Set explicitly: User defaults to Europe/Berlin, and the backfill guard reads this zone.
+        currentUser.setTimezone("UTC");
         when(checkHelper.currentUser()).thenReturn(currentUser);
+        when(systemClock.today(ZoneId.of("UTC"))).thenReturn(TODAY);
     }
 
     private MetricSnapshot dailySnapshot(MetricType type, LocalDate date, double value) {
@@ -390,7 +400,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void backfill_validRange_returns202() throws Exception {
-        LocalDate to = LocalDate.now().minusDays(2);
+        LocalDate to = YESTERDAY.minusDays(1);
         LocalDate from = to.minusDays(5);
 
         mvc.perform(post("/api/metrics/backfill")
@@ -404,7 +414,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void backfill_fromAfterTo_returns400() throws Exception {
-        LocalDate to = LocalDate.now().minusDays(5);
+        LocalDate to = YESTERDAY.minusDays(4);
         LocalDate from = to.minusDays(1).plusDays(2); // from is after to
 
         mvc.perform(post("/api/metrics/backfill")
@@ -416,13 +426,49 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void backfill_toIsToday_returns400() throws Exception {
-        LocalDate to = LocalDate.now();
+        LocalDate to = TODAY;
         LocalDate from = to.minusDays(3);
 
         mvc.perform(post("/api/metrics/backfill")
                         .param("from", from.toString())
                         .param("to", to.toString()))
                 .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * A requester west of UTC has not finished the UTC day yet, so the guard must reject a day a
+     * UTC reading would have allowed.
+     */
+    @Test
+    @WithMockUser
+    void backfill_toIsTodayInTheRequestersZoneButYesterdayInUtc_returns400() throws Exception {
+        currentUser.setTimezone("America/Los_Angeles");
+        when(systemClock.today(ZoneId.of("America/Los_Angeles"))).thenReturn(YESTERDAY);
+
+        mvc.perform(post("/api/metrics/backfill")
+                        .param("from", YESTERDAY.minusDays(3).toString())
+                        .param("to", YESTERDAY.toString()))
+                .andExpect(status().isBadRequest());
+
+        verify(metricsService, never()).calculateDailyMetrics(anyLong(), any(), any());
+    }
+
+    /**
+     * A requester east of UTC has already completed a day UTC is still in, and must be allowed to
+     * backfill it — the case the UTC-anchored guard rejected.
+     */
+    @Test
+    @WithMockUser
+    void backfill_toIsYesterdayInTheRequestersZoneButTodayInUtc_returns202() throws Exception {
+        currentUser.setTimezone("Pacific/Auckland");
+        when(systemClock.today(ZoneId.of("Pacific/Auckland"))).thenReturn(TODAY.plusDays(1));
+
+        mvc.perform(post("/api/metrics/backfill")
+                        .param("from", TODAY.minusDays(3).toString())
+                        .param("to", TODAY.toString()))
+                .andExpect(status().isAccepted());
+
+        verify(metricsService).calculateDailyMetrics(currentUser.getId(), TODAY.minusDays(3), TODAY);
     }
 
     // =========================================================================

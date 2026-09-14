@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.ai.scheduler;
 
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.notification.NotificationDispatchService;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
@@ -26,10 +27,11 @@ public class MetricsSummaryScheduler {
     private final MetricsService metricsService;
     private final MetricsAiService metricsAiService;
     private final NotificationDispatchService notificationDispatch;
+    private final SystemClock systemClock;
 
     @Scheduled(cron = "0 0 8 * * MON", zone = "UTC")
     public void generateWeeklySummaries() {
-        LocalDate to = LocalDate.now().minusDays(1);
+        LocalDate to = systemClock.yesterday();
         LocalDate from = to.minusDays(6);
 
         log.info("Weekly AI summary job started: period {} to {}", from, to);

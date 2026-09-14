@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics;
 
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
@@ -86,7 +87,7 @@ class AttributionRecomputeTest {
         private MetricBackfillService service() {
             return new MetricBackfillService(userRepository, repoScopeResolver, commitRepository,
                     pullRequestRepository, issueRepository, coverageRepository, metricsPurger,
-                    metricsService, new BackfillProperties(30));
+                    metricsService, new BackfillProperties(30), new SystemClock());
         }
 
         @Test

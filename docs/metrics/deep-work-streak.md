@@ -39,6 +39,7 @@ for (LocalDate day : days) {
 }
 ```
 
+- Day boundaries: a commit's calendar day is derived in UTC; the streak is a run of consecutive such days. See [timezone.md](timezone.md).
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`.
 - **Weekends and holidays count against the streak**: a commit-free Saturday breaks a Monday–Friday streak, resulting in a maximum possible 5-day streak in a standard work week without weekend commits.

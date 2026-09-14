@@ -27,7 +27,7 @@ FOR each calendar day D in [from, to):
 ```
 
 - Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
-- Time window: UTC calendar day boundaries applied to `merged_at`.
+- Time window: UTC calendar day boundaries applied to `merged_at`. See [timezone.md](timezone.md).
 - Only PRs with `state = MERGED` (i.e. `merged_at IS NOT NULL`) are counted.
 - Bot exclusion: `author_login` ending with `[bot]` excluded.
 

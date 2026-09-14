@@ -22,7 +22,7 @@ weekdays_with_commits =
        OR lower(author_email) IN user.commitEmails )
     AND author_date  >= from
     AND author_date   < to+1
-    AND DAYOFWEEK(author_date IN user.timezone) NOT IN (SATURDAY, SUNDAY)
+    AND DAYOFWEEK(CAST(author_date AS date)) NOT IN (SATURDAY, SUNDAY)
     AND author_name NOT LIKE '%[bot]%'
 
 total_weekdays_in_window =
@@ -42,7 +42,7 @@ focus_ratio = COUNT(FOCUS_RATIO_DAYS_TASKS snapshots in [from, to])
 This design avoids writing O(window_days) rows per user per recalculation cycle.
 
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
-- Weekday check applied in the service (`DayOfWeek != SATURDAY && DayOfWeek != SUNDAY`) using the commit's UTC-normalised date.
+- Weekday check applied in the service (`DayOfWeek != SATURDAY && DayOfWeek != SUNDAY`) on the commit's calendar day, not on the user's configured zone: a commit made late on a Sunday evening in a zone ahead of UTC counts toward Monday. Day boundaries are specified in UTC. See [timezone.md](timezone.md).
 - Snapshots have `periodFrom = null`, `periodTo = null` (stored as daily shape, one row per active weekday).
 - Bot exclusion: implicit. A bot holds neither a declared address of the user nor their GitHub account ID, so it cannot satisfy the attribution predicate.
 

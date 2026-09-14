@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics;
 
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
@@ -20,9 +21,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -70,13 +73,17 @@ class MetricBackfillServiceTest {
     private final Set<LocalDate> ledger = new HashSet<>();
 
     private static final ZoneId UTC = ZoneId.of("UTC");
-    private LocalDate today;
+
+    /**
+     * The window's upper bound is read from the clock, so it is fixed rather than recomputed here;
+     * asserting against a second {@code now()} could only ever restate the implementation.
+     */
+    private static final Instant NOW = Instant.parse("2026-03-15T00:30:00Z");
+    private static final LocalDate TODAY_UTC = LocalDate.of(2026, 3, 15);
 
     @BeforeEach
     void setUp() {
         service = newService(30);
-
-        today = LocalDate.now(UTC);
 
         user = new User();
         user.setId(1L);
@@ -109,18 +116,19 @@ class MetricBackfillServiceTest {
     private MetricBackfillService newService(int maxDaysPerRun) {
         return new MetricBackfillService(userRepository, repoScopeResolver, commitRepository,
                 pullRequestRepository, issueRepository, coverageRepository, metricsPurger,
-                metricsService, new BackfillProperties(maxDaysPerRun));
+                metricsService, new BackfillProperties(maxDaysPerRun),
+                new SystemClock(Clock.fixed(NOW, ZoneOffset.UTC)));
     }
 
     /** Commits reach back {@code days} days before today, so the target range is {@code days} long. */
     private void commitsSpanning(int days) {
-        LocalDate earliest = today.minusDays(days);
+        LocalDate earliest = TODAY_UTC.minusDays(days);
         when(commitRepository.findEarliestAuthorDate(List.of(7L)))
                 .thenReturn(Optional.of(earliest.atStartOfDay(UTC).toInstant()));
     }
 
     private void coverEntireRange(int days) {
-        for (LocalDate d = today.minusDays(days); !d.isAfter(today.minusDays(1)); d = d.plusDays(1)) {
+        for (LocalDate d = TODAY_UTC.minusDays(days); !d.isAfter(TODAY_UTC.minusDays(1)); d = d.plusDays(1)) {
             ledger.add(d);
         }
     }
@@ -133,12 +141,12 @@ class MetricBackfillServiceTest {
 
         assertThat(result.daysComputed()).isEqualTo(30);
         assertThat(result.daysRemaining()).isEqualTo(60);
-        assertThat(result.coverageFrom()).isEqualTo(today.minusDays(90));
-        assertThat(result.coverageTo()).isEqualTo(today.minusDays(1));
+        assertThat(result.coverageFrom()).isEqualTo(TODAY_UTC.minusDays(90));
+        assertThat(result.coverageTo()).isEqualTo(TODAY_UTC.minusDays(1));
 
         // Newest-first: the block computed is the 30 days ending yesterday.
         verify(metricsService).calculateDailyMetrics(
-                1L, today.minusDays(30), today.minusDays(1));
+                1L, TODAY_UTC.minusDays(30), TODAY_UTC.minusDays(1));
         verifyNoMoreInteractions(metricsService);
     }
 
@@ -156,7 +164,7 @@ class MetricBackfillServiceTest {
         // Every day of the ninety-day range is now covered — the cap deferred days rather
         // than dropping them.
         assertThat(ledger).hasSize(90)
-                .contains(today.minusDays(90), today.minusDays(45), today.minusDays(1));
+                .contains(TODAY_UTC.minusDays(90), TODAY_UTC.minusDays(45), TODAY_UTC.minusDays(1));
 
         clearInvocations(metricsService);
         BackfillResult fourth = service.backfillUser(1L);
@@ -174,25 +182,25 @@ class MetricBackfillServiceTest {
         service.backfillUser(1L);
         service.backfillUser(1L);
 
-        inOrder.verify(metricsService).calculateDailyMetrics(1L, today.minusDays(30), today.minusDays(1));
-        inOrder.verify(metricsService).calculateDailyMetrics(1L, today.minusDays(60), today.minusDays(31));
-        inOrder.verify(metricsService).calculateDailyMetrics(1L, today.minusDays(90), today.minusDays(61));
+        inOrder.verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(30), TODAY_UTC.minusDays(1));
+        inOrder.verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(60), TODAY_UTC.minusDays(31));
+        inOrder.verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(90), TODAY_UTC.minusDays(61));
     }
 
     @Test
     void backfillUser_holeInMiddleOfRange_fillsTheHole() {
         commitsSpanning(10);
         coverEntireRange(10);
-        ledger.remove(today.minusDays(6));
-        ledger.remove(today.minusDays(5));
-        ledger.remove(today.minusDays(4));
+        ledger.remove(TODAY_UTC.minusDays(6));
+        ledger.remove(TODAY_UTC.minusDays(5));
+        ledger.remove(TODAY_UTC.minusDays(4));
 
         BackfillResult result = service.backfillUser(1L);
 
         assertThat(result.daysComputed()).isEqualTo(3);
         assertThat(result.daysRemaining()).isZero();
         verify(metricsService).calculateDailyMetrics(
-                1L, today.minusDays(6), today.minusDays(4));
+                1L, TODAY_UTC.minusDays(6), TODAY_UTC.minusDays(4));
         verifyNoMoreInteractions(metricsService);
     }
 
@@ -200,15 +208,15 @@ class MetricBackfillServiceTest {
     void backfillUser_nonContiguousMissingDays_computesSeparateBlocksNewestFirst() {
         commitsSpanning(10);
         coverEntireRange(10);
-        ledger.remove(today.minusDays(8));
-        ledger.remove(today.minusDays(3));
+        ledger.remove(TODAY_UTC.minusDays(8));
+        ledger.remove(TODAY_UTC.minusDays(3));
 
         BackfillResult result = service.backfillUser(1L);
 
         assertThat(result.daysComputed()).isEqualTo(2);
         InOrder inOrder = inOrder(metricsService);
-        inOrder.verify(metricsService).calculateDailyMetrics(1L, today.minusDays(3), today.minusDays(3));
-        inOrder.verify(metricsService).calculateDailyMetrics(1L, today.minusDays(8), today.minusDays(8));
+        inOrder.verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(3), TODAY_UTC.minusDays(3));
+        inOrder.verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(8), TODAY_UTC.minusDays(8));
         verifyNoMoreInteractions(metricsService);
     }
 
@@ -216,10 +224,10 @@ class MetricBackfillServiceTest {
     void backfillUser_blockFails_computesRemainingBlocksAndReportsItStillMissing() {
         commitsSpanning(10);
         coverEntireRange(10);
-        ledger.remove(today.minusDays(8));
-        ledger.remove(today.minusDays(3));
+        ledger.remove(TODAY_UTC.minusDays(8));
+        ledger.remove(TODAY_UTC.minusDays(3));
         doThrow(new IllegalStateException("calculator blew up"))
-                .when(metricsService).calculateDailyMetrics(1L, today.minusDays(3), today.minusDays(3));
+                .when(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(3), TODAY_UTC.minusDays(3));
 
         BackfillResult result = service.backfillUser(1L);
 
@@ -227,8 +235,8 @@ class MetricBackfillServiceTest {
         // next run still sees it as missing instead of the whole user stalling on one bad day.
         assertThat(result.daysComputed()).isEqualTo(1);
         assertThat(result.daysRemaining()).isEqualTo(1);
-        verify(metricsService).calculateDailyMetrics(1L, today.minusDays(8), today.minusDays(8));
-        assertThat(ledger).contains(today.minusDays(8)).doesNotContain(today.minusDays(3));
+        verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(8), TODAY_UTC.minusDays(8));
+        assertThat(ledger).contains(TODAY_UTC.minusDays(8)).doesNotContain(TODAY_UTC.minusDays(3));
     }
 
     @Test
@@ -240,7 +248,7 @@ class MetricBackfillServiceTest {
 
         assertThat(result.daysComputed()).isZero();
         assertThat(result.daysRemaining()).isZero();
-        assertThat(result.coverageFrom()).isEqualTo(today.minusDays(10));
+        assertThat(result.coverageFrom()).isEqualTo(TODAY_UTC.minusDays(10));
         verifyNoInteractions(metricsService);
     }
 
@@ -254,7 +262,7 @@ class MetricBackfillServiceTest {
         BackfillResult second = service.backfillUser(1L);
 
         assertThat(second).isEqualTo(first);
-        verify(metricsService).calculateDailyMetrics(1L, today.minusDays(10), today.minusDays(1));
+        verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(10), TODAY_UTC.minusDays(1));
     }
 
     @Test
@@ -283,7 +291,7 @@ class MetricBackfillServiceTest {
     void backfillUser_activityOnlyToday_writesNothing() {
         // Earliest activity is today, but the range ends yesterday: from > to, nothing to cover.
         when(commitRepository.findEarliestAuthorDate(List.of(7L)))
-                .thenReturn(Optional.of(today.atStartOfDay(UTC).toInstant()));
+                .thenReturn(Optional.of(TODAY_UTC.atStartOfDay(UTC).toInstant()));
 
         BackfillResult result = service.backfillUser(1L);
 
@@ -294,11 +302,11 @@ class MetricBackfillServiceTest {
 
     @Test
     void backfillUser_earliestActivityIsTheOldestOfThreeSources_usesIt() {
-        LocalDate issueDay = today.minusDays(40);
+        LocalDate issueDay = TODAY_UTC.minusDays(40);
         when(commitRepository.findEarliestAuthorDate(List.of(7L)))
-                .thenReturn(Optional.of(today.minusDays(5).atStartOfDay(UTC).toInstant()));
+                .thenReturn(Optional.of(TODAY_UTC.minusDays(5).atStartOfDay(UTC).toInstant()));
         when(pullRequestRepository.findEarliestCreatedAt(List.of(7L)))
-                .thenReturn(Optional.of(today.minusDays(20).atStartOfDay(UTC).toInstant()));
+                .thenReturn(Optional.of(TODAY_UTC.minusDays(20).atStartOfDay(UTC).toInstant()));
         when(issueRepository.findEarliestCreatedAt(List.of(7L)))
                 .thenReturn(Optional.of(issueDay.atStartOfDay(UTC).toInstant()));
 
@@ -308,6 +316,10 @@ class MetricBackfillServiceTest {
         assertThat(result.daysComputed() + result.daysRemaining()).isEqualTo(40);
     }
 
+    /**
+     * Both ends of the window follow the user's zone. At {@code NOW} Auckland is already on the
+     * 15th while Los Angeles is still on the 14th, so the last complete day differs by one.
+     */
     @Test
     void backfillUser_userTimezoneAheadOfUtc_usesUserZoneForDayBoundary() {
         // 2026-03-01T12:00Z is 2026-03-02 01:00 in Auckland, so Auckland's earliest day is
@@ -323,7 +335,10 @@ class MetricBackfillServiceTest {
         BackfillResult losAngeles = service.backfillUser(1L);
 
         assertThat(auckland.coverageFrom()).isEqualTo(LocalDate.of(2026, 3, 2));
+        assertThat(auckland.coverageTo()).isEqualTo(LocalDate.of(2026, 3, 14));
+
         assertThat(losAngeles.coverageFrom()).isEqualTo(LocalDate.of(2026, 3, 1));
+        assertThat(losAngeles.coverageTo()).isEqualTo(LocalDate.of(2026, 3, 13));
     }
 
     @Test
@@ -332,7 +347,9 @@ class MetricBackfillServiceTest {
         when(commitRepository.findEarliestAuthorDate(List.of(7L)))
                 .thenReturn(Optional.of(Instant.parse("2026-03-01T12:00:00Z")));
 
-        assertThat(service.backfillUser(1L).coverageFrom()).isEqualTo(LocalDate.of(2026, 3, 1));
+        BackfillResult result = service.backfillUser(1L);
+        assertThat(result.coverageFrom()).isEqualTo(LocalDate.of(2026, 3, 1));
+        assertThat(result.coverageTo()).isEqualTo(TODAY_UTC.minusDays(1));
     }
 
     @Test
@@ -341,7 +358,9 @@ class MetricBackfillServiceTest {
         when(commitRepository.findEarliestAuthorDate(List.of(7L)))
                 .thenReturn(Optional.of(Instant.parse("2026-03-01T12:00:00Z")));
 
-        assertThat(service.backfillUser(1L).coverageFrom()).isEqualTo(LocalDate.of(2026, 3, 1));
+        BackfillResult result = service.backfillUser(1L);
+        assertThat(result.coverageFrom()).isEqualTo(LocalDate.of(2026, 3, 1));
+        assertThat(result.coverageTo()).isEqualTo(TODAY_UTC.minusDays(1));
     }
 
     @Test
@@ -353,7 +372,7 @@ class MetricBackfillServiceTest {
 
         assertThat(result.daysComputed()).isEqualTo(7);
         assertThat(result.daysRemaining()).isEqualTo(83);
-        verify(metricsService).calculateDailyMetrics(1L, today.minusDays(7), today.minusDays(1));
+        verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(7), TODAY_UTC.minusDays(1));
     }
 
     @Test
@@ -365,7 +384,7 @@ class MetricBackfillServiceTest {
 
         service.backfillUser(1L);
 
-        verify(metricsService).calculateDailyMetrics(1L, today.minusDays(3), today.minusDays(1));
+        verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(3), TODAY_UTC.minusDays(1));
         verifyNoMoreInteractions(metricsService);
     }
 
@@ -420,7 +439,7 @@ class MetricBackfillServiceTest {
         service = newService(60);
         when(commitRepository.findEarliestAuthorDate(List.of(7L)))
                 .thenReturn(Optional.of(rangeStart.atStartOfDay(UTC).toInstant()));
-        for (LocalDate d = rangeStart; !d.isAfter(today.minusDays(1)); d = d.plusDays(1)) {
+        for (LocalDate d = rangeStart; !d.isAfter(TODAY_UTC.minusDays(1)); d = d.plusDays(1)) {
             ledger.add(d);
         }
         for (LocalDate d = holeFrom; !d.isAfter(holeTo); d = d.plusDays(1)) {
@@ -443,7 +462,7 @@ class MetricBackfillServiceTest {
         // behaviour is pinned rather than assumed, and logged at ERROR by the service.
         commitsSpanning(10);
         doThrow(new IllegalStateException("calculator blew up"))
-                .when(metricsService).calculateDailyMetrics(1L, today.minusDays(10), today.minusDays(1));
+                .when(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(10), TODAY_UTC.minusDays(1));
 
         BackfillResult first = service.backfillUser(1L);
         BackfillResult second = service.backfillUser(1L);
@@ -497,7 +516,7 @@ class MetricBackfillServiceTest {
         BackfillResult second = service.backfillUser(1L);
 
         assertThat(second.daysComputed()).isEqualTo(10);
-        verify(metricsService).calculateDailyMetrics(1L, today.minusDays(10), today.minusDays(1));
+        verify(metricsService).calculateDailyMetrics(1L, TODAY_UTC.minusDays(10), TODAY_UTC.minusDays(1));
     }
 
     @Test
@@ -517,15 +536,15 @@ class MetricBackfillServiceTest {
 
         assertThat(result.daysRemaining()).isEqualTo(90);
         assertThat(result.daysComputed()).isZero();
-        assertThat(result.coverageFrom()).isEqualTo(today.minusDays(90));
-        assertThat(result.coverageTo()).isEqualTo(today.minusDays(1));
+        assertThat(result.coverageFrom()).isEqualTo(TODAY_UTC.minusDays(90));
+        assertThat(result.coverageTo()).isEqualTo(TODAY_UTC.minusDays(1));
         verify(metricsService, never()).calculateDailyMetrics(anyLong(), any(), any());
     }
 
     @Test
     void onFirstCollection_clearsCoverageThenBackfills() {
         commitsSpanning(10);
-        ledger.addAll(List.of(today.minusDays(2), today.minusDays(3)));
+        ledger.addAll(List.of(TODAY_UTC.minusDays(2), TODAY_UTC.minusDays(3)));
         doAnswer(inv -> { ledger.clear(); return null; })
                 .when(coverageRepository).deleteByUserId(1L);
 
@@ -534,7 +553,7 @@ class MetricBackfillServiceTest {
         InOrder inOrder = inOrder(coverageRepository, metricsService);
         inOrder.verify(coverageRepository).deleteByUserId(1L);
         inOrder.verify(metricsService).calculateDailyMetrics(
-                1L, today.minusDays(10), today.minusDays(1));
+                1L, TODAY_UTC.minusDays(10), TODAY_UTC.minusDays(1));
     }
 
     @Test

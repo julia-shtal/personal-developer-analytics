@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.ai.service;
 import com.juliashtal.devanalytics.ai.model.AggregatedMetricsContext;
 import com.juliashtal.devanalytics.ai.model.TeamMetricsContext;
 import com.juliashtal.devanalytics.ai.repository.GoalRepository;
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
@@ -16,7 +17,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -51,7 +55,8 @@ class AiContextBuilderServiceTest {
     @BeforeEach
     void setUp() {
         // The resolver is pure computation; a mock would make every assertion vacuous.
-        service = new AiContextBuilderService(metricSnapshotService, new AggregateWindowResolver(), goalRepository);
+        service = new AiContextBuilderService(metricSnapshotService, new AggregateWindowResolver(), goalRepository,
+                new SystemClock(Clock.fixed(Instant.parse("2024-02-01T00:00:00Z"), ZoneOffset.UTC)));
 
         // Base: every query variant returns empty. Tests override the type-scoped variant they need.
         lenient().when(metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(any(), any(), any(), any()))

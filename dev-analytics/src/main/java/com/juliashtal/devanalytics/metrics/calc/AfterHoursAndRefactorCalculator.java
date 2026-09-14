@@ -4,13 +4,13 @@ import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.metrics.model.CommitDetailProjection;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.user.model.UserZone;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Set;
@@ -46,12 +46,7 @@ public class AfterHoursAndRefactorCalculator implements MetricCalculator {
                         ctx.from(), ctx.to());
         if (rows.isEmpty()) return;
 
-        ZoneId zone;
-        try {
-            zone = ZoneId.of(ctx.user().getTimezone() != null ? ctx.user().getTimezone() : "UTC");
-        } catch (Exception e) {
-            zone = ZoneOffset.UTC;
-        }
+        ZoneId zone = UserZone.of(ctx.user());
 
         long total = rows.size();
         long outOfHours = 0;

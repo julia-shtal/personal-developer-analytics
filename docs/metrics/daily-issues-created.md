@@ -24,7 +24,7 @@ FOR each calendar day D in [from, to):
 ```
 
 - **No author filter**: issues are project-level. Both Jira issues and GitHub Issues are collected into the unified `issues` table and counted together.
-- Time window: UTC calendar day boundaries applied to `created_at`.
+- Time window: UTC calendar day boundaries applied to `created_at`. See [timezone.md](timezone.md).
 - Bot exclusion: applied at the project level (issues created by `[bot]` accounts in GitHub are filtered by the `IssueCollector`). Jira automation issues are included unless explicitly excluded by the Jira JQL scope.
 - `repoIds`: the set of `git_repositories` linked to the user's subscriptions. For Jira, the link is through `jira_project_repo_mappings`.
 
