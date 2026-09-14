@@ -37,7 +37,7 @@ pr_first_commit_to_merge_lead_time =
 - Duration: `Duration.between(commits.get(0).getAuthorDate(), pr.getMergedAt()).toHours()` — `commits` is ordered by `authorDate` ascending; index 0 is the earliest.
 - The computed `leadTimeHours` is also persisted on the `GitHubPullRequestEntity` row (`pr.setLeadTimeHours(hours)`) as a denormalized cache.
 - Saved as aggregate shape: `periodFrom` = the ISO week Monday, `periodTo` = that week Sunday.
-- Bot exclusion: `author_login NOT LIKE '%[bot]'`.
+- Bot exclusion: implicit. Attribution matches on the numeric GitHub account ID alone, which no bot account shares with a user, so no bot filter is applied. See [author-attribution.md](author-attribution.md).
 
 ## Edge cases
 

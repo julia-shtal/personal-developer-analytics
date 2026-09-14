@@ -24,7 +24,7 @@ pr_size_complexity_score =
 
 - Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Window: `merged_at >= from` AND `merged_at < to+1`.
-- Bot exclusion: `author_login NOT LIKE '%[bot]'`.
+- Bot exclusion: implicit. Attribution matches on the numeric GitHub account ID alone, which no bot account shares with a user, so no bot filter is applied. See [author-attribution.md](author-attribution.md).
 - `MAX(commits_count, 1)`: guards against squash-merged PRs where `commits_count = 0` (the PR appears as a single synthesised commit after squash). Treating such PRs as 1 commit prevents division by zero and reflects the squash as a single-commit review unit.
 - `additions` and `deletions` are populated during two-phase GitHub stats enrichment. PRs with `stats_status = PENDING` have both values as 0, making `size_score = 0`. These are included in the median, which may skew results toward 0 until enrichment completes.
 - Median calculation: `Collections.sort(values)` then middle element (odd n) or average of two middle elements (even n).

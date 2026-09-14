@@ -44,7 +44,7 @@ This design avoids writing O(window_days) rows per user per recalculation cycle.
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Weekday check applied in the service (`DayOfWeek != SATURDAY && DayOfWeek != SUNDAY`) on the commit's calendar day, not on the user's configured zone: a commit made late on a Sunday evening in a zone ahead of UTC counts toward Monday. Day boundaries are specified in UTC. See [timezone.md](timezone.md).
 - Snapshots have `periodFrom = null`, `periodTo = null` (stored as daily shape, one row per active weekday).
-- Bot exclusion: implicit. A bot holds neither a declared address of the user nor their GitHub account ID, so it cannot satisfy the attribution predicate.
+- Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied in the query. Attribution can match on a declared email address, and a local commit carries no `author_github_id`, so an automation account configured with the user's address would otherwise be attributed to them. See [author-attribution.md](author-attribution.md).
 
 ## Edge cases
 

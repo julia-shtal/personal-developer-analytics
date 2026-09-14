@@ -32,63 +32,6 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     @Query("SELECT MIN(p.createdAt) FROM GitHubPullRequestEntity p WHERE p.repository.id IN :repoIds")
     Optional<Instant> findEarliestCreatedAt(@Param("repoIds") List<Long> repoIds);
 
-    @Query("""
-    select p.repository.id as repoId,
-           p.createdAt     as createdAt,
-           p.mergedAt      as mergedAt
-    from GitHubPullRequestEntity p
-    where p.repository.id IN :repoIds
-      and p.merged = true
-      and p.mergedAt between :from and :to
-    """)
-    List<PrLeadTimeProjection> findMergedLeadTimesByRepoIds(
-            @Param("repoIds") List<Long> repoIds,
-            @Param("from") Instant from,
-            @Param("to") Instant to);
-
-    @Query("""
-    select date(p.createdAt) as day,
-           p.repository.id   as repoId,
-           count(p.id)       as count
-    from GitHubPullRequestEntity p
-    where p.repository.id IN :repoIds
-      and p.createdAt between :from and :to
-    group by date(p.createdAt), p.repository.id
-    order by day, repoId
-    """)
-    List<DailyCountProjection> aggregatePrCreatedDailyByRepoIds(
-            @Param("repoIds") List<Long> repoIds,
-            @Param("from") Instant from,
-            @Param("to") Instant to);
-
-    @Query("""
-    select date(p.mergedAt) as day,
-           p.repository.id  as repoId,
-           count(p.id)      as count
-    from GitHubPullRequestEntity p
-    where p.repository.id IN :repoIds
-      and p.merged = true
-      and p.mergedAt between :from and :to
-    group by date(p.mergedAt), p.repository.id
-    order by day, repoId
-    """)
-    List<DailyCountProjection> aggregatePrMergedDailyByRepoIds(
-            @Param("repoIds") List<Long> repoIds,
-            @Param("from") Instant from,
-            @Param("to") Instant to);
-
-    @Query("""
-    select p
-    from GitHubPullRequestEntity p
-    where p.repository.id IN :repoIds
-      and p.merged = true
-      and p.mergedAt between :from and :to
-    """)
-    List<GitHubPullRequestEntity> findMergedPrsByRepoIds(
-            @Param("repoIds") List<Long> repoIds,
-            @Param("from") Instant from,
-            @Param("to") Instant to);
-
     // -------------------------------------------------------------------------
     // Author-scoped variants: filter by explicit repo IDs + the author's numeric GitHub ID.
     //

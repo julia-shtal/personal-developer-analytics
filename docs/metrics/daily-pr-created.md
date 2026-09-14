@@ -22,11 +22,10 @@ FOR each calendar day D in [from, to):
       AND author_github_id = user.githubUserId -- attribution guard
       AND created_at   >= D 00:00:00 UTC
       AND created_at    < D+1 00:00:00 UTC
-      AND author_login NOT LIKE '%[bot]'      -- bot exclusion
 ```
 
 - Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
-- Bot exclusion: `author_login` ending with `[bot]` excluded.
+- Bot exclusion: implicit. Attribution matches on the numeric GitHub account ID alone, which no bot account shares with a user, so no bot filter is applied. See [author-attribution.md](author-attribution.md).
 - Includes PRs in any state (open, closed, merged) as long as `created_at` falls within the window. A PR that is later rejected still represents initiated work.
 - Time window: UTC calendar day boundaries applied to `created_at`. See [timezone.md](timezone.md).
 

@@ -24,7 +24,8 @@ FOR each calendar day D in [from, to):
       AND closed_at  < D+1 00:00:00 UTC
 ```
 
-- **No author filter**: project-level metric; all closures by any team member are counted.
+- Attribution: GitHub issues by `assignee_github_id = user.githubUserId`; Jira issues by `assignee_account_id = user.jiraAccountId`. Closures are credited to the assignee, not to whoever performed the close. See [author-attribution.md](author-attribution.md).
+- Bot exclusion: implicit. Attribution matches on the numeric GitHub account ID alone, which no bot account shares with a user, so no bot filter is applied. See [author-attribution.md](author-attribution.md).
 - Time window: UTC calendar day boundaries applied to `closed_at`. See [timezone.md](timezone.md).
 - Only issues with `closed_at IS NOT NULL` are included.
 - Same `repoIds` scope and Jira-linking rules as `DAILY_ISSUES_CREATED`.

@@ -38,23 +38,6 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     Optional<Instant> findEarliestAuthorDate(@Param("repoIds") List<Long> repoIds);
 
     @Query("""
-    select date(c.authorDate) as day,
-           r.id               as repoId,
-           sum(c.additions)   as additions,
-           sum(c.deletions)   as deletions
-    from GitCommitEntity c
-    join c.repository r
-    where r.id IN :repoIds
-      and c.authorDate between :from and :to
-    group by date(c.authorDate), r.id
-    order by day, repoId
-    """)
-    List<DailyChurnProjection> aggregateChurnDailyByRepoIds(
-            @Param("repoIds") List<Long> repoIds,
-            @Param("from") Instant from,
-            @Param("to") Instant to);
-
-    @Query("""
     select c
     from GitCommitEntity c
     where c.repository = :repository
@@ -62,23 +45,6 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     order by c.authorDate asc
     """)
     List<GitCommitEntity> findCommitsForPr(GitRepositoryEntity repository, int prNumber);
-
-    @Query("""
-    select date(c.authorDate) as day,
-           r.id               as repoId,
-           count(c.id)        as commitsCount,
-           avg(c.additions + c.deletions) as avgSize
-    from GitCommitEntity c
-    join c.repository r
-    where r.id IN :repoIds
-      and c.authorDate between :from and :to
-    group by date(c.authorDate), r.id
-    order by day, repoId
-    """)
-    List<DailyCommitsProjection> aggregateCommitsDailyByRepoIds(
-            @Param("repoIds") List<Long> repoIds,
-            @Param("from") Instant from,
-            @Param("to") Instant to);
 
     // -------------------------------------------------------------------------
     // Author-scoped variants: filter by explicit repo IDs + the user's AuthorIdentity.
@@ -88,6 +54,10 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     // made with an address the user never registered. Both branches select the same row when
     // both match, so a commit is never double-counted, and a null githubUserId simply makes
     // its branch unsatisfiable so the email set carries the match alone.
+    //
+    // The bot filter is needed because of that email branch: an automation account configured
+    // with the user's own address satisfies it. No null guard is needed on author_name; the
+    // column is NOT NULL.
     // -------------------------------------------------------------------------
 
     @Query("""
@@ -99,6 +69,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     join c.repository r
     where r.id IN :repoIds
       and (c.authorGithubId = :githubUserId or lower(c.authorEmail) in :emails)
+      and c.authorName not like '%[bot]%'
       and c.authorDate between :from and :to
     group by date(c.authorDate), r.id
     order by day, repoId
@@ -119,6 +90,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     join c.repository r
     where r.id IN :repoIds
       and (c.authorGithubId = :githubUserId or lower(c.authorEmail) in :emails)
+      and c.authorName not like '%[bot]%'
       and c.authorDate between :from and :to
     group by date(c.authorDate), r.id
     order by day, repoId
@@ -156,6 +128,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     from GitCommitEntity c
     where c.repository.id IN :repoIds
       and (c.authorGithubId = :githubUserId or lower(c.authorEmail) in :emails)
+      and c.authorName not like '%[bot]%'
       and c.authorDate between :from and :to
     """)
     List<CommitDetailProjection> findCommitDetailsByRepoIdsAndIdentity(
@@ -166,7 +139,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
             @Param("to") Instant to);
 
     /**
-     * Total commit count per repo (all authors) in a window.
+     * Commit count per repo for every human author in a window.
      * Used as the denominator for knowledge silo score.
      */
     @Query("""
@@ -174,6 +147,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
            count(c.id)     as count
     from GitCommitEntity c
     where c.repository.id IN :repoIds
+      and c.authorName not like '%[bot]%'
       and c.authorDate between :from and :to
     group by c.repository.id
     """)
@@ -192,6 +166,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     from GitCommitEntity c
     where c.repository.id IN :repoIds
       and (c.authorGithubId = :githubUserId or lower(c.authorEmail) in :emails)
+      and c.authorName not like '%[bot]%'
       and c.authorDate between :from and :to
     group by c.repository.id
     """)
