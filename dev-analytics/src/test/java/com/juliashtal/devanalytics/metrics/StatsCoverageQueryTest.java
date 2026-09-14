@@ -12,9 +12,8 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -121,6 +120,32 @@ class StatsCoverageQueryTest {
         assertThat(rows.stream().mapToLong(StatsCoverageProjection::getRecordCount).sum()).isEqualTo(3);
     }
 
+    // -------------------------------------------------------------------------
+    // Window boundary. StatsCoverageService builds the same exclusive bound as MetricsService, so
+    // the coverage counts must describe the same population the metrics were computed over.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void countByStatsStateInRange_commitAtWindowEnd_excluded() {
+        long inside = commitRecordsInRange();
+        assertThat(inside).isEqualTo(7);
+
+        insertCommit(TO, "COMPLETE", null);
+
+        assertThat(commitRecordsInRange()).isEqualTo(inside);
+    }
+
+    @Test
+    void countByStatsStateInRange_pullRequestAtWindowEnd_excluded() {
+        insertPullRequest(WHEN, "COMPLETE", null);
+        long inside = prRecordsInRange();
+        assertThat(inside).isPositive();
+
+        insertPullRequest(TO, "COMPLETE", null);
+
+        assertThat(prRecordsInRange()).isEqualTo(inside);
+    }
+
     @Test
     void skipReasonIndex_isUsedForTheSkippedBreakdown() {
         // Pins the partial index as reachable, not merely present: a sequential scan here would
@@ -140,6 +165,18 @@ class StatsCoverageQueryTest {
         assertThat(plan).contains("ix_git_commits_skip_reason");
     }
 
+    /** Every commit record the coverage query sees in the window, across all groups. */
+    private long commitRecordsInRange() {
+        return commitRepository.countByStatsStateInRange(List.of(repoId), FROM, TO)
+                .stream().mapToLong(StatsCoverageProjection::getRecordCount).sum();
+    }
+
+    /** Every PR record the coverage query sees in the window, across all groups. */
+    private long prRecordsInRange() {
+        return pullRequestRepository.countByStatsStateInRange(List.of(repoId), FROM, TO)
+                .stream().mapToLong(StatsCoverageProjection::getRecordCount).sum();
+    }
+
     private long countOf(List<StatsCoverageProjection> rows, StatsStatus status, StatsSkipReason reason) {
         return rows.stream()
                 .filter(r -> r.getStatsStatus() == status && r.getStatsSkipReason() == reason)
@@ -149,8 +186,8 @@ class StatsCoverageQueryTest {
 
     // -------------------------------------------------------------------------
     // Fixtures. Inserted with JdbcTemplate so the test states the exact column values the
-    // queries read. author_date and created_at are TIMESTAMP WITHOUT TIME ZONE, so Instant
-    // fixtures are bound as UTC LocalDateTime rather than through the JVM zone.
+    // queries read. author_date and created_at are TIMESTAMPTZ, so Instant fixtures bind as an
+    // absolute Timestamp rather than a wall clock the session zone would reinterpret.
     // -------------------------------------------------------------------------
 
     private void insertCommit(Instant when, String statsStatus, String skipReason) {
@@ -160,9 +197,14 @@ class StatsCoverageQueryTest {
                         + "VALUES (?, ?, 'Fixture', 'fixture@x.org', ?, 'msg', 5, 5, ?, ?)",
                 repoId,
                 "coverage-" + System.nanoTime() + "-" + (++seq),
-                LocalDateTime.ofInstant(when, ZoneOffset.UTC),
+                Timestamp.from(when),
                 statsStatus,
                 skipReason);
+    }
+
+    /** Allocates its own PR number, for tests that do not care which one it gets. */
+    private void insertPullRequest(Instant when, String statsStatus, String skipReason) {
+        insertPullRequest(100 + (++seq), when, statsStatus, skipReason);
     }
 
     private void insertPullRequest(int number, Instant when, String statsStatus, String skipReason) {
@@ -172,7 +214,7 @@ class StatsCoverageQueryTest {
                         + "VALUES (?, ?, 'Fixture PR', 'closed', false, ?, ?, ?)",
                 repoId,
                 number,
-                LocalDateTime.ofInstant(when, ZoneOffset.UTC),
+                Timestamp.from(when),
                 statsStatus,
                 skipReason);
     }

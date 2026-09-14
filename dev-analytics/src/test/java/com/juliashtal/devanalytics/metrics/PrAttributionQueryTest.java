@@ -10,9 +10,8 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,8 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>Attribution compares numeric account ids, so a rename cannot split one person's history and
  * differing spellings cannot defeat the self-review exclusion. The timestamp columns are
- * {@code TIMESTAMP WITHOUT TIME ZONE}, so fixtures bind UTC {@link LocalDateTime} — see
- * {@code EarliestActivityQueryTest}.</p>
+ * {@code TIMESTAMPTZ}, so fixtures bind an absolute {@link java.sql.Timestamp} rather than a wall
+ * clock the session zone would reinterpret.</p>
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -112,6 +111,76 @@ class PrAttributionQueryTest {
     }
 
     // -------------------------------------------------------------------------
+    // Window boundary. `to` is exclusive, so a PR stamped exactly on it belongs to the next
+    // window. The merged queries need their own in-window row: seed() merges nothing.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void aggregatePrCreatedDailyByRepoIdsAndAuthorGithubId_recordAtWindowEnd_excluded() {
+        long inside = prsCreated();
+        assertThat(inside).isPositive();
+
+        insertPr(10, STORED_LOGIN, AUTHOR_ID, TO);
+
+        assertThat(prsCreated()).isEqualTo(inside);
+    }
+
+    @Test
+    void aggregatePrMergedDailyByRepoIdsAndAuthorGithubId_recordAtWindowEnd_excluded() {
+        insertMergedPr(11, AUTHOR_ID, WHEN, WHEN);
+        long inside = prsMerged();
+        assertThat(inside).isPositive();
+
+        insertMergedPr(12, AUTHOR_ID, WHEN, TO);
+
+        assertThat(prsMerged()).isEqualTo(inside);
+    }
+
+    @Test
+    void findMergedLeadTimesByRepoIdsAndAuthorGithubId_recordAtWindowEnd_excluded() {
+        insertMergedPr(11, AUTHOR_ID, WHEN, WHEN);
+        long inside = mergedLeadTimeRows();
+        assertThat(inside).isPositive();
+
+        insertMergedPr(12, AUTHOR_ID, WHEN, TO);
+
+        assertThat(mergedLeadTimeRows()).isEqualTo(inside);
+    }
+
+    @Test
+    void findMergedPrsByRepoIdsAndAuthorGithubId_recordAtWindowEnd_excluded() {
+        insertMergedPr(11, AUTHOR_ID, WHEN, WHEN);
+        int inside = prRepository
+                .findMergedPrsByRepoIdsAndAuthorGithubId(List.of(repoId), AUTHOR_ID, FROM, TO).size();
+        assertThat(inside).isPositive();
+
+        insertMergedPr(12, AUTHOR_ID, WHEN, TO);
+
+        assertThat(prRepository.findMergedPrsByRepoIdsAndAuthorGithubId(List.of(repoId), AUTHOR_ID, FROM, TO))
+                .hasSize(inside);
+    }
+
+    /** PRs the author created inside the window, summed across the per-day rows. */
+    private long prsCreated() {
+        return prRepository.aggregatePrCreatedDailyByRepoIdsAndAuthorGithubId(
+                        List.of(repoId), AUTHOR_ID, FROM, TO)
+                .stream().mapToLong(DailyCountProjection::getCount).sum();
+    }
+
+    /** PRs the author merged inside the window, summed across the per-day rows. */
+    private long prsMerged() {
+        return prRepository.aggregatePrMergedDailyByRepoIdsAndAuthorGithubId(
+                        List.of(repoId), AUTHOR_ID, FROM, TO)
+                .stream().mapToLong(DailyCountProjection::getCount).sum();
+    }
+
+    /** Lead-time rows for the author's merged PRs inside the window. */
+    private long mergedLeadTimeRows() {
+        return prRepository.findMergedLeadTimesByRepoIdsAndAuthorGithubId(
+                List.of(repoId), AUTHOR_ID, FROM, TO).size();
+    }
+
+    // -------------------------------------------------------------------------
     // Fixtures
     // -------------------------------------------------------------------------
 
@@ -139,12 +208,27 @@ class PrAttributionQueryTest {
     }
 
     private Long insertPr(int number, String authorLogin, Long authorGithubId) {
+        return insertPr(number, authorLogin, authorGithubId, WHEN);
+    }
+
+    /** Overload for the window cases, where created_at is the discriminating column. */
+    private Long insertPr(int number, String authorLogin, Long authorGithubId, Instant createdAt) {
         return jdbc.queryForObject(
                 "INSERT INTO github_pull_requests (repository_id, number, title, author_login, "
                         + "author_github_id, state, merged, created_at) "
                         + "VALUES (?, ?, 'PR', ?, ?, 'closed', false, ?) RETURNING id",
                 Long.class, repoId, number, authorLogin, authorGithubId,
-                LocalDateTime.ofInstant(WHEN, ZoneOffset.UTC));
+                Timestamp.from(createdAt));
+    }
+
+    /** Merged PRs: the three lead-time and merge queries all filter on merged = true. */
+    private Long insertMergedPr(int number, Long authorGithubId, Instant createdAt, Instant mergedAt) {
+        return jdbc.queryForObject(
+                "INSERT INTO github_pull_requests (repository_id, number, title, author_login, "
+                        + "author_github_id, state, merged, created_at, merged_at) "
+                        + "VALUES (?, ?, 'PR', ?, ?, 'closed', true, ?, ?) RETURNING id",
+                Long.class, repoId, number, STORED_LOGIN, authorGithubId,
+                Timestamp.from(createdAt), Timestamp.from(mergedAt));
     }
 
     private void insertReview(Long prId, String reviewerLogin, Long reviewerGithubId) {
@@ -152,6 +236,6 @@ class PrAttributionQueryTest {
                 "INSERT INTO github_pr_reviews (pr_id, reviewer_login, reviewer_github_id, state, submitted_at) "
                         + "VALUES (?, ?, ?, 'APPROVED', ?)",
                 prId, reviewerLogin, reviewerGithubId,
-                LocalDateTime.ofInstant(WHEN, ZoneOffset.UTC));
+                Timestamp.from(WHEN));
     }
 }

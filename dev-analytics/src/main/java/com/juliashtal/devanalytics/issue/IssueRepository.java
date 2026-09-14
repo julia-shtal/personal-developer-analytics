@@ -43,6 +43,9 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     // Native SQL: COALESCE(i.repository_id, rm.repository_id) routes GitHub and Jira issues
     // through one repo-scoped filter, which JPQL cannot express across nullable FKs. Nullable
     // bind parameters are CAST explicitly, since PostgreSQL cannot type a bare NULL.
+    //
+    // Windows are half-open: `from` inclusive, `to` exclusive, so adjacent windows neither
+    // double-count a record nor drop one. Callers pass toDate + 1 at midnight UTC.
     // -------------------------------------------------------------------------
 
     @Query(value = """
@@ -54,7 +57,8 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
     WHERE  COALESCE(i.repository_id, rm.repository_id) IN (:repoIds)
       AND  ( (i.source = 'GITHUB' AND i.creator_github_id  = CAST(:githubUserId AS bigint))
           OR   (i.source = 'JIRA'   AND i.reporter_account_id = CAST(:jiraAccountId AS text)) )
-      AND  i.created_at BETWEEN :from AND :to
+      AND  i.created_at >= :from
+      AND  i.created_at  < :to
     GROUP  BY date(i.created_at), COALESCE(i.repository_id, rm.repository_id)
     ORDER  BY day, repoId
     """, nativeQuery = true)
@@ -75,7 +79,8 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
       AND  ( (i.source = 'GITHUB' AND i.assignee_github_id  = CAST(:githubUserId AS bigint))
           OR   (i.source = 'JIRA'   AND i.assignee_account_id = CAST(:jiraAccountId AS text)) )
       AND  i.closed_at IS NOT NULL
-      AND  i.closed_at BETWEEN :from AND :to
+      AND  i.closed_at >= :from
+      AND  i.closed_at  < :to
     GROUP  BY date(i.closed_at), COALESCE(i.repository_id, rm.repository_id)
     ORDER  BY day, repoId
     """, nativeQuery = true)
@@ -97,7 +102,8 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
           OR   (i.source = 'JIRA'   AND i.assignee_account_id = CAST(:jiraAccountId AS text)) )
       AND  i.created_at IS NOT NULL
       AND  i.closed_at IS NOT NULL
-      AND  i.closed_at BETWEEN :from AND :to
+      AND  i.closed_at >= :from
+      AND  i.closed_at  < :to
     """, nativeQuery = true)
     List<IssueLeadTimeProjection> findIssueLeadTimesByRepoIdsAndIdentity(
             @Param("repoIds") List<Long> repoIds,

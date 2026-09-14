@@ -37,6 +37,9 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     //
     // Matched on the numeric ID: a login is free text, case-sensitive and re-assignable,
     // so authorLogin survives as a display value only.
+    //
+    // Windows are half-open: `from` inclusive, `to` exclusive, so adjacent windows neither
+    // double-count a record nor drop one. Callers pass toDate + 1 at midnight UTC.
     // -------------------------------------------------------------------------
 
     @Query("""
@@ -46,7 +49,8 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     from GitHubPullRequestEntity p
     where p.repository.id IN :repoIds
       and p.authorGithubId = :githubUserId
-      and p.createdAt between :from and :to
+      and p.createdAt >= :from
+      and p.createdAt  < :to
     group by date(p.createdAt), p.repository.id
     order by day, repoId
     """)
@@ -64,7 +68,8 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     where p.repository.id IN :repoIds
       and p.authorGithubId = :githubUserId
       and p.merged = true
-      and p.mergedAt between :from and :to
+      and p.mergedAt >= :from
+      and p.mergedAt  < :to
     group by date(p.mergedAt), p.repository.id
     order by day, repoId
     """)
@@ -82,7 +87,8 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     where p.repository.id IN :repoIds
       and p.authorGithubId = :githubUserId
       and p.merged = true
-      and p.mergedAt between :from and :to
+      and p.mergedAt >= :from
+      and p.mergedAt  < :to
     """)
     List<PrLeadTimeProjection> findMergedLeadTimesByRepoIdsAndAuthorGithubId(
             @Param("repoIds") List<Long> repoIds,
@@ -96,7 +102,8 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
     where p.repository.id IN :repoIds
       and p.authorGithubId = :githubUserId
       and p.merged = true
-      and p.mergedAt between :from and :to
+      and p.mergedAt >= :from
+      and p.mergedAt  < :to
     """)
     List<GitHubPullRequestEntity> findMergedPrsByRepoIdsAndAuthorGithubId(
             @Param("repoIds") List<Long> repoIds,
@@ -156,7 +163,8 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
            count(p)          as recordCount
     from GitHubPullRequestEntity p
     where p.repository.id in :repoIds
-      and p.createdAt between :from and :to
+      and p.createdAt >= :from
+      and p.createdAt  < :to
     group by p.statsStatus, p.statsSkipReason
     """)
     List<StatsCoverageProjection> countByStatsStateInRange(
