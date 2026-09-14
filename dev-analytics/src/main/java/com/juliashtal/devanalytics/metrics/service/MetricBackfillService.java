@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics.service;
 
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.issue.IssueRepository;
@@ -7,6 +8,7 @@ import com.juliashtal.devanalytics.metrics.MetricCoverageRepository;
 import com.juliashtal.devanalytics.metrics.model.BackfillProperties;
 import com.juliashtal.devanalytics.metrics.model.BackfillResult;
 import com.juliashtal.devanalytics.user.model.User;
+import com.juliashtal.devanalytics.user.model.UserZone;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -52,6 +53,7 @@ public class MetricBackfillService implements MetricBackfillTrigger {
     private final UserMetricsPurger metricsPurger;
     private final MetricsService metricsService;
     private final BackfillProperties properties;
+    private final SystemClock systemClock;
 
     /**
      * Users with a backfill pass running. Guards the read-then-write snapshot save, which has no
@@ -200,9 +202,9 @@ public class MetricBackfillService implements MetricBackfillTrigger {
             return new Coverage(null, null, List.of());
         }
 
-        ZoneId zone = zoneOf(user);
+        ZoneId zone = UserZone.of(user);
         LocalDate from = LocalDate.ofInstant(earliest.get(), zone);
-        LocalDate to = LocalDate.now(zone).minusDays(1);
+        LocalDate to = systemClock.today(zone).minusDays(1);
         if (from.isAfter(to)) {
             return new Coverage(null, null, List.of());
         }
@@ -225,24 +227,6 @@ public class MetricBackfillService implements MetricBackfillTrigger {
                         issueRepository.findEarliestCreatedAt(repoIds))
                 .flatMap(Optional::stream)
                 .min(Instant::compareTo);
-    }
-
-    /**
-     * Day boundaries follow the user's own zone, matching the after-hours calculator. An unset or
-     * unparseable zone falls back to UTC rather than failing the run.
-     */
-    private static ZoneId zoneOf(User user) {
-        String timezone = user.getTimezone();
-        if (timezone == null || timezone.isBlank()) {
-            return ZoneOffset.UTC;
-        }
-        try {
-            return ZoneId.of(timezone);
-        } catch (RuntimeException e) {
-            log.warn("Unparseable timezone '{}' for userId={}, falling back to UTC",
-                    timezone, user.getId());
-            return ZoneOffset.UTC;
-        }
     }
 
     /** Splits a descending day list into contiguous blocks, newest first, one calculator pass each. */

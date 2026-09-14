@@ -5,6 +5,7 @@ import com.juliashtal.devanalytics.ai.model.GoalEntity;
 import com.juliashtal.devanalytics.ai.model.GoalSummary;
 import com.juliashtal.devanalytics.ai.model.TeamMetricsContext;
 import com.juliashtal.devanalytics.ai.repository.GoalRepository;
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
@@ -66,6 +67,7 @@ public class AiContextBuilderService {
     private final MetricSnapshotService metricSnapshotService;
     private final AggregateWindowResolver aggregateWindowResolver;
     private final GoalRepository goalRepository;
+    private final SystemClock systemClock;
 
     public AggregatedMetricsContext buildPersonalContext(User user, LocalDate from, LocalDate to,
                                                          GitRepositoryEntity repo) {
@@ -93,7 +95,7 @@ public class AiContextBuilderService {
 
         // Attach active goals — target date >= today so past-due goals are excluded
         List<GoalEntity> activeGoalEntities =
-                goalRepository.findByUser_IdAndTargetDateGreaterThanEqual(user.getId(), LocalDate.now());
+                goalRepository.findByUser_IdAndTargetDateGreaterThanEqual(user.getId(), systemClock.today());
 
         List<GoalSummary> goalSummaries = activeGoalEntities.stream().map(goal -> {
             MetricType type;

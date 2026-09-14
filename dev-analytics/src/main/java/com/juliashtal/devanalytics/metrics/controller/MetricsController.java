@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics.controller;
 
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.exception.BadRequestException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
@@ -12,6 +13,7 @@ import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.metrics.service.StatsCoverageService;
 import com.juliashtal.devanalytics.security.CheckHelper;
 import com.juliashtal.devanalytics.user.model.User;
+import com.juliashtal.devanalytics.user.model.UserZone;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -44,6 +46,7 @@ public class MetricsController {
     private final CheckHelper checkHelper;
     private final MetricBackfillService metricBackfillService;
     private final StatsCoverageService statsCoverageService;
+    private final SystemClock systemClock;
 
     // =========================================================================
     // Personal endpoints — team IS NULL snapshots only
@@ -315,8 +318,11 @@ public class MetricsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         if (from.isAfter(to)) throw new BadRequestException("'from' must not be after 'to'");
-        if (to.isAfter(LocalDate.now().minusDays(1))) throw new BadRequestException("Cannot backfill future dates");
         User user = checkHelper.currentUser();
+        // The last complete day is the requester's, not UTC's, so this guard and the nightly
+        // backfill window agree on which day has finished.
+        LocalDate lastCompleteDay = systemClock.today(UserZone.of(user)).minusDays(1);
+        if (to.isAfter(lastCompleteDay)) throw new BadRequestException("Cannot backfill future dates");
         metricsService.calculateDailyMetrics(user.getId(), from, to);
         return ResponseEntity.accepted().build();
     }

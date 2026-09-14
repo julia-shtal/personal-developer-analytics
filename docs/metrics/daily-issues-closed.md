@@ -25,7 +25,7 @@ FOR each calendar day D in [from, to):
 ```
 
 - **No author filter**: project-level metric; all closures by any team member are counted.
-- Time window: UTC calendar day boundaries applied to `closed_at`.
+- Time window: UTC calendar day boundaries applied to `closed_at`. See [timezone.md](timezone.md).
 - Only issues with `closed_at IS NOT NULL` are included.
 - Same `repoIds` scope and Jira-linking rules as `DAILY_ISSUES_CREATED`.
 

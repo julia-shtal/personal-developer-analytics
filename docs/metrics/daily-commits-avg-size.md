@@ -26,6 +26,7 @@ FOR each calendar day D in [from, to):
       AND author_name NOT LIKE '%[bot]%'
 ```
 
+- Time window: calendar day boundaries in UTC. See [timezone.md](timezone.md).
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name LIKE '%[bot]%'` excluded.
 - The query (`aggregateCommitsDailyByRepoIdsAndAuthorEmail`) returns `AVG(c.additions + c.deletions)` alongside the daily commit count; a single DB round-trip produces both `DAILY_COMMITS_COUNT` and `DAILY_COMMITS_AVG_SIZE`.

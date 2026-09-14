@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics;
 
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.metrics.controller.MetricsController;
 import com.juliashtal.devanalytics.metrics.model.MetricSnapshot;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
@@ -42,7 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   - Median metrics (PR_LEAD_TIME_HOURS_MEDIAN): median of per-repo values, not arbitrary pick.
  */
 @WebMvcTest(MetricsController.class)
-@Import(AggregateWindowResolver.class)   // pure computation — a mock would defeat the assertions
+@Import({AggregateWindowResolver.class, SystemClock.class})   // pure computation — a mock would defeat the assertions
 @AutoConfigureMockMvc(addFilters = false)
 class MetricsAggregationTest {
 

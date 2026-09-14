@@ -25,6 +25,7 @@ FOR each calendar day D in [from, to):
       ELSE 0.0                             -- denominator guard; no snapshot saved when 0 commits
 ```
 
+- Time window: calendar day boundaries in UTC. See [timezone.md](timezone.md).
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`.
 - Denominator guard: if `total_changes = 0` (no commits or all enrichment still PENDING), no snapshot is saved for that day.

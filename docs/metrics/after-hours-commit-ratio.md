@@ -26,7 +26,7 @@ is_after_hours(author_date, timezone):
 ```
 
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
-- Timezone: `ZoneId.of(user.timezone)` — falls back to `ZoneOffset.UTC` on parse failure.
+- Timezone: resolved once by `UserZone.of(user)` — falls back to `ZoneOffset.UTC` on parse failure. This is the attribution clock; see [timezone.md](timezone.md).
 - Business hours definition: 09:00 (inclusive) to 18:00 (exclusive), Monday through Friday.
 - Denominator: all commits by the user in the window, including after-hours ones. No denominator guard for zero-commits: if `rows.isEmpty()`, the method returns early and no snapshot is saved.
 - Bot exclusion: implicit. A bot holds neither a declared address of the user nor their GitHub account ID, so it cannot satisfy the attribution predicate.
@@ -35,8 +35,9 @@ is_after_hours(author_date, timezone):
 
 ## Edge cases
 
-- **`user.timezone` is null or invalid**: falls back to `ZoneOffset.UTC`. Users should set their timezone in Settings for accurate results.
+- **`user.timezone` is invalid**: falls back to `ZoneOffset.UTC`, with a warning logged. The column is `NOT NULL DEFAULT 'Europe/Berlin'`, so a user who never opens Settings is classified in Berlin's working hours rather than UTC — the fallback is reached only by an unparseable value. Users outside that zone should set their timezone for accurate results.
 - **No commits in window**: method returns early; no snapshot saved.
+- **Timezone changed after computation**: stored snapshots are not recomputed, so a series can contain days classified under two different zones. See [timezone.md](timezone.md).
 - **Commits spanning timezone DST transitions**: `ZonedDateTime` handles DST correctly — Java's `ZoneId` applies the correct offset for each timestamp.
 - **Developers in non-standard time zones**: the 09:00–18:00 window is fixed; it does not adapt to local customs (e.g. a developer in a culture with different business hours). This is a known limitation.
 

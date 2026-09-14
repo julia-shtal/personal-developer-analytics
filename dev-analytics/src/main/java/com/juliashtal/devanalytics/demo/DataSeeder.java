@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.demo;
 
+import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
@@ -49,6 +50,7 @@ public class DataSeeder implements ApplicationRunner {
     private final UserRepoRegistrationRepository registrationRepo;
     private final MetricSnapshotWriter           metricSnapshotWriter;
     private final PasswordEncoder                encoder;
+    private final SystemClock                    systemClock;
 
     @Override
     @Transactional
@@ -128,7 +130,7 @@ public class DataSeeder implements ApplicationRunner {
      * once the demo user exists.</p>
      */
     private void seedMetrics(User user, User teammate, Team team, GitRepositoryEntity repo) {
-        LocalDate lastCompleteWeekStart = LocalDate.now().with(DayOfWeek.MONDAY).minusWeeks(1);
+        LocalDate lastCompleteWeekStart = systemClock.today().with(DayOfWeek.MONDAY).minusWeeks(1);
 
         for (int w = 0; w < WEEKS; w++) {
             LocalDate weekStart = lastCompleteWeekStart.minusWeeks(WEEKS - 1 - w);
