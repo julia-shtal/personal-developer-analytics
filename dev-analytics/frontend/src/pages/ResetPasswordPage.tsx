@@ -2,10 +2,11 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '@/context/ThemeContext';
 import { Logo } from '@/components/brand/Logo';
-import { APP_VERSION } from '@/config/branding';
+import { useAppVersion } from '@/hooks/useAppVersion';
 import api from '@/lib/api';
 
 export function ResetPasswordPage() {
+  const appVersion = useAppVersion();
   const { logo } = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -131,7 +132,7 @@ export function ResetPasswordPage() {
         </div>
 
         <div className="t-label" style={{ fontSize: 10, marginTop: 32 }}>
-          dev·analytics · {APP_VERSION} · self-hosted
+          dev·analytics{appVersion ? ` · ${appVersion}` : ''} · self-hosted
         </div>
       </div>
     </div>

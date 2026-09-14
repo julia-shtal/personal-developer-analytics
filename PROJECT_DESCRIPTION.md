@@ -2006,7 +2006,7 @@ cd frontend && npm run build
 
 # Run JAR
 java -DJWT_SECRET=<hex> -DSMTP_PASSWORD=<pass> \
-     -jar target/dev-analytics-0.0.1-SNAPSHOT.jar
+     -jar target/dev-analytics-1.0.0.jar
 ```
 
 Health: `GET /actuator/health` (no auth required). App: `http://localhost:8080`.

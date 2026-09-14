@@ -16,4 +16,3 @@ import type { LogoVariant } from '@/lib/theme';
  * constant below is the application's shipping default.
  */
 export const ACTIVE_LOGO: LogoVariant = 'pulse';
-export const APP_VERSION = 'v 0.4.1';

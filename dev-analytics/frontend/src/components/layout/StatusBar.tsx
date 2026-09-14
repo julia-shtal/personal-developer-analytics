@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { datasourcesApi } from '@/api/datasources';
 import { useTheme } from '@/context/ThemeContext';
-import { APP_VERSION } from '@/config/branding';
+import { useAppVersion } from '@/hooks/useAppVersion';
 import type { DataSourceConfig } from '@/types';
 
 function timeSince(iso: string | undefined): string | null {
@@ -18,6 +18,7 @@ function timeSince(iso: string | undefined): string | null {
 }
 
 export function StatusBar() {
+  const appVersion = useAppVersion();
   const { showStatusBar } = useTheme();
   const { pathname } = useLocation();
 
@@ -67,8 +68,12 @@ export function StatusBar() {
       <span>view: {view}</span>
       <span className="sep">│</span>
       <span>tz: {tz}</span>
-      <span className="sep">│</span>
-      <span>build {APP_VERSION}</span>
+      {appVersion && (
+        <>
+          <span className="sep">│</span>
+          <span>build {appVersion}</span>
+        </>
+      )}
     </div>
   );
 }

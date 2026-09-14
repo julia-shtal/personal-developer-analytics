@@ -6,7 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Logo } from '@/components/brand/Logo';
 import { Chip } from '@/components/ui/Chip';
 import { AI, Jira, Folder, MergeFreq, Github } from '@/components/icons';
-import { APP_VERSION } from '@/config/branding';
+import { useAppVersion } from '@/hooks/useAppVersion';
 
 type MockSource = { name: string; sync: string; icon: ReactNode; color: string };
 type MockMember = { initials: string; color: string; name: string; v: number };
@@ -24,6 +24,7 @@ const PREVIEW_MEMBERS: MockMember[] = [
 ];
 
 export function LoginPage() {
+  const appVersion = useAppVersion();
   const { login } = useAuth();
   const { logo } = useTheme();
   const navigate = useNavigate();
@@ -136,7 +137,7 @@ export function LoginPage() {
         </div>
 
         <div className="t-label" style={{ fontSize: 10 }}>
-          dev·analytics · {APP_VERSION} · self-hosted
+          dev·analytics{appVersion ? ` · ${appVersion}` : ''} · self-hosted
         </div>
       </div>
 
