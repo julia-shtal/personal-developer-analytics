@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.metrics.calc;
 
 import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.metrics.model.DailyCommitsProjection;
+import com.juliashtal.devanalytics.metrics.model.RepoCountProjection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -114,11 +115,96 @@ class CommitAttributionQueryTest {
         assertThat(commitsFor(999L, Set.of("nobody@x.org"))).isZero();
     }
 
+    @Test
+    void aggregateCommitsDailyByRepoIdsAndIdentity_botCommitWithUserDeclaredEmail_isExcluded() {
+        // A release workflow configured with the user's own address. The email branch of the
+        // attribution predicate matches it; only the bot filter keeps it out.
+        insertCommit("c-bot-as-a", "github-actions[bot]", A_EMAIL, null);
+
+        assertThat(commitsFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(2);
+    }
+
+    @Test
+    void aggregateCommitsDailyByRepoIdsAndIdentity_commitWithBlankAuthorName_isRetained() {
+        // author_name is NOT NULL, so a blank name is the nearest real edge case: it must not
+        // be mistaken for a bot marker by a NOT LIKE filter.
+        insertCommit("c-blank-name", "", A_EMAIL, null);
+
+        assertThat(commitsFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(3);
+    }
+
+    @Test
+    void aggregateChurnDailyByRepoIdsAndIdentity_botCommitWithUserDeclaredEmail_isExcluded() {
+        // Baseline: two attributed commits at 5 additions + 5 deletions each.
+        assertThat(churnFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(20);
+
+        insertCommit("c-bot-churn", "dependabot[bot]", A_EMAIL, null);
+
+        assertThat(churnFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(20);
+    }
+
+    @Test
+    void findCommitDetailsByRepoIdsAndIdentity_botCommitWithUserDeclaredEmail_isExcluded() {
+        insertCommit("c-bot-detail", "renovate[bot]", A_EMAIL, null);
+
+        assertThat(detailsFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(2);
+    }
+
+    @Test
+    void countCommitsByRepoIdsAndIdentity_botCommitWithUserDeclaredEmail_isExcluded() {
+        insertCommit("c-bot-numerator", "github-actions[bot]", A_EMAIL, null);
+
+        assertThat(siloNumeratorFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(2);
+    }
+
+    @Test
+    void countTotalCommitsByRepoIds_botCommits_areExcludedFromTheDenominator() {
+        // The knowledge-silo denominator. Five human commits are seeded; bot commits must not
+        // inflate it, because that would deflate every user's ownership share.
+        assertThat(siloDenominator()).isEqualTo(5);
+
+        insertCommit("c-bot-denominator", "dependabot[bot]", "dependabot[bot]@users.noreply.github.com", null);
+
+        assertThat(siloDenominator()).isEqualTo(5);
+    }
+
     /** Total commits the identity matches, summed across the per-day rows the projection returns. */
     private long commitsFor(Long githubUserId, Set<String> emails) {
         List<DailyCommitsProjection> rows = commitRepository.aggregateCommitsDailyByRepoIdsAndIdentity(
                 List.of(repoId), githubUserId, CalcUtils.emailsOrSentinel(emails), FROM, TO);
         return rows.stream().mapToLong(DailyCommitsProjection::getCommitsCount).sum();
+    }
+
+    /** Total line churn the identity matches, summed across the per-day rows. */
+    private long churnFor(Long githubUserId, Set<String> emails) {
+        return commitRepository.aggregateChurnDailyByRepoIdsAndIdentity(
+                        List.of(repoId), githubUserId, CalcUtils.emailsOrSentinel(emails), FROM, TO)
+                .stream()
+                .mapToLong(row -> row.getAdditions() + row.getDeletions())
+                .sum();
+    }
+
+    /** Number of commit-detail rows the identity matches. */
+    private long detailsFor(Long githubUserId, Set<String> emails) {
+        return commitRepository.findCommitDetailsByRepoIdsAndIdentity(
+                List.of(repoId), githubUserId, CalcUtils.emailsOrSentinel(emails), FROM, TO).size();
+    }
+
+    /** Knowledge-silo numerator: commits in this repo attributed to the identity. */
+    private long siloNumeratorFor(Long githubUserId, Set<String> emails) {
+        return commitRepository.countCommitsByRepoIdsAndIdentity(
+                        List.of(repoId), githubUserId, CalcUtils.emailsOrSentinel(emails), FROM, TO)
+                .stream()
+                .mapToLong(RepoCountProjection::getCount)
+                .sum();
+    }
+
+    /** Knowledge-silo denominator: every human-authored commit in this repo. */
+    private long siloDenominator() {
+        return commitRepository.countTotalCommitsByRepoIds(List.of(repoId), FROM, TO)
+                .stream()
+                .mapToLong(RepoCountProjection::getCount)
+                .sum();
     }
 
     // -------------------------------------------------------------------------
@@ -150,12 +236,18 @@ class CommitAttributionQueryTest {
 
     /** Hashes are globally unique, so each carries the test's nanotime suffix. */
     private void insertCommit(String hashPrefix, String authorEmail, Long authorGithubId) {
+        insertCommit(hashPrefix, "Fixture", authorEmail, authorGithubId);
+    }
+
+    /** Overload for the bot cases, where author_name is the discriminating column. */
+    private void insertCommit(String hashPrefix, String authorName, String authorEmail, Long authorGithubId) {
         jdbc.update(
                 "INSERT INTO git_commits (repository_id, hash, author_name, author_email, "
                         + "author_github_id, author_date, message, additions, deletions, stats_status) "
-                        + "VALUES (?, ?, 'Fixture', ?, ?, ?, 'msg', 5, 5, 'COMPLETE')",
+                        + "VALUES (?, ?, ?, ?, ?, ?, 'msg', 5, 5, 'COMPLETE')",
                 repoId,
                 hashPrefix + "-" + System.nanoTime(),
+                authorName,
                 authorEmail,
                 authorGithubId,
                 LocalDateTime.ofInstant(WHEN, ZoneOffset.UTC));

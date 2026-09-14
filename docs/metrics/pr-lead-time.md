@@ -24,7 +24,7 @@ pr_lead_time_hours_median =
 
 - Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Window: `merged_at >= from` AND `merged_at < to+1` (inclusive end date). `created_at` may fall before the window.
-- Bot exclusion: `author_login NOT LIKE '%[bot]'`.
+- Bot exclusion: implicit. Attribution matches on the numeric GitHub account ID alone, which no bot account shares with a user, so no bot filter is applied. See [author-attribution.md](author-attribution.md).
 - Duration: `Duration.between(createdAt, mergedAt).toHours()` — integer hours, rounding down (Java `Duration.toHours()`).
 - Grouping: one snapshot per repository. With no `repoId` filter the read side reduces across repositories first (median of the per-repository medians for that week), then across weeks; with a `repoId` it reads only that repository's snapshots.
 - Saved as aggregate shape: `periodFrom` = the ISO week Monday, `periodTo` = that week Sunday (not a per-day snapshot).

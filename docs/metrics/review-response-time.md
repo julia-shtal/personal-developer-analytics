@@ -37,7 +37,7 @@ review_response_time_hours_median =
 - PRs without any review row in `github_pr_reviews` are **excluded** from the denominator. This metric measures review speed when reviews happen, not review adoption (which is `MERGE_WITHOUT_REVIEW_RATIO`).
 - Negative durations (review timestamp before PR creation) are skipped: `if (hours < 0) continue`.
 - Saved as aggregate shape: `periodFrom` = the ISO week Monday, `periodTo` = that week Sunday.
-- Bot exclusion on PR author: `author_login NOT LIKE '%[bot]'`.
+- Bot exclusion: implicit. Attribution matches on the numeric GitHub account ID alone, which no bot account shares with a user, so no bot filter is applied. See [author-attribution.md](author-attribution.md).
 
 ## Edge cases
 

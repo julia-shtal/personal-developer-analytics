@@ -23,9 +23,9 @@ FOR each calendar day D in [from, to):
       AND created_at  < D+1 00:00:00 UTC
 ```
 
-- **No author filter**: issues are project-level. Both Jira issues and GitHub Issues are collected into the unified `issues` table and counted together.
+- Attribution: GitHub issues by `creator_github_id = user.githubUserId`; Jira issues by `reporter_account_id = user.jiraAccountId`. Both sources are collected into the unified `issues` table and counted together. See [author-attribution.md](author-attribution.md).
 - Time window: UTC calendar day boundaries applied to `created_at`. See [timezone.md](timezone.md).
-- Bot exclusion: applied at the project level (issues created by `[bot]` accounts in GitHub are filtered by the `IssueCollector`). Jira automation issues are included unless explicitly excluded by the Jira JQL scope.
+- Bot exclusion: implicit. Attribution matches on the numeric GitHub account ID alone, which no bot account shares with a user, so no bot filter is applied. Jira automation issues are reported under the automation rule's own `accountId` and are likewise never attributed to a user. See [author-attribution.md](author-attribution.md).
 - `repoIds`: the set of `git_repositories` linked to the user's subscriptions. For Jira, the link is through `jira_project_repo_mappings`.
 
 ## Edge cases

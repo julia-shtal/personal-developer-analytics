@@ -29,8 +29,8 @@ is_after_hours(author_date, timezone):
 - Timezone: resolved once by `UserZone.of(user)` — falls back to `ZoneOffset.UTC` on parse failure. This is the attribution clock; see [timezone.md](timezone.md).
 - Business hours definition: 09:00 (inclusive) to 18:00 (exclusive), Monday through Friday.
 - Denominator: all commits by the user in the window, including after-hours ones. No denominator guard for zero-commits: if `rows.isEmpty()`, the method returns early and no snapshot is saved.
-- Bot exclusion: implicit. A bot holds neither a declared address of the user nor their GitHub account ID, so it cannot satisfy the attribution predicate.
-- Computed alongside `REFACTOR_RATIO` in a single `findCommitDetailsByRepoIdsAndAuthorEmail` query to avoid a duplicate DB round-trip.
+- Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied in the query. Attribution can match on a declared email address, and a local commit carries no `author_github_id`, so an automation account configured with the user's address would otherwise be attributed to them. See [author-attribution.md](author-attribution.md).
+- Computed alongside `REFACTOR_RATIO` in a single `findCommitDetailsByRepoIdsAndIdentity` query to avoid a duplicate DB round-trip.
 - Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`.
 
 ## Edge cases

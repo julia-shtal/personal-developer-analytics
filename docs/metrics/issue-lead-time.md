@@ -22,7 +22,8 @@ issue_lead_time_hours_median =
   grouped per repository_id
 ```
 
-- **No author filter**: issues are not attributed to a single developer.
+- Attribution: GitHub issues by `assignee_github_id = user.githubUserId`; Jira issues by `assignee_account_id = user.jiraAccountId`. Lead time is credited to the assignee. See [author-attribution.md](author-attribution.md).
+- Bot exclusion: implicit. Attribution matches on the numeric GitHub account ID alone, which no bot account shares with a user, so no bot filter is applied. See [author-attribution.md](author-attribution.md).
 - Window: `closed_at >= from` AND `closed_at < to+1`. `created_at` may fall before the window.
 - Duration: `Duration.between(createdAt, closedAt).toHours()`.
 - Grouping: one snapshot per repository. Jira issues are linked to a repository via `jira_project_repo_mappings`; issues without a `repository_id` are excluded.

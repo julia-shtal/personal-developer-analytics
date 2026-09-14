@@ -18,7 +18,6 @@ merged_prs = github_pull_requests
   WHERE repository_id IN :repoIds
     AND author_github_id = user.githubUserId
     AND merged_at    >= from AND merged_at < to+1
-    AND author_login NOT LIKE '%[bot]'
 
 prs_with_reviews = { pr.id : pr in merged_prs
                      WHERE EXISTS(SELECT 1 FROM github_pr_reviews WHERE pull_request_id = pr.id) }
@@ -47,7 +46,7 @@ ratio = counts[0] / counts[1];
 - Attribution: `author_github_id = user.githubUserId`. **Requires a linked GitHub account** -- a login that has been resolved to its numeric account ID. If absent the calculator returns immediately and no snapshots are written. See [author-attribution.md](author-attribution.md).
 - Window: `merged_at >= from` AND `merged_at < to+1`.
 - Denominator: total merged PRs. No denominator guard for zero: if no merged PRs exist, method returns after the empty-list check.
-- Bot exclusion: `author_login NOT LIKE '%[bot]'`.
+- Bot exclusion: implicit. Attribution matches on the numeric GitHub account ID alone, which no bot account shares with a user, so no bot filter is applied. See [author-attribution.md](author-attribution.md).
 - Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`, one snapshot per repository.
 
 ## Edge cases

@@ -34,7 +34,8 @@ knowledge_silo_score = MAX(share(R)) over all R with total_commits(R) > 0
 
 - Attribution for numerator: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. The denominator counts every author and is not attributed. See [author-attribution.md](author-attribution.md).
 - Denominator: all commits regardless of author — no email filter.
-- Bot exclusion: **not applied** in the current implementation. Bot commits count toward the denominator (`total_commits`) and, if authored with the user's email (unusual), toward the numerator. This is intentional: bot commits represent real repository activity and dilute the silo score.
+- Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied to both the numerator and the denominator. The score measures how concentrated *human* ownership of a repository is, so automated commits belong in neither term: counting them in the denominator alone would deflate every contributor's share in proportion to how much CI writes to the repo. See [author-attribution.md](author-attribution.md).
+- Snapshots calculated before this policy took effect were computed against an unfiltered denominator and read lower. They are overwritten by the `MetricsService.saveMetric` upsert as each window is recalculated; no migration backfills them.
 - Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`, `repository = null`.
 
 ## Edge cases
@@ -43,7 +44,7 @@ knowledge_silo_score = MAX(share(R)) over all R with total_commits(R) > 0
 - **User made zero commits in a repo**: `user_commits(R) = 0`; `share = 0.0` for that repo. Does not prevent another repo from contributing a non-zero max.
 - **User is the only contributor**: `share = 1.0`; snapshot saved with value 1.0.
 - **Single repo**: max is simply that repo's share.
-- **Repositories with only bot commits**: total > 0 but user share ≈ 0; these repos will not drive the maximum unless the user also committed there.
+- **Repositories with only bot commits**: the filter empties both terms, so `total = 0`, the repo is skipped by the denominator guard, and it cannot drive the maximum.
 
 ## Validation (thesis §8.3)
 

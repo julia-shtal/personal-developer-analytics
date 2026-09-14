@@ -97,7 +97,21 @@ repository is still pending, so metrics are never rebuilt over a partly attribut
 
 ## Bot exclusion
 
-Bot filtering is a separate concern from attribution and is applied in each metric formula, not at
-ingestion; ingestion preserves raw signal for audit. Note that attribution no longer excludes bots
-implicitly: matching used to compare against a single human address or login, so a bot could never
-match by construction. Each metric document states its own bot policy explicitly.
+Bot filtering is applied in each metric formula, not at ingestion; ingestion preserves raw signal
+for audit. Whether a formula needs an explicit filter follows from what its attribution predicate
+matches on.
+
+Pull requests, reviews and issues match on a numeric account identifier alone —
+`author_github_id`, `reviewer_github_id`, `creator_github_id`, `assignee_github_id`, or a Jira
+`accountId`. A bot holds its own account and its own identifier, which no user shares, so it
+cannot satisfy the predicate. Exclusion is implicit and no filter is written; adding one would be
+a no-op that costs index selectivity while implying a safeguard that does no work.
+
+Commits are the exception. Their predicate is a disjunction, and the email branch —
+`lower(author_email) IN user.commitEmails` — is satisfiable by an automation account configured
+with the user's own address. Local commits collected through JGit carry no `author_github_id` at
+all, so that branch is the only one available for them. Commit-backed formulas therefore filter
+explicitly on `author_name NOT LIKE '%[bot]%'`. The column is `NOT NULL`, so the predicate needs
+no null guard.
+
+Each metric document states which of the two cases applies to it.

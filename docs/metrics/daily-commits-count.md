@@ -28,7 +28,7 @@ FOR each calendar day D in [from, to):
 
 - Time window: calendar day boundaries in UTC. See [timezone.md](timezone.md).
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
-- Bot exclusion: `author_name` ending with `[bot]` is excluded. Applied in metric formula, not at ingestion.
+- Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied in the query. Attribution can match on a declared email address, and a local commit carries no `author_github_id`, so an automation account configured with the user's address would otherwise be attributed to them. See [author-attribution.md](author-attribution.md).
 - Result: one `MetricSnapshot` row per (user, repo, day) triplet where count > 0. Days with zero commits produce no row.
 
 ## Edge cases

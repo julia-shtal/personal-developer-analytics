@@ -66,6 +66,8 @@ Pre-seeded with the mistakes most likely on this codebase, based on architecture
 
 - `[seed]` Reworded a metric description in code/UI without updating `docs/metrics/<slug>.md` first → thesis chapter and code drift apart; examiners notice. The doc is the source of truth, not the code comments. (×0)
 - `[seed]` Used "average lead time" in a UI label when the metric is actually `..._MEDIAN` → label must match the metric type suffix. (×0)
+- Derived a new metric's bot policy by copying the nearest existing doc → derive it from the attribution predicate instead. Matching on a numeric account ID (PRs, reviews, issues) excludes bots by construction, so a `NOT LIKE '%[bot]%'` clause there is a no-op; the commit predicate's email branch is satisfiable by an automation account using the user's address, so the five commit queries filter explicitly. Fixed on `116-bot-exclusion-code-doc-alignment`, 2026-09-14. (×1)
+- Corrected a metric doc's attribution claim in the notes bullet while the Definition paragraph and `## Formula` block still stated the opposite → a doc states its attribution three times; grep the whole file before editing one of them. All three issue docs still say "project-level, no author filter" while `IssueRepository` filters on `creator_github_id` / `assignee_github_id`; whether the doc or the code is wrong is still open. 2026-09-14. (×1)
 
 ### Tooling & environment
 

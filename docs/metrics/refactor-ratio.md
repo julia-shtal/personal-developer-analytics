@@ -28,7 +28,7 @@ refactor_ratio =
 ```
 
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
-- Bot exclusion: `author_name NOT LIKE '%[bot]%'`.
+- Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied in the query. Attribution can match on a declared email address, and a local commit carries no `author_github_id`, so an automation account configured with the user's address would otherwise be attributed to them. See [author-attribution.md](author-attribution.md).
 - **`stats_status = COMPLETE` filter**: only applied to the `REFACTOR_RATIO` denominator (and numerator). `AFTER_HOURS_COMMIT_RATIO` uses the same query but applies its count to all commits regardless of stats status (since it only needs `author_date`, which is always available).
 - If `enrichedTotal = 0` (no COMPLETE commits in window), the snapshot is **not saved** to avoid persisting a misleading 0.0.
 - Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`, `repository = null`.

@@ -50,7 +50,7 @@ double avgPerWeek = byWeek.values().stream().mapToLong(Long::longValue).average(
 ```
 
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
-- Bot exclusion: `author_name NOT LIKE '%[bot]%'`.
+- Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied in the query. Attribution can match on a declared email address, and a local commit carries no `author_github_id`, so an automation account configured with the user's address would otherwise be attributed to them. See [author-attribution.md](author-attribution.md).
 - ISO week: a week that crosses year boundaries (e.g. last days of December may belong to week 1 of the next year) is counted by ISO standard using `WeekFields.ISO`.
 - Partial weeks at the boundaries of the date window are included at their actual commit count (not prorated).
 - Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`, `repository = null` (sum across all repos).
