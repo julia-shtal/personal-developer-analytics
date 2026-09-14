@@ -1123,6 +1123,7 @@ Read-only; behind `GET /api/metrics/stats-coverage`.
 | GET | `/commits-per-week-avg` | `from`, `to` | `MetricAggregateDto` |
 | GET | `/knowledge-silo-score` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/pr-size-complexity` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
+| GET | `/wip-open-pr-age` | `repoId?` | `MetricPointInTimeDto` — point-in-time, not windowed: the most recent calculation's figure with its `calculatedAt` date |
 | GET | `/merge-without-review-ratio` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/review-participation` | `from`, `to` | `MetricAggregateDto` — cross-repo, no `repoId` param |
 | GET | `/anomalies` | `from`, `to` | `Map<String, Boolean>` — per-metric 2σ anomaly flags |

@@ -5,7 +5,7 @@
 **Unit:** hours (median across open PRs)
 **Data source(s):** github_pull_requests
 **Privacy class:** individual
-**Granularity:** point-in-time (stored with period bounds)
+**Granularity:** point-in-time (stored with period bounds; read by calculation date)
 
 ## Definition
 
@@ -39,6 +39,10 @@ wip_open_pr_age_hours_median =
   `CalcUtils.medianOfLongs`.
 - Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`, one snapshot per
   repository. A value of 0 in the UI (`—`) means no open PRs.
+- Read back by calculation date, not by window. `GET /api/metrics/wip-open-pr-age` takes an
+  optional `repoId` and nothing else; it returns the figure the most recent calculation produced,
+  reported as `calculatedAt`. The stored period bounds are a storage detail — they record when the
+  calculation ran, not a range the value was measured over, so the API does not expose them.
 
 ## Edge cases
 
@@ -48,6 +52,9 @@ wip_open_pr_age_hours_median =
 - **Single open PR in a repo**: median equals that PR's age exactly.
 - **Backfill over a past window**: age is still measured against the current `Instant.now()`, not
   the historical window — the metric is inherently point-in-time.
+- **Never calculated**: the endpoint returns `value = 0` with `calculatedAt = null`, which the UI
+  renders as `—`. A caller can distinguish "no open PRs" (`calculatedAt` set, value 0) from
+  "never computed" (`calculatedAt` null).
 
 ## Validation (thesis §8.3)
 

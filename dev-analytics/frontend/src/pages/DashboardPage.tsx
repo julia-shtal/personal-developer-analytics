@@ -193,8 +193,8 @@ export function DashboardPage() {
   });
 
   const wipOpenPrAge = useQuery({
-    queryKey: ['wip-open-pr-age', from, to, repoId],
-    queryFn: () => metricsApi.wipOpenPrAge(from, to, rId).then((r) => r.data),
+    queryKey: ['wip-open-pr-age', repoId],
+    queryFn: () => metricsApi.wipOpenPrAge(rId).then((r) => r.data),
   });
 
   const knowledgeSilo = useQuery({

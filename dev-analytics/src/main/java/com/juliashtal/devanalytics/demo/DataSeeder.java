@@ -4,18 +4,26 @@ import com.juliashtal.devanalytics.config.SystemClock;
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.repository.DataSourceConfigRepository;
+import com.juliashtal.devanalytics.git.model.GitCommitEntity;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.model.RepoType;
 import com.juliashtal.devanalytics.git.model.UserRepoRegistration;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
+import com.juliashtal.devanalytics.git.repository.GitCommitEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
-import com.juliashtal.devanalytics.metrics.calc.MetricSnapshotWriter;
-import com.juliashtal.devanalytics.metrics.model.MetricType;
+import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
+import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
+import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
+import com.juliashtal.devanalytics.issue.IssueRepository;
+import com.juliashtal.devanalytics.issue.model.IssueEntity;
+import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
+import com.juliashtal.devanalytics.user.model.UserCommitEmail;
 import com.juliashtal.devanalytics.user.repository.TeamRepository;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
+import com.juliashtal.devanalytics.user.repository.UserCommitEmailRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -27,10 +35,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.util.Random;
+import java.util.List;
+import java.util.Locale;
 
 /**
- * Seeds demo users, data sources, and metrics when the 'demo' profile is active.
+ * Seeds demo users, a data source, and twelve weeks of synthetic activity when the 'demo' profile
+ * is active, then runs the production calculators over it.
+ *
+ * <p>No metric snapshot is written directly: the demo has to exercise the pipeline it demonstrates,
+ * so a metric that comes out empty is a calculator finding rather than a row to insert.</p>
  */
 @Component
 @Profile("demo")
@@ -42,13 +55,23 @@ public class DataSeeder implements ApplicationRunner {
     private static final String TEAMMATE_EMAIL = "teammate@demo.com";
     private static final String DEMO_PASSWORD  = "demo";
     private static final int    WEEKS          = 12;
+    /** Fixed so the demo dataset is reproducible: the same seed yields the same twelve weeks. */
+    private static final int    SEED           = 42;
+    /** Synthetic GitHub account IDs. Far above any real account ID, so demo rows can never collide. */
+    private static final long   DEMO_GITHUB_ID     = 900_000_001L;
+    private static final long   TEAMMATE_GITHUB_ID = 900_000_002L;
 
     private final UserRepository                 userRepo;
     private final TeamRepository                 teamRepo;
     private final DataSourceConfigRepository     dsRepo;
     private final GitRepositoryEntityRepository  gitRepoRepo;
     private final UserRepoRegistrationRepository registrationRepo;
-    private final MetricSnapshotWriter           metricSnapshotWriter;
+    private final UserCommitEmailRepository      commitEmailRepo;
+    private final GitCommitEntityRepository      commitRepo;
+    private final GitHubPullRequestRepository    prRepo;
+    private final GitHubPrReviewRepository       reviewRepo;
+    private final IssueRepository                issueRepo;
+    private final MetricsService                 metricsService;
     private final PasswordEncoder                encoder;
     private final SystemClock                    systemClock;
 
@@ -60,20 +83,25 @@ public class DataSeeder implements ApplicationRunner {
             return;
         }
 
-        User demo     = createUser(DEMO_EMAIL,     "demo-developer", "Europe/Warsaw", Role.MANAGER);
-        User teammate = createUser(TEAMMATE_EMAIL, "demo-teammate",  "Europe/Warsaw", Role.DEVELOPER);
+        User demo     = createUser(DEMO_EMAIL,     "demo-developer", "Europe/Warsaw", Role.MANAGER,
+                                   DEMO_GITHUB_ID,     "demo-developer");
+        User teammate = createUser(TEAMMATE_EMAIL, "demo-teammate",  "Europe/Warsaw", Role.DEVELOPER,
+                                   TEAMMATE_GITHUB_ID, "demo-teammate");
         Team team     = createTeam("Demo Team", demo, teammate);
         DataSourceConfig ds   = createDataSource(demo);
         GitRepositoryEntity repo = createRepo(ds);
         registerUser(demo,     repo);
         registerUser(teammate, repo);
 
-        seedMetrics(demo, teammate, team, repo);
+        LocalDate start = systemClock.today().with(DayOfWeek.MONDAY).minusWeeks(WEEKS);
+        seedActivity(demo, teammate, repo, start);
+        calculateFromActivity(demo, teammate, team, start);
 
         log.info("Demo seeding complete. Login: {} / {}", DEMO_EMAIL, DEMO_PASSWORD);
     }
 
-    private User createUser(String email, String username, String timezone, Role role) {
+    private User createUser(String email, String username, String timezone, Role role,
+                            long githubUserId, String githubLogin) {
         User u = new User();
         u.setEmail(email);
         u.setUsername(username);
@@ -81,7 +109,19 @@ public class DataSeeder implements ApplicationRunner {
         u.setRole(role);
         u.setTimezone(timezone);
         u.setAvatarPreset("preset-01");
-        return userRepo.save(u);
+        u.setGithubLogin(githubLogin);
+        u.setGithubUserId(githubUserId);
+        User saved = userRepo.save(u);
+        declareCommitEmail(saved, email);
+        return saved;
+    }
+
+    /** Commits are matched on declared addresses; without one the commit calculators write nothing. */
+    private void declareCommitEmail(User user, String email) {
+        UserCommitEmail declared = new UserCommitEmail();
+        declared.setUser(user);
+        declared.setEmail(email.toLowerCase(Locale.ROOT));
+        commitEmailRepo.save(declared);
     }
 
     private Team createTeam(String name, User manager, User member) {
@@ -121,102 +161,48 @@ public class DataSeeder implements ApplicationRunner {
     }
 
     /**
-     * Seeds {@link #WEEKS} whole ISO calendar weeks ending with the last complete week
-     * before today.
+     * Persists twelve weeks of synthetic activity for both demo accounts.
      *
-     * <p>Anchored on an ISO Monday rather than on yesterday, so the seeded aggregate rows carry
-     * the same grain {@code MetricsService} writes. Misaligned rows would be deleted by the
-     * week-alignment migration and could not be regenerated, since the seeder skips entirely
-     * once the demo user exists.</p>
+     * <p>Every record is attributed by the identifiers the calculators match on, so the figures the
+     * demo shows are computed from this history by the production pipeline rather than inserted.</p>
      */
-    private void seedMetrics(User user, User teammate, Team team, GitRepositoryEntity repo) {
-        LocalDate lastCompleteWeekStart = systemClock.today().with(DayOfWeek.MONDAY).minusWeeks(1);
+    private void seedActivity(User demo, User teammate, GitRepositoryEntity repo, LocalDate start) {
+        List<GitCommitEntity> demoCommits = DemoActivityGenerator.buildCommits(
+                demo.getEmail(), demo.getUsername(), DEMO_GITHUB_ID, start, WEEKS, SEED);
+        List<GitHubPullRequestEntity> prs = DemoActivityGenerator.buildPullRequests(
+                DEMO_GITHUB_ID, demo.getUsername(), start, WEEKS, SEED);
+        DemoActivityGenerator.linkCommitsToPullRequests(demoCommits, prs);
 
-        for (int w = 0; w < WEEKS; w++) {
-            LocalDate weekStart = lastCompleteWeekStart.minusWeeks(WEEKS - 1 - w);
-            LocalDate weekEnd   = weekStart.plusDays(6);
+        persistCommits(demoCommits, repo);
+        persistCommits(DemoActivityGenerator.buildCommits(
+                teammate.getEmail(), teammate.getUsername(), TEAMMATE_GITHUB_ID, start, WEEKS, SEED + 1), repo);
 
-            seedUserDailyMetrics(user, repo, weekStart, w);
-            seedTeammateDailyMetrics(teammate, repo, weekStart, w);
-            seedUserAggregateMetrics(user, repo, weekStart, weekEnd, w);
-            seedTeamMetrics(user, team, repo, weekStart, weekEnd, w);
-        }
+        prs.forEach(pr -> pr.setRepository(repo));
+        prRepo.saveAll(prs);
+        reviewRepo.saveAll(DemoActivityGenerator.buildReviews(
+                prs, TEAMMATE_GITHUB_ID, teammate.getUsername(), SEED));
+
+        List<IssueEntity> issues = DemoActivityGenerator.buildIssues(
+                DEMO_GITHUB_ID, demo.getUsername(), start, WEEKS, SEED);
+        issues.forEach(i -> i.setRepository(repo));
+        issueRepo.saveAll(issues);
+    }
+
+    private void persistCommits(List<GitCommitEntity> commits, GitRepositoryEntity repo) {
+        commits.forEach(c -> c.setRepository(repo));
+        commitRepo.saveAll(commits);
     }
 
     /**
-     * Seeds 7 days of personal daily metrics for the demo user. Each day gets its own
-     * {@link Random} seeded as {@code w * 7 + d} so re-running the seeder is deterministic.
+     * Runs the production calculators over the seeded history.
+     *
+     * <p>The seeder writes no snapshot itself: a metric that stays empty here is a calculator
+     * finding, not a row to insert by hand.</p>
      */
-    private void seedUserDailyMetrics(User user, GitRepositoryEntity repo, LocalDate weekStart, int w) {
-        for (int d = 0; d < 7; d++) {
-            LocalDate day = weekStart.plusDays(d);
-            Random r = rng(w * 7 + d);
-            snap(user, null, repo, day, MetricType.DAILY_COMMITS_COUNT,    r.nextInt(9),                null, null);
-            snap(user, null, repo, day, MetricType.DAILY_COMMITS_AVG_SIZE, 10 + r.nextInt(391),         null, null);
-            snap(user, null, repo, day, MetricType.DAILY_PR_CREATED,       r.nextInt(4),                null, null);
-            snap(user, null, repo, day, MetricType.DAILY_PR_MERGED,        r.nextInt(4),                null, null);
-            snap(user, null, repo, day, MetricType.DAILY_ISSUES_CREATED,   r.nextInt(5),                null, null);
-            snap(user, null, repo, day, MetricType.DAILY_ISSUES_CLOSED,    r.nextInt(5),                null, null);
-            snap(user, null, repo, day, MetricType.DAILY_CHURN_RATIO,      r.nextDouble() * 0.5,        null, null);
-            snap(user, null, repo, day, MetricType.FOCUS_RATIO_DAYS_TASKS, 0.3 + r.nextDouble() * 0.65, null, null);
-        }
-    }
-
-    /**
-     * Seeds 7 days of personal daily metrics for the teammate, populating the team member view.
-     * The {@code 30_000} seed offset keeps its {@link Random} sequence independent of the demo user's.
-     */
-    private void seedTeammateDailyMetrics(User teammate, GitRepositoryEntity repo, LocalDate weekStart, int w) {
-        for (int d = 0; d < 7; d++) {
-            LocalDate day = weekStart.plusDays(d);
-            Random rm = rng(30_000 + w * 7 + d);
-            snap(teammate, null, repo, day, MetricType.DAILY_COMMITS_COUNT,    rm.nextInt(7),                null, null);
-            snap(teammate, null, repo, day, MetricType.DAILY_COMMITS_AVG_SIZE, 10 + rm.nextInt(300),         null, null);
-            snap(teammate, null, repo, day, MetricType.DAILY_PR_CREATED,       rm.nextInt(3),                null, null);
-            snap(teammate, null, repo, day, MetricType.DAILY_PR_MERGED,        rm.nextInt(3),                null, null);
-            snap(teammate, null, repo, day, MetricType.FOCUS_RATIO_DAYS_TASKS, 0.3 + rm.nextDouble() * 0.65, null, null);
-        }
-    }
-
-    /**
-     * Seeds one weekly-window snapshot per aggregate metric type for the demo user.
-     * The {@code 10_000} seed offset keeps its {@link Random} sequence independent of the daily seeders.
-     */
-    private void seedUserAggregateMetrics(User user, GitRepositoryEntity repo, LocalDate weekStart, LocalDate weekEnd, int w) {
-        Random ra = rng(10_000 + w);
-        snap(user, null, repo, weekStart, MetricType.PR_LEAD_TIME_HOURS_MEDIAN,                       1 + ra.nextInt(72),           weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.ISSUE_LEAD_TIME_HOURS_MEDIAN,                    1 + ra.nextInt(168),          weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN, 2 + ra.nextInt(95),           weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.REVIEW_RESPONSE_TIME_HOURS_MEDIAN,               0.5 + ra.nextDouble() * 23.5, weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.AFTER_HOURS_COMMIT_RATIO,                        ra.nextDouble() * 0.4,        weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.DEEP_WORK_STREAK_DAYS,                           ra.nextInt(8),                weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.KNOWLEDGE_SILO_SCORE,                            ra.nextDouble(),              weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.REFACTOR_RATIO,                                  ra.nextDouble() * 0.4,        weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.PR_SIZE_COMPLEXITY_SCORE,                        1 + ra.nextInt(500),          weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.MERGE_WITHOUT_REVIEW_RATIO,                      ra.nextDouble() * 0.3,        weekStart, weekEnd);
-        snap(user, null, repo, weekStart, MetricType.COMMITS_PER_WEEK_AVG,                            ra.nextInt(6),                weekStart, weekEnd);
-    }
-
-    /**
-     * Seeds team-scoped metrics: one weekly PR lead-time aggregate plus 7 days of team commit
-     * counts. The {@code 20_000} seed offset keeps its {@link Random} sequence independent of
-     * the other seeders.
-     */
-    private void seedTeamMetrics(User user, Team team, GitRepositoryEntity repo, LocalDate weekStart, LocalDate weekEnd, int w) {
-        Random rt = rng(20_000 + w);
-        snap(user, team, null, weekStart, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, 1 + rt.nextInt(72), weekStart, weekEnd);
-        for (int d = 0; d < 7; d++) {
-            snap(user, team, repo, weekStart.plusDays(d), MetricType.DAILY_COMMITS_COUNT, rt.nextInt(20), null, null);
-        }
-    }
-
-    private void snap(User user, Team team, GitRepositoryEntity repo,
-                      LocalDate date, MetricType type, double value,
-                      LocalDate periodFrom, LocalDate periodTo) {
-        metricSnapshotWriter.save(user, team, date, type, value, repo, periodFrom, periodTo);
-    }
-
-    private static Random rng(int seed) {
-        return new Random(seed);
+    private void calculateFromActivity(User demo, User teammate, Team team, LocalDate start) {
+        LocalDate end = systemClock.yesterday();
+        metricsService.calculateDailyMetrics(demo.getId(), start, end);
+        metricsService.calculateDailyMetrics(teammate.getId(), start, end);
+        metricsService.calculateForTeam(team.getId(), demo.getId(), start, end);
     }
 }

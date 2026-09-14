@@ -1,5 +1,5 @@
 import api from '@/lib/api';
-import type { MetricPointDto, MetricAggregateDto, TeamMetricPointDto, MemberSummaryDto, MetricAnomalyResponse } from '@/types';
+import type { MetricPointDto, MetricAggregateDto, MetricPointInTimeDto, TeamMetricPointDto, MemberSummaryDto, MetricAnomalyResponse } from '@/types';
 
 // ─── Personal ─────────────────────────────────────────────────────────────────
 
@@ -65,8 +65,9 @@ export const metricsApi = {
   prSizeComplexity: (from: string, to: string, repoId?: number) =>
     api.get<MetricAggregateDto>('/metrics/pr-size-complexity', { params: { from, to, repoId } }),
 
-  wipOpenPrAge: (from: string, to: string, repoId?: number) =>
-    api.get<MetricAggregateDto>('/metrics/wip-open-pr-age', { params: { from, to, repoId } }),
+  // Point-in-time: the backend reports its own calculation date, so there is no window to pass.
+  wipOpenPrAge: (repoId?: number) =>
+    api.get<MetricPointInTimeDto>('/metrics/wip-open-pr-age', { params: { repoId } }),
 
   knowledgeSilo: (from: string, to: string, repoId?: number) =>
     api.get<MetricAggregateDto>('/metrics/knowledge-silo-score', { params: { from, to, repoId } }),

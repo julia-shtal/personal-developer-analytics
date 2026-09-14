@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.auth.service;
 import com.juliashtal.devanalytics.auth.repository.PasswordResetTokenRepository;
 import com.juliashtal.devanalytics.auth.repository.RefreshTokenRepository;
 import com.juliashtal.devanalytics.config.SystemClock;
+import com.juliashtal.devanalytics.invite.InviteTokenRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,8 +19,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * The cut-off both repositories delete against is one instant taken from the system clock, so the
- * two deletes cannot disagree and the boundary is assertable.
+ * The cut-off every repository deletes against is one instant taken from the system clock, so the
+ * deletes cannot disagree and the boundary is assertable.
  */
 @ExtendWith(MockitoExtension.class)
 class TokenCleanupSchedulerTest {
@@ -28,6 +29,7 @@ class TokenCleanupSchedulerTest {
 
     @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock PasswordResetTokenRepository passwordResetTokenRepository;
+    @Mock InviteTokenRepository inviteTokenRepository;
 
     private final TimeZone originalZone = TimeZone.getDefault();
 
@@ -38,15 +40,16 @@ class TokenCleanupSchedulerTest {
 
     private TokenCleanupScheduler scheduler() {
         return new TokenCleanupScheduler(refreshTokenRepository, passwordResetTokenRepository,
-                new SystemClock(Clock.fixed(FIXED, ZoneOffset.UTC)));
+                inviteTokenRepository, new SystemClock(Clock.fixed(FIXED, ZoneOffset.UTC)));
     }
 
     @Test
-    void cleanupExpiredTokens_bothRepositories_deleteAgainstTheSameCutOff() {
+    void cleanupExpiredTokens_everyRepository_deletesAgainstTheSameCutOff() {
         scheduler().cleanupExpiredTokens();
 
         verify(refreshTokenRepository).deleteExpiredTokens(FIXED);
         verify(passwordResetTokenRepository).deleteExpiredOrUsedTokens(FIXED);
+        verify(inviteTokenRepository).deleteExpiredOrRedeemed(FIXED);
     }
 
     @Test
@@ -59,5 +62,6 @@ class TokenCleanupSchedulerTest {
 
         verify(refreshTokenRepository, times(2)).deleteExpiredTokens(FIXED);
         verify(passwordResetTokenRepository, times(2)).deleteExpiredOrUsedTokens(FIXED);
+        verify(inviteTokenRepository, times(2)).deleteExpiredOrRedeemed(FIXED);
     }
 }

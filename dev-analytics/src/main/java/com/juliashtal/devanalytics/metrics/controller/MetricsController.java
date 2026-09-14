@@ -273,14 +273,12 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(PR_SIZE_COMPLEXITY_SCORE, from, to, repoId);
     }
 
-    @Operation(summary = "WIP Open PR Age (median hours of currently open PRs) for the current user")
+    @Operation(summary = "WIP Open PR Age — point-in-time median age in hours of the current user's "
+            + "currently open PRs, as of the most recent calculation. Not windowed: the value cannot "
+            + "be recomputed for a past range, so it is reported with calculatedAt instead of a period.")
     @GetMapping("/wip-open-pr-age")
-    public MetricAggregateDto getWipOpenPrAge(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) Long repoId
-    ) {
-        return getPersonalLeadTimeAggregate(WIP_OPEN_PR_AGE_HOURS_MEDIAN, from, to, repoId);
+    public MetricPointInTimeDto getWipOpenPrAge(@RequestParam(required = false) Long repoId) {
+        return getPersonalPointInTime(WIP_OPEN_PR_AGE_HOURS_MEDIAN, repoId);
     }
 
     @Operation(summary = "Merge Without Review Ratio for the current user")
@@ -429,6 +427,37 @@ public class MetricsController {
         return aggregateWindowResolver.resolve(AggregateWindowResolver.aggregateRows(rows), type)
                 .map(r -> new MetricAggregateDto(type, r.value(), r.periodFrom(), r.periodTo()))
                 .orElseGet(() -> new MetricAggregateDto(type, 0.0, null, null));
+    }
+
+    /**
+     * Resolves a point-in-time metric to the figure its most recent calculation produced.
+     *
+     * <p>Reads only that calculation's rows, never a range, and reduces across repositories the way
+     * the metric permits. The returned {@code calculatedAt} is the date those rows carry, so the
+     * caller always learns how stale the figure is.</p>
+     */
+    private MetricPointInTimeDto getPersonalPointInTime(MetricType type, Long repoId) {
+        User user = checkHelper.currentUser();
+
+        Optional<LocalDate> latest = metricSnapshotService.findLatestPersonalDate(user.getId(), type);
+        if (latest.isEmpty()) {
+            return new MetricPointInTimeDto(type, 0.0, null);
+        }
+        LocalDate calculatedAt = latest.get();
+
+        List<MetricSnapshot> rows;
+        if (repoId == null) {
+            rows = metricSnapshotService
+                    .getPersonalSnapshotsByMetricTypeAndDate(user, type, calculatedAt);
+        } else {
+            GitRepositoryEntity repo = repoService.getAccessibleRepo(user.getId(), repoId);
+            rows = metricSnapshotService
+                    .getPersonalSnapshotsByMetricTypeAndRepositoryAndDate(user, type, repo, calculatedAt);
+        }
+
+        return aggregateWindowResolver.resolve(AggregateWindowResolver.aggregateRows(rows), type)
+                .map(r -> new MetricPointInTimeDto(type, r.value(), calculatedAt))
+                .orElseGet(() -> new MetricPointInTimeDto(type, 0.0, calculatedAt));
     }
 
 }

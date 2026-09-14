@@ -163,6 +163,12 @@ export interface MetricAggregateDto {
   periodTo?: string;
 }
 
+export interface MetricPointInTimeDto {
+  metricType: string;
+  value: number;
+  calculatedAt: string | null;
+}
+
 export interface TeamMetricPointDto {
   date: string;
   value: number;
