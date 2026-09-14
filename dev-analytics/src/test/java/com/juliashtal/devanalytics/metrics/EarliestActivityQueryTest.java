@@ -120,9 +120,6 @@ class EarliestActivityQueryTest {
     // -------------------------------------------------------------------------
     // Fixtures. Inserted with JdbcTemplate rather than entities so the test states the exact
     // column values the queries read, and stays readable when an unrelated field is added.
-    //
-    // git_commits.author_date and github_pull_requests.created_at are TIMESTAMP WITHOUT TIME
-    // ZONE, so Instant fixture values are bound as UTC LocalDateTime -- see insertCommit.
     // -------------------------------------------------------------------------
 
     private Long insertUser() {
@@ -148,23 +145,19 @@ class EarliestActivityQueryTest {
     }
 
     private void insertCommit(Long repositoryId, String hash, Instant authorDate) {
-        // author_date is TIMESTAMP WITHOUT TIME ZONE. Timestamp.from(Instant) writes through the
-        // JVM zone while Hibernate reads back as UTC, shifting the value; bind UTC directly.
         jdbc.update(
                 "INSERT INTO git_commits (repository_id, hash, author_name, author_email, " +
                         "author_date, message, additions, deletions, stats_status) " +
                         "VALUES (?, ?, 'Fixture', 'fixture@example.com', ?, 'msg', 0, 0, 'COMPLETE')",
-                repositoryId, hash, java.time.LocalDateTime.ofInstant(authorDate, java.time.ZoneOffset.UTC));
+                repositoryId, hash, java.sql.Timestamp.from(authorDate));
     }
 
     private void insertPr(Long repositoryId, int number, Instant createdAt) {
-        // github_pull_requests.created_at is likewise TIMESTAMP WITHOUT TIME ZONE; see
-        // insertCommit for why the UTC LocalDateTime is bound directly.
         jdbc.update(
                 "INSERT INTO github_pull_requests (repository_id, number, title, author_login, " +
                         "state, merged, created_at) " +
                         "VALUES (?, ?, 'PR', 'fixture', 'closed', false, ?)",
-                repositoryId, number, java.time.LocalDateTime.ofInstant(createdAt, java.time.ZoneOffset.UTC));
+                repositoryId, number, java.sql.Timestamp.from(createdAt));
     }
 
     private void insertIssue(Long repositoryId, String key, Instant createdAt) {
