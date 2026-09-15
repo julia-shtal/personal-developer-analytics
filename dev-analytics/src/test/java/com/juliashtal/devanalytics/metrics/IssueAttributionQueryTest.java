@@ -110,6 +110,47 @@ class IssueAttributionQueryTest {
         assertThat(teamAggregate).isEqualTo(distinctClosedIssuesInRepo());
     }
 
+    // -------------------------------------------------------------------------
+    // Window boundary. `to` is exclusive, so an issue stamped exactly on it belongs to the next
+    // window. One boundary issue — created by A, assigned to B — covers all three queries.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void aggregateIssuesCreatedDailyByRepoIdsAndIdentity_recordAtWindowEnd_excluded() {
+        long inside = created(A_GITHUB_ID, A_JIRA);
+        assertThat(inside).isPositive();
+
+        insertGithubIssue("GH-AT-WINDOW-END", A_GITHUB_ID, B_GITHUB_ID, TO, TO);
+
+        assertThat(created(A_GITHUB_ID, A_JIRA)).isEqualTo(inside);
+    }
+
+    @Test
+    void aggregateIssuesClosedDailyByRepoIdsAndIdentity_recordAtWindowEnd_excluded() {
+        long inside = closed(B_GITHUB_ID, B_JIRA);
+        assertThat(inside).isPositive();
+
+        insertGithubIssue("GH-AT-WINDOW-END", A_GITHUB_ID, B_GITHUB_ID, TO, TO);
+
+        assertThat(closed(B_GITHUB_ID, B_JIRA)).isEqualTo(inside);
+    }
+
+    @Test
+    void findIssueLeadTimesByRepoIdsAndIdentity_recordAtWindowEnd_excluded() {
+        long inside = leadTimeRows(B_GITHUB_ID, B_JIRA);
+        assertThat(inside).isPositive();
+
+        insertGithubIssue("GH-AT-WINDOW-END", A_GITHUB_ID, B_GITHUB_ID, TO, TO);
+
+        assertThat(leadTimeRows(B_GITHUB_ID, B_JIRA)).isEqualTo(inside);
+    }
+
+    /** Lead-time rows the identity matches, one per closed issue. */
+    private long leadTimeRows(Long githubUserId, String jiraAccountId) {
+        return issueRepository.findIssueLeadTimesByRepoIdsAndIdentity(
+                List.of(repoId), githubUserId, jiraAccountId, FROM, TO).size();
+    }
+
     private long created(Long githubUserId, String jiraAccountId) {
         return sum(issueRepository.aggregateIssuesCreatedDailyByRepoIdsAndIdentity(
                 List.of(repoId), githubUserId, jiraAccountId, FROM, TO));
@@ -163,12 +204,18 @@ class IssueAttributionQueryTest {
     }
 
     private void insertGithubIssue(String key, Long creatorGithubId, Long assigneeGithubId) {
+        insertGithubIssue(key, creatorGithubId, assigneeGithubId, CREATED, CLOSED);
+    }
+
+    /** Overload for the window cases, where created_at and closed_at are the discriminators. */
+    private void insertGithubIssue(String key, Long creatorGithubId, Long assigneeGithubId,
+                                   Instant createdAt, Instant closedAt) {
         jdbc.update(
                 "INSERT INTO issues (repository_id, source_issue_key, title, state, created_at, "
                         + "closed_at, creator_github_id, assignee_github_id, source) "
                         + "VALUES (?, ?, 'Issue', 'closed', ?, ?, ?, ?, 'GITHUB')",
                 repoId, key + "-" + System.nanoTime(),
-                Timestamp.from(CREATED), Timestamp.from(CLOSED), creatorGithubId, assigneeGithubId);
+                Timestamp.from(createdAt), Timestamp.from(closedAt), creatorGithubId, assigneeGithubId);
     }
 
     private Long insertJiraDataSource() {

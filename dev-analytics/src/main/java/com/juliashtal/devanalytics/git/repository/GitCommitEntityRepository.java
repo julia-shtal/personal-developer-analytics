@@ -58,6 +58,9 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     // The bot filter is needed because of that email branch: an automation account configured
     // with the user's own address satisfies it. No null guard is needed on author_name; the
     // column is NOT NULL.
+    //
+    // Windows are half-open: `from` inclusive, `to` exclusive, so adjacent windows neither
+    // double-count a record nor drop one. Callers pass toDate + 1 at midnight UTC.
     // -------------------------------------------------------------------------
 
     @Query("""
@@ -70,7 +73,8 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     where r.id IN :repoIds
       and (c.authorGithubId = :githubUserId or lower(c.authorEmail) in :emails)
       and c.authorName not like '%[bot]%'
-      and c.authorDate between :from and :to
+      and c.authorDate >= :from
+      and c.authorDate  < :to
     group by date(c.authorDate), r.id
     order by day, repoId
     """)
@@ -91,7 +95,8 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     where r.id IN :repoIds
       and (c.authorGithubId = :githubUserId or lower(c.authorEmail) in :emails)
       and c.authorName not like '%[bot]%'
-      and c.authorDate between :from and :to
+      and c.authorDate >= :from
+      and c.authorDate  < :to
     group by date(c.authorDate), r.id
     order by day, repoId
     """)
@@ -129,7 +134,8 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     where c.repository.id IN :repoIds
       and (c.authorGithubId = :githubUserId or lower(c.authorEmail) in :emails)
       and c.authorName not like '%[bot]%'
-      and c.authorDate between :from and :to
+      and c.authorDate >= :from
+      and c.authorDate  < :to
     """)
     List<CommitDetailProjection> findCommitDetailsByRepoIdsAndIdentity(
             @Param("repoIds") List<Long> repoIds,
@@ -148,7 +154,8 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     from GitCommitEntity c
     where c.repository.id IN :repoIds
       and c.authorName not like '%[bot]%'
-      and c.authorDate between :from and :to
+      and c.authorDate >= :from
+      and c.authorDate  < :to
     group by c.repository.id
     """)
     List<RepoCountProjection> countTotalCommitsByRepoIds(
@@ -167,7 +174,8 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     where c.repository.id IN :repoIds
       and (c.authorGithubId = :githubUserId or lower(c.authorEmail) in :emails)
       and c.authorName not like '%[bot]%'
-      and c.authorDate between :from and :to
+      and c.authorDate >= :from
+      and c.authorDate  < :to
     group by c.repository.id
     """)
     List<RepoCountProjection> countCommitsByRepoIdsAndIdentity(
@@ -228,7 +236,8 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
            count(c)          as recordCount
     from GitCommitEntity c
     where c.repository.id in :repoIds
-      and c.authorDate between :from and :to
+      and c.authorDate >= :from
+      and c.authorDate  < :to
     group by c.statsStatus, c.statsSkipReason
     """)
     List<StatsCoverageProjection> countByStatsStateInRange(

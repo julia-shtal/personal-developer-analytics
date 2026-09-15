@@ -32,6 +32,7 @@ Pre-seeded with the mistakes most likely on this codebase, based on architecture
 - `[seed]` Filtered commits by `User.githubLogin` instead of `User.email` → commits attribute via email; only PRs/reviews attribute via githubLogin. (×0)
 - `[seed]` New metric calc forgot the `team` parameter and saved with `team = null` always → personal-only metrics break team-scope queries silently. (×0)
 - `[seed]` Computed a ratio without guarding zero denominator → return null (not 0) when sample size is 0, so the AI layer's `anomaly` detection ignores it. (×0)
+- Wrote a windowed query with `between :from and :to` while the caller passed an exclusive upper bound → `BETWEEN` is inclusive at both ends, so an exclusive `to` must be compared with `<`. Fourteen queries drifted from the half-open rule every `docs/metrics` document states and `GitHubPrReviewRepository` already followed; the daily ones bucketed a boundary record into a calendar day outside the requested range and wrote a snapshot with no `metric_coverage` row. Also: fixtures binding `LocalDateTime` into a `TIMESTAMPTZ` column are reinterpreted in the session zone, so a boundary-case test must bind `Timestamp.from(instant)`. Fixed on `118-half-open-metric-windows`, 2026-09-14. (×1)
 
 ### Ingestion & async
 

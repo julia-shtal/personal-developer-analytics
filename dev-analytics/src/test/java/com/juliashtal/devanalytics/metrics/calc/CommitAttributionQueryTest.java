@@ -10,9 +10,8 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 
@@ -168,6 +167,61 @@ class CommitAttributionQueryTest {
         assertThat(siloDenominator()).isEqualTo(5);
     }
 
+    // -------------------------------------------------------------------------
+    // Window boundary. `to` is exclusive: MetricsService passes toDate + 1 at midnight UTC, so a
+    // commit stamped exactly on that instant belongs to the next window, not this one.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void aggregateCommitsDailyByRepoIdsAndIdentity_recordAtWindowEnd_excluded() {
+        long inside = commitsFor(A_GITHUB_ID, Set.of(A_EMAIL));
+        assertThat(inside).isPositive();
+
+        insertCommit("c-at-window-end", A_EMAIL, A_GITHUB_ID, TO);
+
+        assertThat(commitsFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(inside);
+    }
+
+    @Test
+    void aggregateChurnDailyByRepoIdsAndIdentity_recordAtWindowEnd_excluded() {
+        long inside = churnFor(A_GITHUB_ID, Set.of(A_EMAIL));
+        assertThat(inside).isPositive();
+
+        insertCommit("c-at-window-end", A_EMAIL, A_GITHUB_ID, TO);
+
+        assertThat(churnFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(inside);
+    }
+
+    @Test
+    void findCommitDetailsByRepoIdsAndIdentity_recordAtWindowEnd_excluded() {
+        long inside = detailsFor(A_GITHUB_ID, Set.of(A_EMAIL));
+        assertThat(inside).isPositive();
+
+        insertCommit("c-at-window-end", A_EMAIL, A_GITHUB_ID, TO);
+
+        assertThat(detailsFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(inside);
+    }
+
+    @Test
+    void countCommitsByRepoIdsAndIdentity_recordAtWindowEnd_excluded() {
+        long inside = siloNumeratorFor(A_GITHUB_ID, Set.of(A_EMAIL));
+        assertThat(inside).isPositive();
+
+        insertCommit("c-at-window-end", A_EMAIL, A_GITHUB_ID, TO);
+
+        assertThat(siloNumeratorFor(A_GITHUB_ID, Set.of(A_EMAIL))).isEqualTo(inside);
+    }
+
+    @Test
+    void countTotalCommitsByRepoIds_recordAtWindowEnd_excluded() {
+        long inside = siloDenominator();
+        assertThat(inside).isPositive();
+
+        insertCommit("c-at-window-end", A_EMAIL, A_GITHUB_ID, TO);
+
+        assertThat(siloDenominator()).isEqualTo(inside);
+    }
+
     /** Total commits the identity matches, summed across the per-day rows the projection returns. */
     private long commitsFor(Long githubUserId, Set<String> emails) {
         List<DailyCommitsProjection> rows = commitRepository.aggregateCommitsDailyByRepoIdsAndIdentity(
@@ -236,11 +290,21 @@ class CommitAttributionQueryTest {
 
     /** Hashes are globally unique, so each carries the test's nanotime suffix. */
     private void insertCommit(String hashPrefix, String authorEmail, Long authorGithubId) {
-        insertCommit(hashPrefix, "Fixture", authorEmail, authorGithubId);
+        insertCommit(hashPrefix, "Fixture", authorEmail, authorGithubId, WHEN);
     }
 
     /** Overload for the bot cases, where author_name is the discriminating column. */
     private void insertCommit(String hashPrefix, String authorName, String authorEmail, Long authorGithubId) {
+        insertCommit(hashPrefix, authorName, authorEmail, authorGithubId, WHEN);
+    }
+
+    /** Overload for the window cases, where author_date is the discriminating column. */
+    private void insertCommit(String hashPrefix, String authorEmail, Long authorGithubId, Instant when) {
+        insertCommit(hashPrefix, "Fixture", authorEmail, authorGithubId, when);
+    }
+
+    private void insertCommit(String hashPrefix, String authorName, String authorEmail,
+                              Long authorGithubId, Instant when) {
         jdbc.update(
                 "INSERT INTO git_commits (repository_id, hash, author_name, author_email, "
                         + "author_github_id, author_date, message, additions, deletions, stats_status) "
@@ -250,6 +314,6 @@ class CommitAttributionQueryTest {
                 authorName,
                 authorEmail,
                 authorGithubId,
-                LocalDateTime.ofInstant(WHEN, ZoneOffset.UTC));
+                Timestamp.from(when));
     }
 }
