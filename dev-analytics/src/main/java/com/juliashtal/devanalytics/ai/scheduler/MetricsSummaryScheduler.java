@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.ai.scheduler;
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
 import com.juliashtal.devanalytics.config.SystemClock;
+import com.juliashtal.devanalytics.metrics.service.MetricWriteGate;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.notification.NotificationDispatchService;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
@@ -28,6 +29,7 @@ public class MetricsSummaryScheduler {
     private final MetricsAiService metricsAiService;
     private final NotificationDispatchService notificationDispatch;
     private final SystemClock systemClock;
+    private final MetricWriteGate writeGate;
 
     @Scheduled(cron = "0 0 8 * * MON", zone = "UTC")
     public void generateWeeklySummaries() {
@@ -39,7 +41,13 @@ public class MetricsSummaryScheduler {
         userRepository.findAll().forEach(user -> {
             try {
                 // Compute the week before summarising it: the nightly job may not have covered this ISO week.
-                metricsService.calculateDailyMetrics(user.getId(), from, to);
+                // Only the refresh is gated — a summary over stored snapshots still beats no summary
+                // for a week, which is what skipping the whole run would cost at this cadence.
+                boolean refreshed = writeGate.runExclusively(
+                        () -> metricsService.calculateDailyMetrics(user.getId(), from, to));
+                if (!refreshed) {
+                    log.info("Metric refresh skipped for userId={}; summarising stored snapshots", user.getId());
+                }
 
                 MetricsSummaryDto summary = metricsAiService.generateSummary(user, from, to, null);
                 log.debug("Generated weekly summary for userId={}", user.getId());
