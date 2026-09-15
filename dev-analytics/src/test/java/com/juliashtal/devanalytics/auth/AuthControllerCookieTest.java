@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.juliashtal.devanalytics.auth.controller.AuthController;
 import com.juliashtal.devanalytics.auth.model.AuthResponse;
 import com.juliashtal.devanalytics.auth.model.request.LoginRequest;
 import com.juliashtal.devanalytics.auth.service.PasswordResetService;

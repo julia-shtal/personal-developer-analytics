@@ -1,5 +1,6 @@
-package com.juliashtal.devanalytics.auth;
+package com.juliashtal.devanalytics.auth.controller;
 
+import com.juliashtal.devanalytics.auth.AuthService;
 import com.juliashtal.devanalytics.auth.model.*;
 import com.juliashtal.devanalytics.auth.model.request.*;
 import com.juliashtal.devanalytics.auth.service.PasswordResetService;

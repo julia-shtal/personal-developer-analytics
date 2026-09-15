@@ -38,4 +38,5 @@ dev-analytics/frontend/.vite/
 
 # Local agent working files (not part of the deliverable)
 CLAUDE.md
-tasks/lessons.md
+node_modules/
+skills-lock.json

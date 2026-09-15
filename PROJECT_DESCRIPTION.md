@@ -1645,7 +1645,7 @@ Phase B — Immediate enrich top 150 (seconds to minutes)
   → rate-limited: ~1.4 req/s, proactive throttle on X-RateLimit-Remaining < 100
 
 Phase C — Background sweep (every 2 minutes, 50 items/run)
-  CommitStatsEnrichmentScheduler
+  StatsEnrichmentScheduler
   → findRepositoryIdsWithStatsStatus(PENDING)
   → processPendingBatchForRepo() per repo
   → continues until all items are COMPLETE/FAILED/SKIPPED
@@ -1905,7 +1905,7 @@ The editorial design system lives in `frontend/src/index.css` (`@theme` block re
 | `TokenCleanupScheduler` | Daily 02:00 UTC | Deletes expired `refresh_tokens`; deletes used or expired `password_reset_tokens` |
 | `MetricsScheduler` | Daily 01:00 UTC | For every user: `calculateDailyMetrics(userId, yesterday, yesterday)`. Incremental only — gap recovery moved to `MetricBackfillScheduler`. Per-user failures logged, do not abort run |
 | `MetricsSummaryScheduler` | Every Monday 08:00 UTC | For every user: computes the week first via `calculateDailyMetrics(userId, from, to)`, then generates a personal AI summary for the previous week (Mon–Sun); persists to `metric_summaries` with headline; triggers `NotificationDispatchService.dispatchSummaries()` if email prefs enabled |
-| `CommitStatsEnrichmentScheduler` | Every 2 minutes | Finds repos with PENDING commits or PRs; processes up to 50 per repo per run. Respects GitHub rate limits. Continues until all enriched |
+| `StatsEnrichmentScheduler` | Every 2 minutes | Finds repos with PENDING commits or PRs; processes up to 50 per repo per run. Respects GitHub rate limits. Continues until all enriched |
 | `MetricBackfillScheduler` | Daily 03:00 UTC | For every user: `MetricBackfillService.backfillUser(userId)` — subtracts the `metric_coverage` ledger from the user's collected history and computes up to `app.metrics.backfill.max-days-per-run` (default 30) missing days, newest-first. Per-user failures logged, do not abort run |
 
 ---

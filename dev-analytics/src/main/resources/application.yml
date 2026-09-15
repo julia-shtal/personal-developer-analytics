@@ -51,6 +51,9 @@ app:
     # Bounds one outbound hop on the shared RestTemplate (Jira discovery and collection).
     connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT_MS:5000}
     read-timeout-ms: ${HTTP_READ_TIMEOUT_MS:30000}
+  cors:
+    # Dev origins: the packaged SPA on :8080 and the Vite dev server on :5173.
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:8080,http://localhost:5173}
   base-url: ${APP_BASE_URL:http://localhost:8080}
   frontend-url: ${APP_FRONTEND_URL:http://localhost:5173}
   encryption:
@@ -98,3 +101,7 @@ logging:
   # Override log path via LOG_PATH env var (default: logs/).
   level:
     root: INFO
+
+jira:
+  default-jql: ${JIRA_DEFAULT_JQL:assignee = currentUser() ORDER BY created DESC}
+  page-size: ${JIRA_PAGE_SIZE:100}

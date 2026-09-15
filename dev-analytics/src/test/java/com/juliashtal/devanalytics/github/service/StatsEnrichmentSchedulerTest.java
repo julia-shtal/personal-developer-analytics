@@ -21,7 +21,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class CommitStatsEnrichmentSchedulerTest {
+class StatsEnrichmentSchedulerTest {
 
     @Mock GitCommitEntityRepository commitRepository;
     @Mock GitHubPullRequestRepository prRepository;
@@ -31,7 +31,7 @@ class CommitStatsEnrichmentSchedulerTest {
     @Mock GitHubClientFactory clientFactory;
 
     @InjectMocks
-    CommitStatsEnrichmentScheduler scheduler;
+    StatsEnrichmentScheduler scheduler;
 
     // ── no repos with PENDING → exits immediately ───────────────────────────
 

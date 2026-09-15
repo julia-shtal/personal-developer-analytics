@@ -34,7 +34,7 @@ import java.util.concurrent.*;
  *       most recent commits (priority window, e.g. last 150). Uses a small thread
  *       pool (2 workers) with rate limiting so the initial sync completes quickly
  *       without hammering GitHub.</li>
- *   <li>{@link #processPendingBatchForRepo} — called by {@link CommitStatsEnrichmentScheduler}
+ *   <li>{@link #processPendingBatchForRepo} — called by {@link StatsEnrichmentScheduler}
  *       every 2 minutes for background backfill. Processes up to 50 PENDING commits
  *       per run in a single thread at ~1 req/sec.</li>
  * </ul>

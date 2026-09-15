@@ -31,10 +31,6 @@ public class JwtService {
         this.accessTokenExpirationMs = accessTokenExpirationMs;
     }
 
-    public String generateToken(UserDetails userDetails) {
-        return generateAccessToken(userDetails);
-    }
-
     public String generateAccessToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", "access");

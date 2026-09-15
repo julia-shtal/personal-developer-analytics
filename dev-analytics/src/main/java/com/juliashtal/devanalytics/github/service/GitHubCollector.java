@@ -24,7 +24,7 @@ import java.util.List;
  *       are enriched synchronously using the detail endpoint so that current
  *       dashboards reflect fresh stats right away.</li>
  *   <li><b>Phase C — background backfill:</b> the remaining PENDING commits are
- *       handled by {@link CommitStatsEnrichmentScheduler} which runs every 2 minutes
+ *       handled by {@link StatsEnrichmentScheduler} which runs every 2 minutes
  *       in the background.</li>
  * </ol>
  *
@@ -71,7 +71,7 @@ public class GitHubCollector {
                 ingest.token(),
                 extractRepoFullName(saved));
 
-        // Phase C (background) is handled by CommitStatsEnrichmentScheduler — no action needed here.
+        // Phase C (background) is handled by StatsEnrichmentScheduler — no action needed here.
         int pending = (int) saved.stream()
                 .filter(c -> c.getStatsStatus() == StatsStatus.PENDING)
                 .count();

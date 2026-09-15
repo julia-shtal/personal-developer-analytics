@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.config;
+package com.juliashtal.devanalytics.config.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Controller;

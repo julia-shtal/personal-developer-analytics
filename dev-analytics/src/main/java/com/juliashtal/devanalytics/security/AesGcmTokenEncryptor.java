@@ -37,10 +37,11 @@ public class AesGcmTokenEncryptor implements TokenEncryptor {
 
     private final SecretKey key;
     private final String legacyPrefix;
+    private final SecureRandom random = new SecureRandom();
 
     public AesGcmTokenEncryptor(
             @Value("${app.encryption.key}") String encryptionKeyB64,
-            @Value("${app.jwt.secret:change-me-token-secret}") String jwtSecret) {
+            @Value("${app.jwt.secret}") String jwtSecret) {
         this.key = new SecretKeySpec(Base64.getDecoder().decode(encryptionKeyB64), "AES");
         this.legacyPrefix = jwtSecret + ":";
     }
@@ -50,7 +51,7 @@ public class AesGcmTokenEncryptor implements TokenEncryptor {
         if (plain == null) return null;
         try {
             byte[] iv = new byte[IV_BYTES];
-            new SecureRandom().nextBytes(iv);
+            random.nextBytes(iv);
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, iv));
             byte[] ciphertext = cipher.doFinal(plain.getBytes(StandardCharsets.UTF_8));

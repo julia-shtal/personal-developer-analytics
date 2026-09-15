@@ -35,7 +35,7 @@ refactor_ratio =
 
 ## Edge cases
 
-- **All commits still PENDING**: `enrichedTotal = 0` → no snapshot written. The value becomes available once `CommitStatsEnrichmentScheduler` processes the backlog.
+- **All commits still PENDING**: `enrichedTotal = 0` → no snapshot written. The value becomes available once `StatsEnrichmentScheduler` processes the backlog.
 - **Local Git repos**: all commits have accurate stats immediately (JGit reads diffs directly), so `stats_status = COMPLETE` is set at collection time.
 - **`deletions == additions`**: not counted as a refactor commit. The threshold is strictly `deletions > additions`.
 - **Merge commits with no diff**: `additions = 0`, `deletions = 0` → `deletions > additions` is false → not counted as a refactor.

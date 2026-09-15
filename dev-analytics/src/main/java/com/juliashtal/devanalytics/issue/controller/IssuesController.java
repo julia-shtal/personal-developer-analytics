@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.issue;
+package com.juliashtal.devanalytics.issue.controller;
 
 import com.juliashtal.devanalytics.datasource.model.DataSourceConfig;
 import com.juliashtal.devanalytics.datasource.model.DataSourceType;
