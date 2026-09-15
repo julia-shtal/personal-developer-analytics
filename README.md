@@ -53,8 +53,8 @@ a React dashboard with AI-generated insights via local Ollama.
 
 | Variable | Purpose | Default | How to generate |
 |----------|---------|---------|----------------|
-| `JWT_SECRET` | JWT signing key | dev key (**insecure**) | `openssl rand -hex 32` |
-| `ENCRYPTION_KEY` | AES-256-GCM token encryption key (base64) | dev key (**insecure**) | `openssl rand -base64 32` |
+| `JWT_SECRET` | JWT signing key | none — **startup fails** if unset | `openssl rand -hex 32` |
+| `ENCRYPTION_KEY` | AES-256-GCM token encryption key (base64) | none — **startup fails** if unset | `openssl rand -base64 32` |
 | `POSTGRES_PASSWORD` | Database password | `123` (dev only) | choose one |
 | `SMTP_HOST` | SMTP server for password-reset emails | `mailhog` (Docker) / `smtp.gmail.com` (manual) | — |
 | `SMTP_PORT` | SMTP port | `1025` (Docker) / `587` (manual) | — |
@@ -63,6 +63,11 @@ a React dashboard with AI-generated insights via local Ollama.
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` | — |
 | `COOKIE_SECURE` | Set `true` in production (HTTPS only) | `false` | — |
 
+> `JWT_SECRET` and `ENCRYPTION_KEY` have no defaults. Unset, the application fails to
+> start: `JWT_SECRET` shorter than 32 bytes raises `WeakKeyException`, and an empty
+> `ENCRYPTION_KEY` raises `IllegalArgumentException: Empty key`. Both are thrown during
+> bean creation, so the stack trace names the bean rather than the variable.
+>
 > In production, always set `JWT_SECRET`, `ENCRYPTION_KEY`, and `POSTGRES_PASSWORD`
 > via environment variables or a secrets manager. Never commit real secrets.
 

@@ -44,11 +44,11 @@ import java.time.LocalDate;
  * <p>Invariant: {@code period_from IS NOT NULL AND period_to IS NOT NULL}.</p>
  *
  * <h3>Upsert guard</h3>
- * <p>All writes go through {@code MetricsService.saveMetric}, which uses a native-SQL
+ * <p>All writes go through {@code MetricSnapshotWriter}, which uses a native-SQL
  * {@code findExisting} query with {@code IS NOT DISTINCT FROM} on nullable dimensions
  * ({@code repository_id}, {@code team_id}, {@code period_from}, {@code period_to}) to
- * locate an existing row before inserting. Bypassing {@code saveMetric} will produce
- * duplicate rows that aggregate incorrectly.</p>
+ * locate an existing row before inserting. The table carries no unique key, so bypassing
+ * the writer produces duplicate rows that aggregate incorrectly.</p>
  *
  * <h3>Scope</h3>
  * <p>Personal metrics: {@link #team} is {@code NULL}.

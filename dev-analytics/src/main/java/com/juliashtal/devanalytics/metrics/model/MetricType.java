@@ -44,7 +44,7 @@ public enum MetricType {
     public final boolean inAiContext;
     /** True when the metric represents a daily count to be summed over the period (not averaged). */
     public final boolean dailySum;
-    /** True when the metric is stored with periodFrom/periodTo instead of a date series. */
+    /** True when the metric is recomputed per ISO week; storage shape is a calculator property. */
     public final boolean aggregatePeriod;
 
     MetricType(boolean inAiContext, boolean dailySum, boolean aggregatePeriod) {
