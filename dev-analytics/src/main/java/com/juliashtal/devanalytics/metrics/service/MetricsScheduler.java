@@ -24,10 +24,18 @@ public class MetricsScheduler {
     private final MetricsService metricsService;
     private final UserRepository userRepository;
     private final SystemClock systemClock;
+    private final MetricWriteGate writeGate;
 
     /** Runs every day at 01:00 UTC. */
     @Scheduled(cron = "0 0 1 * * ?", zone = "UTC")
     public void calculateYesterday() {
+        boolean ran = writeGate.runExclusively(this::calculateYesterdayForAllUsers);
+        if (!ran) {
+            log.info("Nightly metrics scheduler skipped: another metric writer is running");
+        }
+    }
+
+    private void calculateYesterdayForAllUsers() {
         LocalDate yesterday = systemClock.yesterday();
         log.info("Nightly metrics scheduler started for {}", yesterday);
 

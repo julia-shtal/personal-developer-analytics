@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.metrics;
 
 import com.juliashtal.devanalytics.config.SystemClock;
+import com.juliashtal.devanalytics.metrics.service.MetricWriteGate;
 import com.juliashtal.devanalytics.metrics.service.MetricsScheduler;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.user.model.User;
@@ -48,7 +49,7 @@ class MetricsSchedulerTest {
 
     private MetricsScheduler scheduler() {
         return new MetricsScheduler(metricsService, userRepository,
-                new SystemClock(Clock.fixed(FIXED, ZoneOffset.UTC)));
+                new SystemClock(Clock.fixed(FIXED, ZoneOffset.UTC)), new MetricWriteGate());
     }
 
     private User userWithId(Long id) {
@@ -108,6 +109,18 @@ class MetricsSchedulerTest {
         verify(metricsService).calculateDailyMetrics(eq(1L), fromCaptor.capture(), toCaptor.capture());
         assertThat(fromCaptor.getValue()).isEqualTo(YESTERDAY);
         assertThat(toCaptor.getValue()).isEqualTo(YESTERDAY);
+    }
+
+    /** Without this, removing the gate from the scheduler leaves every other test here green. */
+    @Test
+    void calculateYesterday_anotherWriterHoldsGate_computesNothing() {
+        MetricWriteGate busyGate = mock(MetricWriteGate.class);
+        when(busyGate.runExclusively(any())).thenReturn(false);
+
+        new MetricsScheduler(metricsService, userRepository,
+                new SystemClock(Clock.fixed(FIXED, ZoneOffset.UTC)), busyGate).calculateYesterday();
+
+        verifyNoInteractions(metricsService, userRepository);
     }
 
     /**

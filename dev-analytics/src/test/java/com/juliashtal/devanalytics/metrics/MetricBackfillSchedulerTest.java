@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.metrics;
 
 import com.juliashtal.devanalytics.metrics.model.BackfillResult;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillScheduler;
+import com.juliashtal.devanalytics.metrics.service.MetricWriteGate;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
@@ -33,10 +34,21 @@ class MetricBackfillSchedulerTest {
         when(backfillService.backfillUser(anyLong()))
                 .thenReturn(new BackfillResult(0, 0, LocalDate.now(), LocalDate.now()));
 
-        new MetricBackfillScheduler(userRepository, backfillService).backfillAll();
+        new MetricBackfillScheduler(userRepository, backfillService, new MetricWriteGate()).backfillAll();
 
         verify(backfillService).backfillUser(1L);
         verify(backfillService).backfillUser(2L);
+    }
+
+    /** Without this, removing the gate from the scheduler leaves every other test here green. */
+    @Test
+    void backfillAll_anotherWriterHoldsGate_backfillsNothing() {
+        MetricWriteGate busyGate = mock(MetricWriteGate.class);
+        when(busyGate.runExclusively(any())).thenReturn(false);
+
+        new MetricBackfillScheduler(userRepository, backfillService, busyGate).backfillAll();
+
+        verifyNoInteractions(backfillService, userRepository);
     }
 
     @Test
@@ -49,7 +61,7 @@ class MetricBackfillSchedulerTest {
         when(backfillService.backfillUser(3L))
                 .thenReturn(new BackfillResult(0, 0, LocalDate.now(), LocalDate.now()));
 
-        new MetricBackfillScheduler(userRepository, backfillService).backfillAll();
+        new MetricBackfillScheduler(userRepository, backfillService, new MetricWriteGate()).backfillAll();
 
         verify(backfillService).backfillUser(1L);
         verify(backfillService).backfillUser(3L);

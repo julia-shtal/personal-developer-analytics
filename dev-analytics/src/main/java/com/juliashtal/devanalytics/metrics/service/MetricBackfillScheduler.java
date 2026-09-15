@@ -11,9 +11,9 @@ import org.springframework.stereotype.Component;
  * Drives {@link MetricBackfillService} over every user once a night, filling days inside each
  * user's collected history that have never been calculated.
  *
- * <p>Separate from {@link MetricsScheduler}, which only computes yesterday. Runs at 03:00 UTC;
- * ordering against that job is not a correctness requirement, because both write through the
- * same {@link MetricsService#calculateDailyMetrics} upsert guard.</p>
+ * <p>Separate from {@link MetricsScheduler}, which only computes yesterday. Runs at 03:00 UTC and
+ * takes {@link MetricWriteGate} first: the upsert guard both jobs share reads before it writes, so
+ * it orders writes but does not make concurrent ones safe.</p>
  */
 @Component
 @RequiredArgsConstructor
@@ -22,9 +22,17 @@ public class MetricBackfillScheduler {
 
     private final UserRepository userRepository;
     private final MetricBackfillService backfillService;
+    private final MetricWriteGate writeGate;
 
     @Scheduled(cron = "0 0 3 * * ?", zone = "UTC")
     public void backfillAll() {
+        boolean ran = writeGate.runExclusively(this::backfillAllUsers);
+        if (!ran) {
+            log.info("History backfill job skipped: another metric writer is running");
+        }
+    }
+
+    private void backfillAllUsers() {
         log.info("History backfill job started");
 
         userRepository.findAll().forEach(user -> {

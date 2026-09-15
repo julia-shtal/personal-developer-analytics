@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.scheduler.MetricsSummaryScheduler;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
 import com.juliashtal.devanalytics.config.SystemClock;
+import com.juliashtal.devanalytics.metrics.service.MetricWriteGate;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.notification.NotificationDispatchService;
 import com.juliashtal.devanalytics.user.model.User;
@@ -61,7 +62,7 @@ class MetricsSummarySchedulerTest {
     @BeforeEach
     void setUp() {
         scheduler = new MetricsSummaryScheduler(userRepository, metricsService, metricsAiService,
-                notificationDispatch, new SystemClock(Clock.fixed(FIXED, ZoneOffset.UTC)));
+                notificationDispatch, new SystemClock(Clock.fixed(FIXED, ZoneOffset.UTC)), new MetricWriteGate());
     }
 
     @Test
@@ -115,6 +116,27 @@ class MetricsSummarySchedulerTest {
 
         verify(metricsAiService, times(1)).generateSummary(eq(healthy), any(), any(), eq(null));
         verify(metricsAiService, org.mockito.Mockito.never()).generateSummary(eq(failing), any(), any(), any());
+    }
+
+    /**
+     * A weekly job that skipped entirely on contention would leave the user with no brief for
+     * seven days, so only the refresh is allowed to be declined.
+     */
+    @Test
+    void generateWeeklySummaries_anotherWriterHoldsGate_stillSummarisesStoredSnapshots() {
+        User user = user(1L);
+        MetricWriteGate busyGate = org.mockito.Mockito.mock(MetricWriteGate.class);
+        when(busyGate.runExclusively(any())).thenReturn(false);
+        scheduler = new MetricsSummaryScheduler(userRepository, metricsService, metricsAiService,
+                notificationDispatch, new SystemClock(Clock.fixed(FIXED, ZoneOffset.UTC)), busyGate);
+        when(userRepository.findAll()).thenReturn(List.of(user));
+        when(metricsAiService.generateSummary(any(), any(), any(), any()))
+                .thenReturn(MetricsSummaryDto.builder().headline("h").build());
+
+        scheduler.generateWeeklySummaries();
+
+        org.mockito.Mockito.verifyNoInteractions(metricsService);
+        verify(metricsAiService).generateSummary(user, FROM, TO, null);
     }
 
     /**

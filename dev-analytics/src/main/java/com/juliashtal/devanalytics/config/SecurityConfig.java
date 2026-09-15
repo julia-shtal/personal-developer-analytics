@@ -4,6 +4,7 @@ import com.juliashtal.devanalytics.security.JwtAuthFilter;
 import com.juliashtal.devanalytics.security.service.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -99,6 +100,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Ordered before the team rule below: the first matching pattern wins. Named
+                        // in full rather than as a subtree — "me" is a literal where every sibling
+                        // route takes a {teamId}, so a wildcard here would shadow all of them.
+                        .requestMatchers(HttpMethod.GET, "/api/teams/me/memberships").authenticated()
                         .requestMatchers("/api/teams/**").hasAnyRole("MANAGER", "ADMIN")
                         .anyRequest().authenticated()
                 )

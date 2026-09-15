@@ -1,4 +1,10 @@
 spring:
+  task:
+    scheduling:
+      pool:
+        # Enough for the 2-minute enrichment pass to overrun without delaying the three
+        # nightly crons, which fire an hour apart. The default of 1 queues them behind it.
+        size: ${SCHEDULING_POOL_SIZE:4}
   servlet:
     multipart:
       max-file-size: 2MB
@@ -41,6 +47,10 @@ app:
     refresh-expiration: 604800000  # 7 days
   password-reset:
     expiration: 3600000            # 1 hour
+  http:
+    # Bounds one outbound hop on the shared RestTemplate (Jira discovery and collection).
+    connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${HTTP_READ_TIMEOUT_MS:30000}
   base-url: ${APP_BASE_URL:http://localhost:8080}
   frontend-url: ${APP_FRONTEND_URL:http://localhost:5173}
   encryption:
