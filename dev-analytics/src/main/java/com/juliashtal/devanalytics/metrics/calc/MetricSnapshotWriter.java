@@ -13,8 +13,7 @@ import java.time.LocalDate;
 
 /**
  * Persists a {@link MetricSnapshot} using the native-SQL upsert guard.
- * Extracted from {@code MetricsService.saveMetric} — logic is unchanged.
- * All {@link MetricCalculator} beans call this service to write their results.
+ * Every {@link MetricCalculator} writes its results through this service.
  */
 @Service
 @RequiredArgsConstructor

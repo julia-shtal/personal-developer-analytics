@@ -63,7 +63,7 @@ class AggregateStorageShapeDriftTest {
      * The metric types stored with {@code periodFrom}/{@code periodTo} — the contract the read
      * paths resolve against, and not derivable from {@code MetricType.aggregatePeriod}.
      */
-    private static final Set<MetricType> EXPECTED_PERIOD_STORED = Set.of(
+    static final Set<MetricType> EXPECTED_PERIOD_STORED = Set.of(
             PR_LEAD_TIME_HOURS_MEDIAN,
             PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
             ISSUE_LEAD_TIME_HOURS_MEDIAN,

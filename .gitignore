@@ -1,7 +1,7 @@
 docs/*
+# Metric documents are thesis-canonical and belong in the deliverable. Specs, ADRs
+# and internal notes stay local, which the docs/* rule above already handles.
 !docs/metrics/
-docs/metrics/*
-!docs/metrics/author-attribution.md
 .claude/
 .agents/
 .idea
