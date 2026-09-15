@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.config;
 
+import com.github.benmanes.caffeine.cache.Ticker;
 import com.juliashtal.devanalytics.exception.RateLimitExceededException;
 import com.juliashtal.devanalytics.security.model.CustomUserDetails;
 import org.junit.jupiter.api.AfterEach;
@@ -14,7 +15,9 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,6 +31,9 @@ class RateLimitInterceptorTest {
     RateLimitInterceptor interceptor;
     MockHttpServletRequest request;
     MockHttpServletResponse response;
+
+    private final AtomicLong nanos = new AtomicLong();
+    private final Ticker ticker = nanos::get;
 
     @BeforeEach
     void setUp() {
@@ -85,5 +91,38 @@ class RateLimitInterceptorTest {
         // No SecurityContext set — interceptor should pass through
         request.setRequestURI("/api/auth/register");
         assertThat(interceptor.preHandle(request, response, null)).isTrue();
+    }
+
+    /** Idle eviction must be invisible: ten minutes is ten refill windows, so the quota is full either way. */
+    @Test
+    void aiBucket_idleBeyondTtl_grantsAFreshQuota() throws Exception {
+        interceptor = new RateLimitInterceptor(ticker);
+        ReflectionTestUtils.setField(interceptor, "aiRpm", 1);
+        ReflectionTestUtils.setField(interceptor, "defaultRpm", 5);
+        authenticateAs(42L);
+        request.setRequestURI("/api/ai/summary");
+
+        interceptor.preHandle(request, response, null);   // consumes the 1 allowed token
+        assertThatThrownBy(() -> interceptor.preHandle(request, response, null))
+                .isInstanceOf(RateLimitExceededException.class);
+
+        nanos.addAndGet(RateLimitInterceptor.BUCKET_IDLE_TTL.plusMinutes(1).toNanos());
+
+        assertThat(interceptor.preHandle(request, response, null)).isTrue();
+    }
+
+    @Test
+    void aiBucket_stillWithinTtl_keepsItsExhaustedQuota() throws Exception {
+        interceptor = new RateLimitInterceptor(ticker);
+        ReflectionTestUtils.setField(interceptor, "aiRpm", 1);
+        ReflectionTestUtils.setField(interceptor, "defaultRpm", 5);
+        authenticateAs(42L);
+        request.setRequestURI("/api/ai/summary");
+
+        interceptor.preHandle(request, response, null);
+        nanos.addAndGet(Duration.ofSeconds(5).toNanos());
+
+        assertThatThrownBy(() -> interceptor.preHandle(request, response, null))
+                .isInstanceOf(RateLimitExceededException.class);
     }
 }

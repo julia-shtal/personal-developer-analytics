@@ -34,7 +34,7 @@ import static com.juliashtal.devanalytics.helper.ParsingHelper.resolveApiBase;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class CommitStatsEnrichmentScheduler {
+public class StatsEnrichmentScheduler {
 
     private final GitCommitEntityRepository commitRepository;
     private final GitHubPullRequestRepository prRepository;

@@ -25,7 +25,7 @@ import java.util.List;
  *       enriched synchronously (reviews + size stats) so dashboards reflect fresh data
  *       right away.</li>
  *   <li><b>Phase C — background backfill:</b> remaining PENDING PRs are handled by
- *       {@link CommitStatsEnrichmentScheduler} which runs every 2 minutes.</li>
+ *       {@link StatsEnrichmentScheduler} which runs every 2 minutes.</li>
  * </ol>
  *
  * <p>This removes the bottleneck where review fetches and detail calls for every PR
@@ -67,7 +67,7 @@ public class GitHubPrCollector {
         String repoFullName = extractRepoFullName(saved);
         enrichmentService.enrichImmediate(saved, ingest.apiBase(), ingest.token(), repoFullName);
 
-        // Phase C (background) is handled by CommitStatsEnrichmentScheduler.
+        // Phase C (background) is handled by StatsEnrichmentScheduler.
         long pending = saved.stream()
                 .filter(p -> p.getStatsStatus() == StatsStatus.PENDING)
                 .count();

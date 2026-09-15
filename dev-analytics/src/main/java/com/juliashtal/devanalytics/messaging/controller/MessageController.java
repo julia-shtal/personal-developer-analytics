@@ -1,4 +1,4 @@
-package com.juliashtal.devanalytics.messaging;
+package com.juliashtal.devanalytics.messaging.controller;
 
 import com.juliashtal.devanalytics.messaging.dto.DirectMessageDto;
 import com.juliashtal.devanalytics.messaging.dto.InboxEntryDto;

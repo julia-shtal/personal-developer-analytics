@@ -1,5 +1,8 @@
 package com.juliashtal.devanalytics.config;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Ticker;
 import com.juliashtal.devanalytics.exception.RateLimitExceededException;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import io.github.bucket4j.Bandwidth;
@@ -13,7 +16,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.time.Duration;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -25,7 +27,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>AI endpoints ({@code /api/ai/}): {@code app.rate-limit.ai-rpm} requests/minute.</li>
  * </ul>
  *
- * <p>Buckets are per-user, per-tier, in a {@link ConcurrentHashMap}.
+ * <p>Buckets are per-user, per-tier, in a Caffeine cache that drops them once idle.
  * For multi-instance deployments, replace with Redis-backed Bucket4j.
  *
  * <p>Exhausted buckets return 429 with a {@code Retry-After} header via
@@ -41,8 +43,26 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     @Value("${app.rate-limit.ai-rpm:10}")
     int aiRpm;
 
-    private final ConcurrentHashMap<Long, Bucket> defaultBuckets = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Long, Bucket> aiBuckets = new ConcurrentHashMap<>();
+    /**
+     * Longer than the refill window, so an evicted bucket would have refilled anyway and a
+     * returning user is never handed a quota they had already spent.
+     */
+    static final Duration BUCKET_IDLE_TTL = Duration.ofMinutes(10);
+
+    private final Cache<Long, Bucket> defaultBuckets;
+    private final Cache<Long, Bucket> aiBuckets;
+
+    public RateLimitInterceptor() {
+        this(Ticker.systemTicker());
+    }
+
+    /** Test seam: a controllable ticker makes idle eviction assertable rather than timed. */
+    RateLimitInterceptor(Ticker ticker) {
+        this.defaultBuckets = Caffeine.newBuilder()
+                .expireAfterAccess(BUCKET_IDLE_TTL).ticker(ticker).build();
+        this.aiBuckets = Caffeine.newBuilder()
+                .expireAfterAccess(BUCKET_IDLE_TTL).ticker(ticker).build();
+    }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -55,8 +75,8 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
         boolean isAi = request.getRequestURI().startsWith("/api/ai/");
         Bucket bucket = isAi
-                ? aiBuckets.computeIfAbsent(userId, id -> newBucket(aiRpm))
-                : defaultBuckets.computeIfAbsent(userId, id -> newBucket(defaultRpm));
+                ? aiBuckets.get(userId, id -> newBucket(aiRpm))
+                : defaultBuckets.get(userId, id -> newBucket(defaultRpm));
 
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
         if (!probe.isConsumed()) {

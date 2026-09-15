@@ -1,5 +1,7 @@
-package com.juliashtal.devanalytics.attribution;
+package com.juliashtal.devanalytics.attribution.controller;
 
+import com.juliashtal.devanalytics.attribution.AttributionMigrationService;
+import com.juliashtal.devanalytics.attribution.AttributionMigrationStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;

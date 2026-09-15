@@ -42,7 +42,7 @@ configuration rather than of the deployment:
 | `MetricBackfillScheduler` | 03:00 UTC daily — fills gaps in each user's collected history |
 | `MetricsSummaryScheduler` | 08:00 UTC Mondays — generates the weekly AI summary |
 
-Jobs declared with `fixedRate` or `fixedDelay` (`CommitStatsEnrichmentScheduler`,
+Jobs declared with `fixedRate` or `fixedDelay` (`StatsEnrichmentScheduler`,
 `SyncJobTracker`) carry no zone, because an interval has no wall-clock anchor to interpret.
 
 ## The attribution clock

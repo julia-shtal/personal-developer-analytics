@@ -30,7 +30,7 @@ FOR each calendar day D in [from, to):
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied in the query. Attribution can match on a declared email address, and a local commit carries no `author_github_id`, so an automation account configured with the user's address would otherwise be attributed to them. See [author-attribution.md](author-attribution.md).
 - The query (`aggregateCommitsDailyByRepoIdsAndIdentity`) returns `AVG(c.additions + c.deletions)` alongside the daily commit count; a single DB round-trip produces both `DAILY_COMMITS_COUNT` and `DAILY_COMMITS_AVG_SIZE`.
-- For GitHub-sourced commits, `additions` and `deletions` are populated by `CommitStatsEnrichmentScheduler`. Until enrichment completes, those commits contribute 0 to the average, making the value unreliable. The metric is saved regardless; users should treat values close to 0 for recent days as provisional.
+- For GitHub-sourced commits, `additions` and `deletions` are populated by `StatsEnrichmentScheduler`. Until enrichment completes, those commits contribute 0 to the average, making the value unreliable. The metric is saved regardless; users should treat values close to 0 for recent days as provisional.
 
 ## Edge cases
 
