@@ -3,7 +3,7 @@ package com.juliashtal.devanalytics.user;
 import com.juliashtal.devanalytics.exception.BadRequestException;
 import com.juliashtal.devanalytics.exception.ConflictException;
 import com.juliashtal.devanalytics.exception.UnprocessableEntityException;
-import com.juliashtal.devanalytics.github.service.GitHubAccountLookup;
+import com.juliashtal.devanalytics.github.identity.GitHubAccountLookup;
 import com.juliashtal.devanalytics.user.model.AuthorIdentityChangedEvent;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.model.UserCommitEmail;

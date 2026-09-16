@@ -10,7 +10,7 @@ import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.git.service.GitRepositoryService;
 import com.juliashtal.devanalytics.git.model.dto.RegisterLocalRepoRequest;
-import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
+import com.juliashtal.devanalytics.github.repo.GitHubRepositoryService;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;

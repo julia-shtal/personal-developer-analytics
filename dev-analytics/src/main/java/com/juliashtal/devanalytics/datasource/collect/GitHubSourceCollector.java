@@ -5,10 +5,10 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.service.SyncJobTracker;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.github.service.GitHubAccountLookup;
-import com.juliashtal.devanalytics.github.service.GitHubCollector;
-import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
-import com.juliashtal.devanalytics.github.service.GitHubPrCollector;
+import com.juliashtal.devanalytics.github.identity.GitHubAccountLookup;
+import com.juliashtal.devanalytics.github.commit.GitHubCommitCollector;
+import com.juliashtal.devanalytics.github.issue.GitHubIssuesCollector;
+import com.juliashtal.devanalytics.github.pullrequest.GitHubPullRequestCollector;
 import com.juliashtal.devanalytics.user.service.AuthorIdentityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +24,8 @@ import org.springframework.stereotype.Component;
 public class GitHubSourceCollector implements SourceCollector {
 
     private final GitRepositoryEntityRepository gitRepoRepository;
-    private final GitHubCollector gitHubCollector;
-    private final GitHubPrCollector prCollector;
+    private final GitHubCommitCollector commitCollector;
+    private final GitHubPullRequestCollector prCollector;
     private final GitHubIssuesCollector issuesCollector;
     private final GitHubAccountLookup accountLookup;
     private final AuthorIdentityService authorIdentityService;
@@ -51,7 +51,7 @@ public class GitHubSourceCollector implements SourceCollector {
         for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
             try {
                 if (jobState != null) tracker.setPhase(jobState, "commits", -1);
-                int commits = gitHubCollector.collectForRepository(repo.getId(), jobState);
+                int commits = commitCollector.collectForRepository(repo.getId(), jobState);
 
                 if (jobState != null) tracker.setPhase(jobState, "pull requests", -1);
                 int prs = prCollector.collectForRepository(repo.getId(), jobState);

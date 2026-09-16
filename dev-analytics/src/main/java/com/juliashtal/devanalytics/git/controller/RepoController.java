@@ -2,7 +2,7 @@ package com.juliashtal.devanalytics.git.controller;
 
 import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.git.service.RepoService;
-import com.juliashtal.devanalytics.github.service.AsyncIssuesCollectService;
+import com.juliashtal.devanalytics.github.issue.AsyncIssuesCollector;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -26,7 +26,7 @@ import java.util.Map;
 public class RepoController {
 
     private final RepoService repoService;
-    private final AsyncIssuesCollectService asyncIssuesCollectService;
+    private final AsyncIssuesCollector asyncIssuesCollector;
 
     @Operation(summary = "List repos visible to the current user (own + team), with subscribed flag")
     @GetMapping
@@ -58,6 +58,6 @@ public class RepoController {
     ) {
         boolean enabled = Boolean.TRUE.equals(body.get("enabled"));
         return repoService.setCollectIssues(repoId, enabled,
-                asyncIssuesCollectService::collectIssuesForRepo);
+                asyncIssuesCollector::collectIssuesForRepo);
     }
 }

@@ -5,7 +5,7 @@ import com.juliashtal.devanalytics.datasource.model.DataSourceType;
 import com.juliashtal.devanalytics.datasource.service.DataSourceService;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
-import com.juliashtal.devanalytics.github.service.GitHubIssuesCollector;
+import com.juliashtal.devanalytics.github.issue.GitHubIssuesCollector;
 import com.juliashtal.devanalytics.issue.model.IssueDto;
 import com.juliashtal.devanalytics.issue.service.IssueService;
 import com.juliashtal.devanalytics.jira.service.JiraCollector;

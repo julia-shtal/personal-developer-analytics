@@ -2,8 +2,8 @@ package com.juliashtal.devanalytics.github.controller;
 
 import com.juliashtal.devanalytics.github.model.dto.GitHubPullRequestDto;
 
-import com.juliashtal.devanalytics.github.service.GitHubPrCollector;
-import com.juliashtal.devanalytics.github.service.GitHubPullRequestCollector;
+import com.juliashtal.devanalytics.github.pullrequest.GitHubPullRequestCollector;
+import com.juliashtal.devanalytics.github.pullrequest.GitHubPullRequestQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -22,8 +22,8 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class GitHubPullRequestController {
 
-    private final GitHubPrCollector prCollector;
-    private final GitHubPullRequestCollector prQueryService;
+    private final GitHubPullRequestCollector prCollector;
+    private final GitHubPullRequestQueryService prQueryService;
 
     @Operation(summary = "Synchronously collect new and updated pull requests for a GitHub repository")
     @PostMapping("/repos/{repoId}/pull-requests/collect")

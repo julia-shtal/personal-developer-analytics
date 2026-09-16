@@ -78,10 +78,11 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 │  AsyncDataSourceCollectService · SyncJobTracker                 │
 │  GitLocalCollector · RepoService · GitRepositoryService         │
 │  GitHubClientFactory · GitHubRepositoryService                  │
-│  GitHubCollector · GitHubCommitIngestService                    │
+│  GitHubCommitCollector · GitHubCommitIngestService              │
 │  GitHubCommitStatsEnrichmentService                             │
-│  GitHubPrCollector · GitHubPullRequestCollector                 │
-│  GitHubPrStatsEnrichmentService · GitHubIssuesCollector         │
+│  GitHubPullRequestCollector · GitHubPullRequestIngestService    │
+│  GitHubPullRequestStatsEnrichmentService                        │
+│  GitHubPullRequestQueryService · GitHubIssuesCollector          │
 │  JiraCollector · IssueService                                   │
 │  MetricsService · MetricSnapshotService · MetricsScheduler      │
 │  MetricBackfillService · MetricBackfillScheduler                │
@@ -120,6 +121,22 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | `notification/` | Async notification dispatch service, gated by user prefs |
 | `messaging/` | 1:1 direct message service and controller, conversation/inbox API |
 | `invite/` | Token-based team invitation issuance and redemption |
+
+`github/` runs two collection pipelines, so it is split further. `controller/`, `model/` and
+`repository/` sit beside these.
+
+| Subpackage | Classes |
+|---|---|
+| `github/client/` | `GitHubClientFactory` |
+| `github/repo/` | `GitHubRepositoryService` |
+| `github/identity/` | `GitHubAccountLookup`, `GitHubAccountLookupImpl`, `GitHubIdentityBackfill`, `GitHubIdentityBackfillService` |
+| `github/commit/` | `GitHubCommitCollector`, `GitHubCommitIngestService`, `GitHubCommitStatsEnrichmentService` |
+| `github/pullrequest/` | `GitHubPullRequestCollector`, `GitHubPullRequestIngestService`, `GitHubPullRequestStatsEnrichmentService`, `GitHubPullRequestQueryService` |
+| `github/issue/` | `GitHubIssuesCollector`, `AsyncIssuesCollector` |
+| `github/scheduler/` | `StatsEnrichmentScheduler` |
+
+`commit/` and `pullrequest/` hold the same three roles — collector, ingest service, stats
+enrichment service — so the two-phase pattern is legible from the tree.
 
 ---
 
@@ -430,7 +447,7 @@ CHECK constraints (added V35):
 
 **`DataSourceCollectService`** — Dispatches to collectors based on `DataSourceType`. For GITHUB type it also conditionally collects issues per repo when `repo.isCollectIssues()` is true:
 - `GIT_LOCAL` → `GitLocalCollector.collectForRepository()`
-- `GITHUB` → Phase 1: `GitHubCollector.collectForRepository()` (commits), Phase 2: `GitHubPrCollector.collectForRepository()` (PRs), Phase 3 (conditional): `GitHubIssuesCollector.collectIssuesForRepo()` if `repo.collectIssues`
+- `GITHUB` → Phase 1: `GitHubCommitCollector.collectForRepository()` (commits), Phase 2: `GitHubPullRequestCollector.collectForRepository()` (PRs), Phase 3 (conditional): `GitHubIssuesCollector.collectIssuesForRepo()` if `repo.collectIssues`
 - `GITHUB_ISSUES` → `GitHubIssuesCollector.collectIssuesForRepo(cfg, repoFullName)` per repo
 - `JIRA` → iterates `JiraProjectService.listTrackedProjects(cfg)`; calls `JiraCollector.collectIssues(project)` per project. Logs a warning if no tracked projects exist.
 - Updates `lastSuccessSync` on success.
@@ -834,21 +851,23 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 - `enrichSingle(entity, ...)` — `GET /repos/{owner}/{repo}/commits/{sha}`. On 200: applies `additions`/`deletions`/`filesChanged`, sets `COMPLETE`. On 403 diff-too-large: sets `SKIPPED`. On 404/422: sets `FAILED`. On 5xx: increments attempts, backs off.
 - Rate limiting: synchronized token bucket on `MIN_INTERVAL_NS`; 100–300 ms jitter; proactive throttle when `X-RateLimit-Remaining < 100`; exponential backoff on error.
 
-**`GitHubCollector`** — Orchestrates commit collection:
+**`GitHubCommitCollector`** — Orchestrates commit collection:
 1. `GitHubCommitIngestService.ingestForRepository()` (Phase A).
 2. Sort saved by `authorDate` desc.
 3. `GitHubCommitStatsEnrichmentService.enrichImmediate()` (Phase B — top 150).
 4. Log remaining PENDING count (Phase C handled by scheduler).
 
-**`GitHubPrCollector`** — Orchestrates PR collection:
-1. `GitHubPullRequestCollector` (ingest): pages all PRs, upserts by `(repoId, number)`, saves with `statsStatus=PENDING`.
+**`GitHubPullRequestCollector`** — Orchestrates PR collection:
+1. `GitHubPullRequestIngestService` (ingest): pages all PRs, upserts by `(repoId, number)`, saves with `statsStatus=PENDING`.
 2. Sort saved by `createdAt` desc.
-3. `GitHubPrStatsEnrichmentService.enrichImmediate()` (Phase B — top 150): fetches reviews (delete+save in `github_pr_reviews`) and detail stats per PR.
+3. `GitHubPullRequestStatsEnrichmentService.enrichImmediate()` (Phase B — top 150): fetches reviews (delete+save in `github_pr_reviews`) and detail stats per PR.
 4. Phase C handled by scheduler.
 
-**`GitHubPullRequestCollector`** — Ingest-only service. Pages PRs from GitHub API, upserts into `github_pull_requests`. Also used by `GitHubPullRequestController` for paginated listing. Returns `IngestResult(savedEntities, apiBase, token)`.
+**`GitHubPullRequestIngestService`** — Ingest-only service. Pages PRs from GitHub API, upserts into `github_pull_requests`. Returns `IngestResult(savedEntities, apiBase, token)`.
 
-**`GitHubPrStatsEnrichmentService`** — Enriches PR stats. Same rate-limit pattern as commit enrichment. `enrichSingle(pr, ...)` — `GET /repos/{owner}/{repo}/pulls/{number}` for additions/deletions/changedFiles/commitsCount; `GET .../reviews` for review list (delete+save all reviews then mark PR `COMPLETE`).
+**`GitHubPullRequestQueryService`** — Read side for stored PRs. `listPullRequests(repoId, pageable)` — the paginated listing `GitHubPullRequestController` serves.
+
+**`GitHubPullRequestStatsEnrichmentService`** — Enriches PR stats. Same rate-limit pattern as commit enrichment. `enrichSingle(pr, ...)` — `GET /repos/{owner}/{repo}/pulls/{number}` for additions/deletions/changedFiles/commitsCount; `GET .../reviews` for review list (delete+save all reviews then mark PR `COMPLETE`).
 
 **`GitHubIssuesCollector`** — Fetches all issues (open + closed) via Kohsuke API, maps to `IssueEntity` with `externalId = owner/repo#{number}`. Upserts by `(dataSourceId, externalId)`. Accepts either a `GitRepositoryEntity` or a bare `repoFullName` string.
 
@@ -1618,8 +1637,8 @@ POST /datasources/{id}/collect
               │     └─▶ reads lastSuccessSync  [before collection stamps it → "first run?"]
               │     └─▶ DataSourceCollectService.collectForDataSource()
               │           ├─ GIT_LOCAL      → GitLocalCollector.collectForRepository()
-              │           ├─ GITHUB         → GitHubCollector.collectForRepository()    [commits]
-              │           │                   GitHubPrCollector.collectForRepository()  [PRs]
+              │           ├─ GITHUB         → GitHubCommitCollector.collectForRepository()      [commits]
+              │           │                   GitHubPullRequestCollector.collectForRepository() [PRs]
               │           │                   GitHubIssuesCollector (if repo.collectIssues) [issues]
               │           ├─ GITHUB_ISSUES  → GitHubIssuesCollector.collectIssuesForRepo()
               │           └─ JIRA           → JiraCollector.collectIssues()
@@ -1633,14 +1652,14 @@ Client polls `GET /datasources/{id}/collect/status` every 3 seconds. `SyncJobTra
 
 ```
 Phase A — Fast ingest (seconds)
-  GitHubCommitIngestService / GitHubPullRequestCollector
+  GitHubCommitIngestService / GitHubPullRequestIngestService
   → pages all items from GitHub list endpoint (100/page)
   → saves with statsStatus=PENDING
   → returns List<entity> sorted newest-first
 
 Phase B — Immediate enrich top 150 (seconds to minutes)
   GitHubCommitStatsEnrichmentService.enrichImmediate()   ← 2 worker threads
-  GitHubPrStatsEnrichmentService.enrichImmediate()
+  GitHubPullRequestStatsEnrichmentService.enrichImmediate()
   → fetches detail/reviews per item, sets statsStatus=COMPLETE
   → rate-limited: ~1.4 req/s, proactive throttle on X-RateLimit-Remaining < 100
 
