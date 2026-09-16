@@ -19,16 +19,19 @@ services:
     restart: unless-stopped
     volumes:
       - ollama_models:/root/.ollama
-    # Start serve in background, wait for it, pull the model, then keep the process alive.
-    command: >
-      /bin/sh -c "
+    # The image's ENTRYPOINT is /bin/ollama, so a shell wrapper has to replace the entrypoint;
+    # left in `command` it is appended as an ollama subcommand and the container exits at once.
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
         ollama serve &
-        until curl -sf http://localhost:11434/api/tags; do sleep 1; done &&
-        ollama list | grep -q llama3.2 || ollama pull llama3.2 &&
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        ollama list | grep -q llama3.2 || ollama pull llama3.2
         wait
-      "
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags"]
+      # The image ships neither curl nor wget, so the CLI is the only probe available. Matching
+      # the model name keeps `app` waiting for the first-run pull, not just for the socket.
+      test: ["CMD-SHELL", "ollama list | grep -q llama3.2"]
       interval: 10s
       timeout: 10s
       retries: 30
