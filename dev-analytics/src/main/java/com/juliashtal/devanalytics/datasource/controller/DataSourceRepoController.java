@@ -5,7 +5,7 @@ import com.juliashtal.devanalytics.datasource.service.DataSourceService;
 import com.juliashtal.devanalytics.git.model.dto.RepoDto;
 import com.juliashtal.devanalytics.github.model.dto.DiscoveredRepoDto;
 import com.juliashtal.devanalytics.github.model.dto.DiscoveryResult;
-import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
+import com.juliashtal.devanalytics.github.repo.GitHubRepositoryService;
 import com.juliashtal.devanalytics.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

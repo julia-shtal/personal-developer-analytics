@@ -2,7 +2,7 @@ package com.juliashtal.devanalytics.attribution;
 
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
-import com.juliashtal.devanalytics.github.service.GitHubIdentityBackfill;
+import com.juliashtal.devanalytics.github.identity.GitHubIdentityBackfill;
 import com.juliashtal.devanalytics.jira.service.JiraIdentityBackfill;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillTrigger;
 import com.juliashtal.devanalytics.user.model.User;

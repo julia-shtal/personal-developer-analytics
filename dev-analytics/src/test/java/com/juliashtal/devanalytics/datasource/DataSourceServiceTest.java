@@ -10,7 +10,7 @@ import com.juliashtal.devanalytics.datasource.service.DataSourceValidator;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.git.repository.UserRepoRegistrationRepository;
 import com.juliashtal.devanalytics.git.service.GitRepositoryService;
-import com.juliashtal.devanalytics.github.service.GitHubRepositoryService;
+import com.juliashtal.devanalytics.github.repo.GitHubRepositoryService;
 import com.juliashtal.devanalytics.jira.service.JiraProjectService;
 import com.juliashtal.devanalytics.jira.model.JiraProjectEntity;
 import com.juliashtal.devanalytics.security.TokenEncryptor;
