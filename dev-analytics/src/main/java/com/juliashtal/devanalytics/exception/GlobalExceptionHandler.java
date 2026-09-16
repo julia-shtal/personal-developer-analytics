@@ -12,6 +12,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -64,6 +65,14 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException ex, HttpServletRequest request) {
         log.warn("Malformed request body on {}: {}", request.getRequestURI(), ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, "Bad Request", "Malformed or unreadable request body", request);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiError> handleMissingParameter(
+            MissingServletRequestParameterException ex, HttpServletRequest request) {
+        log.warn("Missing request parameter on {}: {}", request.getRequestURI(), ex.getParameterName());
+        return build(HttpStatus.BAD_REQUEST, "Bad Request",
+                "Required parameter '" + ex.getParameterName() + "' is missing", request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

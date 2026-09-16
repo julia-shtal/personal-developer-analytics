@@ -41,10 +41,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * re-auth; the rest write to the caller's own row. That asymmetry is the contract worth pinning,
  * and only the real filter chain can show it.</p>
  *
- * <p>The public matcher {@code /api/users/*&#47;avatar} carries no HTTP method and its wildcard
- * matches the literal {@code me}, so the two write routes pass the path rule and are stopped by
- * their method annotation instead — refused, but as 403 where the rest of the API answers 401.
- * These tests record that, they do not endorse it.</p>
+ * <p>The public matcher is scoped to GET because its wildcard also matches the literal
+ * {@code me}: unscoped, it would open the upload and delete routes on the same path.</p>
  */
 @WebMvcTest(AvatarController.class)
 @Import({SecurityConfig.class, JwtAuthFilter.class})
@@ -90,12 +88,12 @@ class AvatarControllerTest {
     }
 
     @Test
-    void uploadAvatar_unauthenticated_isRefusedButWith403Not401() throws Exception {
+    void uploadAvatar_unauthenticated_returns401() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "me.png", MediaType.IMAGE_PNG_VALUE, new byte[]{1});
 
         mockMvc.perform(multipart("/api/users/me/avatar").file(file))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         verify(avatarService, never()).upload(any(), any());
     }
@@ -148,9 +146,9 @@ class AvatarControllerTest {
     }
 
     @Test
-    void deleteAvatar_unauthenticated_isRefusedButWith403Not401() throws Exception {
+    void deleteAvatar_unauthenticated_returns401() throws Exception {
         mockMvc.perform(delete("/api/users/me/avatar"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         verify(avatarService, never()).deleteAvatar(any());
     }

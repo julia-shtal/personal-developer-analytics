@@ -36,9 +36,12 @@ import java.util.List;
 public class SecurityConfig {
 
     /**
-     * Endpoints reachable without a JWT: auth flows, invite acceptance, unauthenticated
-     * avatar assets, the health check, and SPA entry routes (the SPA's own pages enforce
+     * Endpoints reachable without a JWT by any method: auth flows, invite acceptance, the
+     * avatar preset list, the health check, and SPA entry routes (the SPA's own pages enforce
      * auth via their API calls — these paths only need the static shell to be servable).
+     *
+     * <p>Avatar images are public too, but only for GET, so they are declared as their own
+     * method-scoped rule rather than here.</p>
      */
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/auth/register",
@@ -48,7 +51,6 @@ public class SecurityConfig {
             "/api/auth/forgot-password",
             "/api/auth/reset-password",
             "/api/auth/invite/**",
-            "/api/users/*/avatar",   // avatar images served unauthenticated
             "/api/users/avatar/presets",
             "/actuator/health",
             "/actuator/info",   // build version, rendered in the SPA footer before login
@@ -103,6 +105,9 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        // Method-scoped: the wildcard matches the literal "me", so an unscoped
+                        // rule would also open the upload and delete routes on the same path.
+                        .requestMatchers(HttpMethod.GET, "/api/users/*/avatar").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Ordered before the team rule below: the first matching pattern wins. Named
                         // in full rather than as a subtree — "me" is a literal where every sibling

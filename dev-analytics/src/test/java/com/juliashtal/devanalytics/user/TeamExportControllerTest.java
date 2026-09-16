@@ -157,13 +157,11 @@ class TeamExportControllerTest {
     }
 
     @Test
-    void exportTeamCsv_missingDateRange_returns500NotBadRequest() throws Exception {
+    void exportTeamCsv_missingDateRange_returns400() throws Exception {
         User manager = member(7L, "manager", Role.MANAGER);
 
-        // GlobalExceptionHandler does not extend ResponseEntityExceptionHandler, so a missing
-        // required @RequestParam reaches its catch-all rather than being answered as a 400.
         mockMvc.perform(get("/api/teams/5/export").with(user(principal(manager))))
-                .andExpect(status().isInternalServerError());
+                .andExpect(status().isBadRequest());
     }
 
     @Test
