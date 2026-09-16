@@ -121,6 +121,11 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | `notification/` | Async notification dispatch service, gated by user prefs |
 | `messaging/` | 1:1 direct message service and controller, conversation/inbox API |
 | `invite/` | Token-based team invitation issuance and redemption |
+| `jira/` | Jira project registration, issue collection, identity backfill |
+| `attribution/` | One-off backfill of identity columns on pre-attribution records |
+| `demo/` | Seed data for the `demo` profile |
+| `helper/` | `ParsingHelper` and shared parsing utilities |
+| `logging/` | Logback converters (level colour, secret masking) |
 
 `github/` runs two collection pipelines, so it is split further. `controller/`, `model/` and
 `repository/` sit beside these.
@@ -492,7 +497,7 @@ CHECK constraints (added V35):
 
 ---
 
-### 3.9 Jira Domain
+### 3.8 Jira Domain
 
 `DataSourceConfig` is a pure credential/connection record. Jira collection targets are managed as first-class `JiraProjectEntity` rows, mirroring `GitRepositoryEntity` for GitHub. Users subscribe to individual Jira projects via `UserProjectRegistration`. A repo-mapping link table lets metric queries include Jira issues alongside a Git repository's GitHub issues.
 
@@ -618,7 +623,7 @@ Metric queries join through this table to include Jira issues in repository-scop
 
 ---
 
-### 3.8 Git Domain (Local Repositories)
+### 3.9 Git Domain (Local Repositories)
 
 #### Content-Addressed Access Model
 
@@ -777,7 +782,7 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 ---
 
-### 3.9 GitHub Domain
+### 3.10 GitHub Domain
 
 #### Entities
 
@@ -897,7 +902,7 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 ---
 
-### 3.10 Issues Domain
+### 3.11 Issues Domain
 
 #### Entity
 
@@ -941,7 +946,7 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 ---
 
-### 3.11 Metrics Domain
+### 3.12 Metrics Domain
 
 #### Entity
 
@@ -1166,7 +1171,7 @@ Read-only; behind `GET /api/metrics/stats-coverage`.
 
 ---
 
-### 3.12 AI Domain
+### 3.13 AI Domain
 
 The AI layer generates natural-language summaries and metric explanations from pre-aggregated metric snapshots using a locally running Ollama LLM. All inference is fully offline — no data leaves the machine.
 
@@ -1323,14 +1328,14 @@ Note: `anomalies` endpoint lives on `MetricsController` (personal) — see Secti
 
 ---
 
-### 3.13 Email Service
+### 3.14 Email Service
 
 **`EmailService`** — Dependencies: `JavaMailSender`; config: `app.mail.from-address`/`app.mail.from-name` (decoupled from `spring.mail.username`, which is SMTP-auth-only).
 - `sendPasswordResetEmail(String toEmail, String resetLink)` — Sends an HTML `MimeMessage` via `MimeMessageHelper` over configured SMTP/STARTTLS, with `From: <from-name> <from-address>`.
 
 ---
 
-### 3.14 Messaging Domain
+### 3.15 Messaging Domain
 
 #### Entities
 
@@ -1377,7 +1382,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 ---
 
-### 3.15 Notification Domain
+### 3.16 Notification Domain
 
 **`NotificationDispatchService`** — Async notification delivery service.
 - `dispatchSummaries()` — Called by `MetricsSummaryScheduler` on Monday 08:00 UTC. Iterates all users with `userNotificationPrefs.aiBrief = true`, sends email with summary headline + overview.
@@ -1386,7 +1391,7 @@ Indexes: `(sender_id, recipient_id, created_at)`, `(recipient_id, read_at)` (unr
 
 ---
 
-### 3.16 Invite Domain
+### 3.17 Invite Domain
 
 Package `invite/`; the DTOs and the entity live in `invite/model/`. There is no dedicated
 invite controller — issuance hangs off `AdminController` and lookup/redemption off
@@ -1440,7 +1445,7 @@ validates the invite, creates the user, and calls `redeemInvite`.
 
 ## 4. Database Design
 
-### 4.1 Schema Evolution — 65 Flyway Migrations
+### 4.1 Schema Evolution — 66 Flyway Migrations
 
 | Version | File | What it does |
 |---|---|---|
@@ -1508,7 +1513,8 @@ validates the invite, creates the user, and calls `redeemInvite`.
 | V62 | `V62__jira_identity.sql` | ALTER `users` ADD `jira_account_id` VARCHAR(128); partial UNIQUE index WHERE NOT NULL. ALTER `issues` ADD `assignee_account_id`, `reporter_account_id`; indexes on `(jira_project_id, assignee_account_id)` and `(jira_project_id, reporter_account_id)`, mirroring how closed-issue/lead-time metrics filter by assignee and created-issue metrics by reporter. Jira issues could not be attributed at all: `buildJql` narrowed the fetch to the token owner's `accountId`, and the canonical project row is collected with whichever user's token owns it, so every subscriber to that project was credited with the owner's issues — unrecoverable after the fact, since only display names were stored. Storing `accountId` per issue moves the filter out of the JQL and into the metric queries, where it can differ per user. Until re-collection fills the columns, Jira issues match nobody, which is the correct failure direction — previously they matched everybody |
 | V63 | `V63__stats_skip_reason.sql` | ALTER `git_commits` and `github_pull_requests` ADD `stats_skip_reason` VARCHAR(32); backfill rows already `stats_status = 'SKIPPED'` to `UNKNOWN`. SKIPPED was set for two unrelated causes, so the line-count metrics' exclusion set could not be characterised: an oversized diff is evidence about the repository's commit-size distribution, a missing detail record is evidence about API access. A nullable reason column rather than new `StatsStatus` values keeps every query, projection and metric filter testing `= 'SKIPPED'` working and leaves the status enum a four-state lifecycle. Partial indexes `ix_git_commits_skip_reason` / `ix_github_prs_skip_reason` on `(repository_id, stats_skip_reason) WHERE stats_status = 'SKIPPED'` serve the breakdown of skipped rows without indexing the COMPLETE majority |
 | V64 | `V64__metric_summaries_prompt_version.sql` | ALTER `metric_summaries` ADD `prompt_version` VARCHAR(16) NOT NULL; backfill existing rows to `PRE_VERSIONING`; rebuild `uix_metric_summaries_identity` with `prompt_version` as the last key column. A summary recorded `model_name` but nothing about the instruction that produced it, so any figure computed over stored summaries spanned an unknown mixture of prompt revisions. Rows predating the column genuinely cannot be attributed, so they are labelled rather than backfilled with a hash |
-| V65 | `V65__remaining_timestamps_to_timestamptz.sql` | ALTER the remaining `Instant`-backed columns from TIMESTAMP to TIMESTAMPTZ across `ai_conversations`, `ai_messages`, `git_commits`, `git_repositories`, `github_pr_reviews`, `github_pull_requests`, `invite_tokens`, `messages`, `password_reset_tokens`, `refresh_tokens` and `teams`, reinterpreting existing values as UTC — the zone the application writes in, now pinned by `hibernate.jdbc.time_zone`. V55 converted the first four such columns; these are the rest. A type change rewrites the table and discards its statistics, so the migration ends with `ANALYZE` on the four largest tables, otherwise the planner stops choosing the partial stats indexes until autovacuum catches up |
+| V65 | `V65__remaining_timestamps_to_timestamptz.sql` | ALTER the remaining `Instant`-backed columns from TIMESTAMP to TIMESTAMPTZ across `ai_conversations`, `ai_messages`, `git_commits`, `git_repositories`, `github_pr_reviews`, `github_pull_requests`, `invite_tokens`, `messages`, `password_reset_tokens`, `refresh_tokens` and `teams`, reinterpreting existing values as UTC — the zone the application writes in. `hibernate.jdbc.time_zone` is *not* configured, so daily bucketing still resolves in the database session zone; see `docs/metrics/timezone.md`. V55 converted the first four such columns; these are the rest. A type change rewrites the table and discards its statistics, so the migration ends with `ANALYZE` on the four largest tables, otherwise the planner stops choosing the partial stats indexes until autovacuum catches up |
+| V66 | `V66__metric_snapshots_comment_refresh.sql` | Restate the `metric_snapshots` table comment. V57 (itself a restatement of V40) had gone stale on two counts: it named `MetricsService.saveMetric`, extracted since to `MetricSnapshotWriter`, and its AGGREGATE list omitted `REVIEW_PARTICIPATION_COUNT` and `WIP_OPEN_PR_AGE_HOURS_MEDIAN`. `COMMENT ON TABLE` has no partial form and V57 is frozen, so the comment is restated in full: 8 DAILY + 13 AGGREGATE = 21 types, exhaustive and disjoint. It also records that the storage shape is a property of the calculator, not of `MetricType.aggregatePeriod`, which selects ISO-week window resolution and is true for only five of the thirteen AGGREGATE types. Comment-only — no DDL, no data change, re-running is a no-op |
 
 ### 4.2 Entity-Relationship Overview
 
@@ -1942,7 +1948,7 @@ The editorial design system lives in `frontend/src/index.css` (`@theme` block re
 | Spring Cache / Caffeine | (managed) | AI summary caching (`ai_summaries`) |
 | JJWT | 0.13.0 | HS256 token generation/validation |
 | PostgreSQL | 16 | Primary data store |
-| Flyway | (managed) | Schema versioning (55 migrations) |
+| Flyway | (managed) | Schema versioning (66 migrations) |
 | JGit | 7.2.1.202505142326-r | Local Git repository reading |
 | Kohsuke GitHub API | 2.0-rc.5 | GitHub REST API client |
 | Spring RestTemplate | (managed) | Jira API + Ollama HTTP calls |
@@ -1950,21 +1956,21 @@ The editorial design system lives in `frontend/src/index.css` (`@theme` block re
 | Ollama | external | Local LLM inference (llama3.2) |
 | Lombok | 1.18.34 | `@Data`, `@Builder`, `@RequiredArgsConstructor`, etc. |
 | Swagger Annotations | 2.1.7 | OpenAPI annotations |
-| Docker / Docker Compose | — | Local PostgreSQL |
+| Docker / Docker Compose | — | Full local stack: app, PostgreSQL, Ollama, MailHog |
 | Maven Wrapper | 3.x | Build |
 
 ### Frontend
 
 | Technology | Version | Role |
 |---|---|---|
-| React | 18 | UI framework |
-| TypeScript | 5.x | Type safety |
+| React | 19.2.x | UI framework |
+| TypeScript | 6.x | Type safety |
 | Vite | 5.4.x | Build + dev server |
 | React Router | 6.x | Client-side routing |
 | TanStack React Query | 5.x | Server state, caching |
 | Axios | 1.x | HTTP client + JWT interceptors |
-| Recharts | 2.x | Charts (bar, line, responsive) |
-| Tailwind CSS | 3.x | Utility-first styling |
+| Recharts | 3.x | Charts (bar, line, responsive) |
+| Tailwind CSS | 4.x | Utility-first styling (CSS-first config; `@import "tailwindcss"`, no `tailwind.config.js`) |
 | Lucide React | — | Icons |
 | clsx | — | Conditional classNames |
 
@@ -1976,30 +1982,47 @@ The editorial design system lives in `frontend/src/index.css` (`@theme` block re
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
-| `JWT_SECRET` | (dev hex value) | **Yes in prod** | 256-bit hex; HMAC-SHA256 signing key |
-| `APP_BASE_URL` | `http://localhost:8080` | No | Used in password reset email links |
-| `ENCRYPTION_KEY` | (dev base64) | **Yes for AES-GCM token encryption** | 32-byte base64-encoded AES-256 key |
+| `JWT_SECRET` | *(none — empty)* | **Yes, always** | 256-bit hex; HMAC-SHA256 signing key. Empty raises `WeakKeyException` during bean creation, so the app does not start |
+| `ENCRYPTION_KEY` | *(none — empty)* | **Yes, always** | 32-byte base64-encoded AES-256 key. Empty raises `IllegalArgumentException: Empty key` during bean creation |
 | `ENCRYPTION_MIGRATE` | `false` | No | Set to `true` to re-encrypt legacy tokens on startup |
-| `SMTP_HOST` | `smtp.gmail.com` | No | SMTP hostname |
-| `SMTP_PORT` | `587` | No | SMTP port (STARTTLS) |
-| `SMTP_USERNAME` | — | Yes (for email) | SMTP auth username |
-| `SMTP_PASSWORD` | — | Yes (for email) | SMTP app password |
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/dev_analytics` | No | JDBC URL; Compose overrides the host to `db` |
+| `SPRING_DATASOURCE_USERNAME` | `postgres` | No | Database user |
+| `SPRING_DATASOURCE_PASSWORD` | *(none — empty)* | Yes in prod | Database password |
+| `POSTGRES_PASSWORD` | *(none)* | **Yes for Compose** | Consumed by `docker-compose.yml` only; has no application-side default |
+| `APP_BASE_URL` | `http://localhost:8080` | No | Used in password-reset email links |
+| `APP_FRONTEND_URL` | `http://localhost:5173` | No | SPA origin the reset links point at |
+| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:8080,http://localhost:5173` | No | Comma-separated allowed origins |
+| `SMTP_HOST` | `localhost` | No | SMTP hostname (`mailhog` under Compose) |
+| `SMTP_PORT` | `1025` | No | SMTP port (`1025` = MailHog) |
+| `SMTP_USERNAME` | — | Yes (for real mail) | SMTP auth username |
+| `SMTP_PASSWORD` | — | Yes (for real mail) | SMTP app password |
+| `SMTP_AUTH` | `false` | No | Enable SMTP authentication |
+| `SMTP_STARTTLS` | `false` | No | Enable STARTTLS |
+| `MAIL_FROM` | `noreply@dev-analytics.local` | No | Sender address |
+| `MAIL_FROM_NAME` | `Dev Analytics` | No | Sender display name |
+| `HTTP_CONNECT_TIMEOUT_MS` | `5000` | No | Connect timeout on the shared `RestTemplate` (Jira) |
+| `HTTP_READ_TIMEOUT_MS` | `30000` | No | Read timeout on the shared `RestTemplate` (Jira) |
 | `RATE_LIMIT_DEFAULT_RPM` | `120` | No | Default request rate limit (requests per minute) |
 | `RATE_LIMIT_AI_RPM` | `10` | No | AI endpoint rate limit (requests per minute) |
 | `COOKIE_SECURE` | `false` | No | Set `true` in production for httpOnly, secure cookies |
+| `SCHEDULING_POOL_SIZE` | `4` | No | Scheduler thread pool; the default of 1 queues the nightly jobs behind enrichment |
+| `METRICS_BACKFILL_MAX_DAYS_PER_RUN` | `30` | No | Days of history one backfill run may compute per user |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | No | Ollama server base URL |
 | `OLLAMA_MODEL` | `llama3.2` | No | LLM model name |
 | `OLLAMA_NUM_PREDICT` | `1024` | No | Max tokens per completion |
 | `OLLAMA_SEED` | `42` | No | Determinism seed |
+| `JIRA_DEFAULT_JQL` | `assignee = currentUser() ORDER BY created DESC` | No | Default issue query |
+| `JIRA_PAGE_SIZE` | `100` | No | Jira search page size |
 
 ### 13.2 application.yml Summary
 
 ```yaml
 spring:
+  task.scheduling.pool.size: ${SCHEDULING_POOL_SIZE:4}
   datasource:
-    url: jdbc:postgresql://localhost:5432/dev_analytics
-    username: postgres
-    password: 123
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dev_analytics}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
   jpa:
     hibernate.ddl-auto: validate           # Flyway owns the schema
     properties.hibernate.jdbc.batch_size: 500
@@ -2007,16 +2030,35 @@ spring:
     properties.hibernate.order_updates: true
   flyway.enabled: true
   mail:
-    host: ${SMTP_HOST:smtp.gmail.com}
-    port: ${SMTP_PORT:587}
-    properties.mail.smtp.starttls.enable: true
+    host: ${SMTP_HOST:localhost}           # 'mailhog' under Compose
+    port: ${SMTP_PORT:1025}
+    properties.mail.smtp.auth: ${SMTP_AUTH:false}
+    properties.mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
 
 app:
+  version: @project.version@               # filtered by Maven at package time
   jwt:
+    secret: ${JWT_SECRET:}                 # empty -> startup failure
     access-expiration:  900000             # 15 minutes
     refresh-expiration: 604800000          # 7 days
-  password-reset.expiration: 3600000      # 1 hour
+  password-reset.expiration: 3600000       # 1 hour
+  http:                                    # bounds the shared RestTemplate (Jira)
+    connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${HTTP_READ_TIMEOUT_MS:30000}
+  cors.allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:8080,http://localhost:5173}
   base-url: ${APP_BASE_URL:http://localhost:8080}
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:5173}
+  encryption:
+    key: ${ENCRYPTION_KEY:}                # empty -> startup failure
+    migrate-on-startup: ${ENCRYPTION_MIGRATE:false}
+  rate-limit:
+    default-rpm: ${RATE_LIMIT_DEFAULT_RPM:120}
+    ai-rpm: ${RATE_LIMIT_AI_RPM:10}
+  cookie.secure: ${COOKIE_SECURE:false}
+  mail:
+    from-address: ${MAIL_FROM:noreply@dev-analytics.local}
+    from-name: ${MAIL_FROM_NAME:Dev Analytics}
+  metrics.backfill.max-days-per-run: ${METRICS_BACKFILL_MAX_DAYS_PER_RUN:30}
 
 ai:
   ollama:
@@ -2025,23 +2067,36 @@ ai:
     num-predict: ${OLLAMA_NUM_PREDICT:1024}
     seed: ${OLLAMA_SEED:42}
 
+management.endpoints.web.exposure.include: health,info
+
+jira:
+  default-jql: ${JIRA_DEFAULT_JQL:assignee = currentUser() ORDER BY created DESC}
+  page-size: ${JIRA_PAGE_SIZE:100}
+
 server.port: 8080
-logging.level.root: INFO
+logging.level.root: INFO                   # fine-grained levels in logback-spring.xml
 ```
+
+`application.properties` holds only `spring.application.name`; every other setting lives in
+`application.yml`.
 
 ### 13.3 Build & Run
 
 ```bash
-# Start PostgreSQL
-docker-compose up -d
+# Full stack: app + PostgreSQL + Ollama + MailHog.
+# Postgres is not published to the host; it is reachable only as db:5432 on the
+# Compose network. For manual dev mode start the database alone:
+#   docker compose up -d db
+docker compose up -d
 
 # Run backend (from dev-analytics/)
 ./mvnw spring-boot:run
 
-# Build frontend (embeds into src/main/resources/static/)
+# Build frontend (emits into src/main/resources/static/)
 cd frontend && npm run build
 
-# Build fat JAR
+# Build fat JAR. Maven does NOT build the frontend — there is no frontend-maven-plugin,
+# so static/ is a committed artifact and package ships whatever it already holds.
 ./mvnw clean package
 
 # Run JAR
@@ -2055,4 +2110,4 @@ Ollama must be running separately: `ollama serve` (and `ollama pull llama3.2` on
 
 ---
 
-*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 21-metric calculation engine (registry-based dispatch via `MetricCalculatorRegistry`, 17 `MetricCalculator` beans) with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries, 2σ anomaly detection, 1:1 meeting prep export, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (25 controllers, 65 Flyway migrations, 25 repositories).*
+*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 21-metric calculation engine (registry-based dispatch via `MetricCalculatorRegistry`, 17 `MetricCalculator` beans) with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries, 2σ anomaly detection, 1:1 meeting prep export, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (25 controllers, 66 Flyway migrations, 25 repositories).*

@@ -11,10 +11,10 @@
 ![Flyway migrations](https://img.shields.io/github/directory-file-count/julia-shtal/personal-developer-analytics/dev-analytics%2Fsrc%2Fmain%2Fresources%2Fdb%2Fmigration?type=file&label=Flyway%20migrations&logo=flyway&logoColor=white&color=CC0200)
 
 <!-- Frontend stack -->
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.x-06B6D4?logo=tailwindcss&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.x-06B6D4?logo=tailwindcss&logoColor=white)
 
 <!-- AI / infra -->
 ![Ollama](https://img.shields.io/badge/Ollama-llama3.2-000000?logo=ollama&logoColor=white)
@@ -35,7 +35,7 @@ a React dashboard with AI-generated insights via local Ollama.
 |-------|-----------|
 | Backend API | Spring Boot 3.5, Java 17, JWT auth |
 | Database | PostgreSQL 16, Flyway migrations |
-| Frontend SPA | React 18, TypeScript, Vite, Tailwind CSS 3, Recharts |
+| Frontend SPA | React 19, TypeScript, Vite, Tailwind CSS 4, Recharts |
 | AI insights | Ollama (llama3.2) — runs locally, no cloud dependency |
 | Mail (dev/Docker) | MailHog — local SMTP capture, web UI on port 8025 |
 | Deployment | Docker Compose (app + Postgres + Ollama + MailHog) |
@@ -55,12 +55,15 @@ a React dashboard with AI-generated insights via local Ollama.
 |----------|---------|---------|----------------|
 | `JWT_SECRET` | JWT signing key | none — **startup fails** if unset | `openssl rand -hex 32` |
 | `ENCRYPTION_KEY` | AES-256-GCM token encryption key (base64) | none — **startup fails** if unset | `openssl rand -base64 32` |
-| `POSTGRES_PASSWORD` | Database password | `123` (dev only) | choose one |
+| `POSTGRES_PASSWORD` | Database password | none — Compose requires it | choose one |
 | `SMTP_HOST` | SMTP server for password-reset emails | `mailhog` (Docker) / `smtp.gmail.com` (manual) | — |
 | `SMTP_PORT` | SMTP port | `1025` (Docker) / `587` (manual) | — |
 | `SMTP_USERNAME` | SMTP sender address (not needed with MailHog) | — | your email |
 | `SMTP_PASSWORD` | SMTP app password (not needed with MailHog) | — | your app password |
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` | — |
+| `OLLAMA_MODEL` | LLM model name | `llama3.2` | — |
+| `APP_BASE_URL` | Base URL used in password-reset email links | `http://localhost:8080` | — |
+| `APP_FRONTEND_URL` | SPA origin the reset links point at | `http://localhost:5173` | — |
 | `COOKIE_SECURE` | Set `true` in production (HTTPS only) | `false` | — |
 
 > `JWT_SECRET` and `ENCRYPTION_KEY` have no defaults. Unset, the application fails to
@@ -127,9 +130,17 @@ First boot pulls the llama3.2 model (~2 GB) — allow a few minutes before the A
 
 ## Building the Fat JAR
 
+Maven does **not** build the frontend — there is no `frontend-maven-plugin`.
+`src/main/resources/static/` is a committed build artifact, and `./mvnw package`
+packages whatever that directory already holds. Any change under `frontend/src/`
+needs `npm run build` first, and the rebuilt bundle belongs in the same commit.
+
 ```bash
-cd dev-analytics
-./mvnw clean package      # builds frontend, embeds it in the JAR
+cd dev-analytics/frontend
+npm run build             # emits into ../src/main/resources/static/
+
+cd ..
+./mvnw clean package      # packages the static/ directory as it stands
 java -jar target/dev-analytics-*.jar
 ```
 
@@ -152,7 +163,7 @@ Start with a pre-seeded dashboard — no real data source needed:
 
 ```bash
 cd dev-analytics
-./mvnw spring-boot:run --spring.profiles.active=demo
+./mvnw spring-boot:run -Dspring-boot.run.profiles=demo
 ```
 
 **Login:** `demo@demo.com` / `demo`
