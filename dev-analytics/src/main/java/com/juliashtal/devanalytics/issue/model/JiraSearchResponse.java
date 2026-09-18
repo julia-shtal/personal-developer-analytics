@@ -12,14 +12,10 @@ import java.util.List;
 public class JiraSearchResponse {
     private List<JiraIssue> issues;
 
-    /**
-     * Token-based paging, which is what {@code /rest/api/3/search/jql} provides. The endpoint
-     * that replaced {@code /rest/api/3/search} (CHANGE-2046) returns neither {@code total} nor
-     * an offset, so there is no count to page toward: a caller follows {@code nextPageToken}
-     * until {@code isLast}. No {@code total} field is modelled here on purpose — an absent one
-     * deserialises to zero, which reads as "no more pages" and silently truncates a collection.
-     */
+    /** Cursor for the next page; absent on the last one. No total is returned by this endpoint. */
     private String nextPageToken;
+
+    /** True on the final page. The only reliable stop condition, since there is no count. */
     private Boolean isLast;
 
     /**

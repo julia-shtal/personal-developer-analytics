@@ -303,14 +303,10 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
     /**
      * Clears one scope's snapshots for a window so a recalculation can rebuild it.
      *
-     * <p>Calculators upsert and write nothing for a day that has no data, so without this a
-     * day whose records went away — a force-push, a squashed branch, a repository detached —
-     * keeps the row it had. {@code FOCUS_RATIO_DAYS_TASKS} is the sharp case, because its
-     * read side counts rows: the ratio could rise and never fall.</p>
-     *
-     * <p>Scoped by team so a personal recalculation cannot remove team rows or the reverse.
-     * Flushed before running; nothing snapshot-shaped is loaded at the point the caller
-     * invokes it, so the persistence context has nothing to resurrect afterwards.</p>
+     * <p>Calculators upsert and write nothing for a day with no data, so a day whose records
+     * went away keeps its row; {@code FOCUS_RATIO_DAYS_TASKS} counts rows on the read side
+     * and so could rise but never fall. Scoped by team so a personal recalculation cannot
+     * reach team rows or the reverse.</p>
      */
     @Transactional
     @Modifying(flushAutomatically = true)

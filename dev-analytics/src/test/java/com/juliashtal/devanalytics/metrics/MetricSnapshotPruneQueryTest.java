@@ -15,9 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Pins what a recalculation clears: one user, one scope, one window, and nothing else.
  *
- * <p>Run against the real schema because the scope test turns on SQL's treatment of a null
- * {@code team_id} — a personal recalculation must not remove team rows, and neither may
- * reach another user's.</p>
+ * <p>Run against the real schema because the scoping turns on SQL's treatment of a null
+ * {@code team_id}.</p>
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)

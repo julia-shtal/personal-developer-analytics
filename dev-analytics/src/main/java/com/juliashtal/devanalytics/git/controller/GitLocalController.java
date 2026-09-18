@@ -68,9 +68,21 @@ public class GitLocalController {
         return commitsPage.map(GitCommitDto::fromEntity);
     }
 
-    @Operation(summary = "Synchronously collect new commits for a local Git repository")
+    /**
+     * Collects new commits, or the whole history when {@code full} is set.
+     *
+     * <p>Collection resumes from the newest commit of the last run, so a gap left by a
+     * rewritten history or an interrupted run can only be filled by walking it all.</p>
+     */
+    @Operation(summary = "Synchronously collect commits for a local Git repository")
     @PostMapping("/repos/{repoId}/collect")
-    public ResponseEntity<String> collect(@PathVariable Long repoId) {
+    public ResponseEntity<String> collect(
+            @PathVariable Long repoId,
+            @RequestParam(required = false, defaultValue = "false") boolean full
+    ) {
+        if (full) {
+            gitRepositoryService.resetCollectionWatermark(repoId);
+        }
         long saved = gitLocalCollector.collectForRepository(repoId, null);
         return ResponseEntity.ok("Collected " + saved + " commits");
     }

@@ -10,7 +10,11 @@ import java.time.Instant;
  */
 @Data
 @Entity
-@Table(name = "git_commits")
+@Table(
+        name = "git_commits",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_git_commits_repo_hash",
+                columnNames = {"repository_id", "hash"}))
 public class GitCommitEntity {
 
     @Id
@@ -22,7 +26,8 @@ public class GitCommitEntity {
     @JoinColumn(name = "repository_id")
     private GitRepositoryEntity repository;
 
-    @Column(nullable = false, unique = true, length = 64)
+    /** Unique within its repository, not across the table: a fork shares revisions. */
+    @Column(nullable = false, length = 64)
     private String hash;
 
     @Column(nullable = false)

@@ -9,6 +9,7 @@ import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 /**
@@ -44,6 +45,7 @@ public class MetricSnapshotWriter {
         snapshot.setPeriodFrom(periodFrom);
         snapshot.setPeriodTo(periodTo);
         snapshot.setValue(value);
+        snapshot.setCalculatedAt(Instant.now());
 
         repository.save(snapshot);
     }

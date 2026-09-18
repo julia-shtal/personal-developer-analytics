@@ -22,6 +22,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -265,10 +266,8 @@ public class MetricsController {
 
     @Operation(summary = "Knowledge Silo Score for the current user")
     /**
-     * Takes no {@code repoId}: the score is the maximum ownership share across the user's
-     * repositories and is stored as one cross-repository row, so there is nothing for a
-     * repository filter to select. It used to accept one and answer 0.0 — a value this
-     * metric also uses to mean "owns none of it", which is the opposite of "not measured".
+     * Takes no {@code repoId}: the score is already a maximum across repositories and is
+     * stored as one cross-repository row, so a filter has nothing to select.
      */
     @GetMapping("/knowledge-silo-score")
     public MetricAggregateDto getKnowledgeSilo(
@@ -386,11 +385,7 @@ public class MetricsController {
 
         if (repoId == null) {
             // Counts sum across repositories; a ratio or a per-commit average does not.
-            // DAILY_CHURN_RATIO is a ratio and DAILY_COMMITS_AVG_SIZE is changed lines per
-            // commit, so adding one repository's figure to another's would be meaningless -
-            // both are averaged instead. The mean of per-repository means is unweighted, so
-            // it approximates the true cross-repository average unless the repositories
-            // contributed equal numbers of commits that day.
+            // The mean of per-repository means is unweighted, so it is an approximation.
             boolean isRatio = type == DAILY_CHURN_RATIO || type == DAILY_COMMITS_AVG_SIZE;
 
             Map<LocalDate, List<Double>> valuesByDate = new TreeMap<>();
@@ -474,9 +469,16 @@ public class MetricsController {
                     .getPersonalSnapshotsByMetricTypeAndRepositoryAndDate(user, type, repo, calculatedAt);
         }
 
+        // The value is an age ending at the moment of calculation, so a date cannot carry it.
+        Instant computedAt = rows.stream()
+                .map(MetricSnapshot::getCalculatedAt)
+                .filter(Objects::nonNull)
+                .max(Instant::compareTo)
+                .orElse(null);
+
         return aggregateWindowResolver.resolve(AggregateWindowResolver.aggregateRows(rows), type)
-                .map(r -> new MetricPointInTimeDto(type, r.value(), calculatedAt))
-                .orElseGet(() -> new MetricPointInTimeDto(type, 0.0, calculatedAt));
+                .map(r -> new MetricPointInTimeDto(type, r.value(), computedAt))
+                .orElseGet(() -> new MetricPointInTimeDto(type, 0.0, computedAt));
     }
 
 }

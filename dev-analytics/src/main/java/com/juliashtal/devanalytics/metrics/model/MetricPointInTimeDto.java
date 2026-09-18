@@ -1,9 +1,9 @@
 package com.juliashtal.devanalytics.metrics.model;
 
-import java.time.LocalDate;
+import java.time.Instant;
 
 /**
- * A metric that describes a moment rather than a period, reported with the date it was computed.
+ * A metric that describes a moment rather than a period, reported with the instant it was computed.
  *
  * <p>Distinct from {@link MetricAggregateDto} because there is no window to report: a point-in-time
  * figure cannot be recomputed for a past range, so labelling it with {@code periodFrom}/{@code periodTo}
@@ -12,5 +12,5 @@ import java.time.LocalDate;
 public record MetricPointInTimeDto(
         MetricType metricType,
         double value,
-        LocalDate calculatedAt
+        Instant calculatedAt
 ) { }

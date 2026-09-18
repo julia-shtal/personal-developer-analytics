@@ -23,7 +23,7 @@ import java.util.Optional;
  * Spring Data repository for GitCommitEntity (git_commits). Hash lookups and per-repo commit queries.
  */
 public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity, Long> {
-    Optional<GitCommitEntity> findByHash(String hash);
+    Optional<GitCommitEntity> findByRepositoryIdAndHash(Long repositoryId, String hash);
     long countByRepositoryId(Long repositoryId);
 
     @Query("select c.hash from GitCommitEntity c where c.repository.id = :repositoryId")
@@ -64,15 +64,12 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     // -------------------------------------------------------------------------
 
     /**
-     * Daily commit count and average changed lines per commit, for one author in a window.
+     * Daily commit count over every attributed commit, and average changed lines over the
+     * enriched ones.
      *
-     * <p>The two figures are drawn from different populations on purpose. The count is over
-     * every attributed commit, because counting a commit needs nothing but its date. The
-     * average is over enriched commits only: an unenriched commit carries additions and
-     * deletions of zero as a placeholder, and averaging that in would fabricate an
-     * observation rather than omit one. Non-enriched rows are narrowed to null inside the
-     * aggregate rather than by the where clause, so the count keeps its own population and
-     * one round-trip still serves both metrics.</p>
+     * <p>The narrowing is inside the aggregate rather than the where clause so the two keep
+     * different populations: an unenriched row carries placeholder zeros, which would
+     * fabricate an observation in the average but says nothing about the count.</p>
      */
     @Query("""
     select date(c.authorDate) as day,
@@ -98,13 +95,11 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
             @Param("to") Instant to);
 
     /**
-     * Daily added and deleted line totals for one author in a window, over enriched commits.
+     * Daily added and deleted line totals for one author, over enriched commits.
      *
-     * <p>Restricted to {@code COMPLETE} in the where clause rather than inside the sums,
-     * because the churn ratio needs the day to disappear when nothing on it was enriched:
-     * summing placeholder zeros would otherwise store a ratio of 0.0 that reads as an
-     * all-additions day. A day with enriched commits whose diffs are genuinely empty still
-     * produces a row, and the calculator's denominator guard stores 0.0 for it.</p>
+     * <p>Narrowed in the where clause so a day with nothing enriched yields no row at all:
+     * summing placeholder zeros would store a ratio of 0.0, which reads as an
+     * all-additions day.</p>
      */
     @Query("""
     select date(c.authorDate) as day,

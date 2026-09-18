@@ -80,11 +80,8 @@ public class MetricsService {
         // Resolved once per run, not per calculator: re-reading it per week multiplies queries.
         AuthorIdentity identity = authorIdentityResolver.resolve(user);
 
-        // The window is cleared before it is rebuilt, because calculators upsert and write
-        // nothing for a day with no data — so a recalculation alone cannot retract a day whose
-        // records went away. Guarded on a non-empty scope for the same reason coverage is:
-        // with nothing to recompute from, clearing would delete a history rather than rebuild
-        // it. Same transaction as the rebuild, so a failure rolls both back together.
+        // Cleared before rebuilding: calculators upsert, so a recalculation alone cannot
+        // retract a day. Empty scope means nothing to rebuild from, so clearing would delete.
         if (!repoIds.isEmpty()) {
             snapshotRepository.deleteForRecalculation(
                     user.getId(), team != null ? team.getId() : null, fromDate, toDate);

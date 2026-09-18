@@ -16,6 +16,7 @@ import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.service.UserService;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -31,6 +32,9 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -173,6 +177,31 @@ class GitLocalControllerTest {
         mockMvc.perform(post("/api/git/local/repos/11/collect").with(user(principal(7L))))
                 .andExpect(status().isOk())
                 .andExpect(content().string("Collected 12 commits"));
+    }
+
+    @Test
+    void collect_withoutFull_leavesTheResumeWatermarkAlone() throws Exception {
+        when(gitLocalCollector.collectForRepository(eq(11L), isNull())).thenReturn(3);
+
+        mockMvc.perform(post("/api/git/local/repos/11/collect").with(user(principal(7L))))
+                .andExpect(status().isOk());
+
+        verify(gitRepositoryService, never()).resetCollectionWatermark(anyLong());
+    }
+
+    @Test
+    void collect_full_clearsTheWatermarkBeforeCollecting() throws Exception {
+        // Collection stops at the watermark, so a gap is only fillable by walking it all.
+        when(gitLocalCollector.collectForRepository(eq(11L), isNull())).thenReturn(203);
+
+        mockMvc.perform(post("/api/git/local/repos/11/collect")
+                        .param("full", "true").with(user(principal(7L))))
+                .andExpect(status().isOk())
+                .andExpect(content().string("Collected 203 commits"));
+
+        InOrder order = inOrder(gitRepositoryService, gitLocalCollector);
+        order.verify(gitRepositoryService).resetCollectionWatermark(11L);
+        order.verify(gitLocalCollector).collectForRepository(eq(11L), isNull());
     }
 
     @Test

@@ -92,14 +92,11 @@ public class JiraCollector {
     }
 
     /**
-     * Links the credential owner's Jira account to the user, if the instance will say who
-     * that is.
+     * Links the credential owner's Jira account, when the instance will say who that is.
      *
-     * <p>A convenience — it spares the user from typing their own accountId — so it runs
-     * after the issues are saved and never prevents them from being saved. A Jira site that
-     * serves its issues to anyone but answers {@code /myself} only to its own members is a
-     * real configuration, and on one of those the identifier is simply unavailable: the
-     * issues still collect and the user can enter the accountId in Settings.</p>
+     * <p>A convenience that spares the user from typing their own accountId, so it runs
+     * after the issues are saved and never blocks them: a site may serve its issues to
+     * anyone while answering {@code /myself} only to its own members.</p>
      */
     private void claimAccountIdIfPossible(String baseUrl, HttpHeaders headers, DataSourceConfig config) {
         if (config.getUser() == null) return;
@@ -114,19 +111,16 @@ public class JiraCollector {
     }
 
     /**
-     * Pages through the Jira search endpoint and upserts each returned issue against
-     * {@code project}, following {@code nextPageToken} until the response says it is last.
+     * Upserts every issue the search returns, following {@code nextPageToken} until last.
      *
      * <p>Token-based because {@code /rest/api/3/search/jql} reports no total and accepts no
-     * offset. Paging toward a count would stop after the first page: an absent {@code total}
-     * deserialises to zero, and a collection that ends one page in reports success for a
-     * truncated result.</p>
+     * offset, so there is no count to page toward.</p>
      */
     private int fetchAndUpsertIssues(String searchUrl, String jql, HttpHeaders headers, JiraProjectEntity project) {
         int saved = 0;
         int page = 0;
         String pageToken = null;
-        // A token that repeats means the endpoint is not advancing; stopping beats looping.
+        // A repeated token means the endpoint is not advancing; stopping beats looping.
         Set<String> tokensSeen = new HashSet<>();
 
         while (true) {

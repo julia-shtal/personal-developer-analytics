@@ -75,7 +75,7 @@ class GitHubIdentityBackfillServiceTest {
     @Test
     void backfillCommits_commitWithResolvedAuthor_setsIdAndLoginOnTheStoredRow() {
         GitCommitEntity stored = commit("abc123", null);
-        when(commitRepository.findByHash("abc123")).thenReturn(Optional.of(stored));
+        when(commitRepository.findByRepositoryIdAndHash(10L, "abc123")).thenReturn(Optional.of(stored));
         stubCommitsPage("""
             [{"sha": "abc123", "author": {"id": 49405289, "login": "julia-shtal"}}]
             """);
@@ -90,7 +90,7 @@ class GitHubIdentityBackfillServiceTest {
     @Test
     void backfillCommits_commitAlreadyCarryingTheId_writesNothing() {
         GitCommitEntity stored = commit("abc123", 49405289L);
-        when(commitRepository.findByHash("abc123")).thenReturn(Optional.of(stored));
+        when(commitRepository.findByRepositoryIdAndHash(10L, "abc123")).thenReturn(Optional.of(stored));
         stubCommitsPage("""
             [{"sha": "abc123", "author": {"id": 49405289, "login": "julia-shtal"}}]
             """);
@@ -110,13 +110,13 @@ class GitHubIdentityBackfillServiceTest {
         service.backfillCommits(repo);
 
         // GitHub resolved no account, so there is nothing to write and no row to look up.
-        verify(commitRepository, never()).findByHash(any());
+        verify(commitRepository, never()).findByRepositoryIdAndHash(any(), any());
         verify(commitRepository, never()).saveAll(any());
     }
 
     @Test
     void backfillCommits_commitNotStoredLocally_isSkipped() {
-        when(commitRepository.findByHash("unknown")).thenReturn(Optional.empty());
+        when(commitRepository.findByRepositoryIdAndHash(10L, "unknown")).thenReturn(Optional.empty());
         stubCommitsPage("""
             [{"sha": "unknown", "author": {"id": 1, "login": "someone"}}]
             """);

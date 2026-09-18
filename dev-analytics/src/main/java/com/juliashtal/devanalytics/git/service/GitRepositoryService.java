@@ -39,6 +39,15 @@ public class GitRepositoryService {
     private final GitCommitEntityRepository commitRepository;
     private final UserRepoRegistrationRepository userRepoRegRepository;
 
+    /** Clears the resume watermark so the next collection walks the whole history. */
+    @Transactional
+    public void resetCollectionWatermark(Long repoId) {
+        GitRepositoryEntity repo = repoRepository.findById(repoId)
+                .orElseThrow(() -> new NoSuchElementException("Git repo not found: " + repoId));
+        repo.setLastFetchedCommitHash(null);
+        repoRepository.save(repo);
+    }
+
     @Transactional
     public GitRepositoryEntity registerLocalRepo(Long userId, RegisterLocalRepoRequest req) {
         User user = userRepository.getReferenceById(userId);

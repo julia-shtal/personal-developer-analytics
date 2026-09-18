@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.user.model.User;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 /**
@@ -102,4 +103,8 @@ public class MetricSnapshot {
     /** NULL for DAILY rows. Inclusive end of the calculation window for AGGREGATE rows. */
     @Column(name = "period_to")
     private LocalDate periodTo;
+
+    /** When this figure was computed. A point-in-time metric is unreadable without it. */
+    @Column(name = "calculated_at")
+    private Instant calculatedAt;
 }

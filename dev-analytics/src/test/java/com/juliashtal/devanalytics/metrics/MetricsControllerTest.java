@@ -34,6 +34,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -111,8 +112,12 @@ class MetricsControllerTest {
         s.setValue(value);
         s.setPeriodFrom(from);
         s.setPeriodTo(to);
+        s.setCalculatedAt(COMPUTED_AT);
         return s;
     }
+
+    /** Every snapshot a calculation writes carries the instant it was computed. */
+    private static final Instant COMPUTED_AT = Instant.parse("2026-03-08T14:30:00Z");
 
     // =========================================================================
     // /calculate
@@ -193,14 +198,32 @@ class MetricsControllerTest {
                 .andExpect(jsonPath("$[0].metricType").value("DAILY_ISSUES_CLOSED"));
     }
 
+    @Test
+    @WithMockUser
+    void getWipOpenPrAge_reportsTheInstantItWasComputed() throws Exception {
+        // An age ending at the moment of calculation cannot be read without that moment.
+        MetricSnapshot row = aggregateSnapshot(
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, 48.0, FROM, TO);
+        when(snapshotService.findLatestPersonalDate(any(), eq(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)))
+                .thenReturn(Optional.of(TO));
+        when(snapshotService.getPersonalSnapshotsByMetricTypeAndDate(
+                any(), eq(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN), eq(TO)))
+                .thenReturn(List.of(row));
+
+        mvc.perform(get("/api/metrics/wip-open-pr-age"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value(48.0))
+                .andExpect(jsonPath("$.calculatedAt").value("2026-03-08T14:30:00Z"));
+    }
+
     // =========================================================================
-    // Read surface: every in-scope metric type needs a way for its owner to read it, and
-    // the cross-repository aggregate must not accept a filter it cannot honour.
+    // Read surface: an owner can read every metric type, and a cross-repository aggregate
+    // does not accept a filter it cannot honour.
     // =========================================================================
 
     @Test
     @WithMockUser
-    void getDailyCommitsAvgSize_returnsTheSeriesItsOwnerCouldNotPreviouslyRead() throws Exception {
+    void getDailyCommitsAvgSize_returnsTheDailySeries() throws Exception {
         when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(
                 any(), eq(MetricType.DAILY_COMMITS_AVG_SIZE), eq(FROM), eq(TO)))
                 .thenReturn(List.of(dailySnapshot(MetricType.DAILY_COMMITS_AVG_SIZE, FROM, 42.0)));
@@ -216,9 +239,8 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getKnowledgeSilo_ignoresARepoIdRatherThanAnsweringZero() throws Exception {
-        // The score is stored as one cross-repository row, so a repository filter can never
-        // match. It used to answer 0.0 - a value this metric also uses to mean "owns none of
-        // it", which is the opposite of "not measured".
+        // Stored as one cross-repository row, so a filter can never match - and 0.0 is a
+        // value this metric already uses to mean "owns none of it".
         when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
                 any(), eq(MetricType.KNOWLEDGE_SILO_SCORE), eq(FROM), eq(TO)))
                 .thenReturn(List.of(aggregateSnapshot(MetricType.KNOWLEDGE_SILO_SCORE, 0.66, FROM, TO)));
@@ -239,8 +261,7 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getDailyCommitsAvgSize_acrossRepositories_averagesRatherThanSums() throws Exception {
-        // Two repositories, 40 and 20 changed lines per commit on the same day. Summing
-        // would report 60 lines per commit, which no commit had.
+        // Summing two repositories would report 60 lines per commit, which no commit had.
         when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(
                 any(), eq(MetricType.DAILY_COMMITS_AVG_SIZE), eq(FROM), eq(TO)))
                 .thenReturn(List.of(dailySnapshot(MetricType.DAILY_COMMITS_AVG_SIZE, FROM, 40.0),
@@ -402,7 +423,7 @@ class MetricsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.metricType").value("WIP_OPEN_PR_AGE_HOURS_MEDIAN"))
                 .andExpect(jsonPath("$.value").value(48.0))
-                .andExpect(jsonPath("$.calculatedAt").value("2026-03-08"))
+                .andExpect(jsonPath("$.calculatedAt").value("2026-03-08T14:30:00Z"))
                 .andExpect(jsonPath("$.periodFrom").doesNotExist())
                 .andExpect(jsonPath("$.periodTo").doesNotExist());
     }
@@ -421,7 +442,7 @@ class MetricsControllerTest {
         mvc.perform(get("/api/metrics/wip-open-pr-age")
                         .param("from", "2020-01-01").param("to", "2020-01-31"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.calculatedAt").value("2026-03-08"));
+                .andExpect(jsonPath("$.calculatedAt").value("2026-03-08T14:30:00Z"));
     }
 
     @Test

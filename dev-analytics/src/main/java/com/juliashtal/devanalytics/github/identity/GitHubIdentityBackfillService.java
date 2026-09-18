@@ -78,7 +78,8 @@ public class GitHubIdentityBackfillService implements GitHubIdentityBackfill {
                 Long githubId = author.path("id").isNumber() ? author.path("id").asLong() : null;
                 if (githubId == null) continue;
 
-                Optional<GitCommitEntity> existing = commitRepository.findByHash(hash);
+                Optional<GitCommitEntity> existing =
+                        commitRepository.findByRepositoryIdAndHash(repo.getId(), hash);
                 if (existing.isEmpty()) continue;
 
                 GitCommitEntity commit = existing.get();

@@ -40,10 +40,9 @@ import static org.mockito.Mockito.when;
 /**
  * Pins that a Jira collection reads every page.
  *
- * <p>{@code /rest/api/3/search/jql} replaced {@code /rest/api/3/search} (CHANGE-2046) and
- * returns neither a total nor an offset: a caller follows {@code nextPageToken} until
- * {@code isLast}. Paging toward a count stops after one page, because an absent {@code total}
- * deserialises to zero — a truncated collection that reports success.</p>
+ * <p>{@code /rest/api/3/search/jql} returns neither a total nor an offset, so paging follows
+ * {@code nextPageToken} until {@code isLast}; a count to page toward would be absent, and an
+ * absent count reads as zero.</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -84,7 +83,7 @@ class JiraCollectorPagingTest {
         when(issueRepository.findByJiraProjectAndSourceIssueKey(any(), any()))
                 .thenReturn(Optional.empty());
         when(jiraProjectRepoMappingRepository.findAllByJiraProject(any())).thenReturn(List.of());
-        // The account lookup runs after the search and is not what these tests are about.
+        // Not what these tests are about; it runs after the search.
         when(restTemplate.exchange(eq(MYSELF), eq(HttpMethod.GET), any(), eq(String.class)))
                 .thenThrow(new HttpClientErrorException(HttpStatus.UNAUTHORIZED));
     }
@@ -110,7 +109,7 @@ class JiraCollectorPagingTest {
 
     @Test
     void collectIssues_responseWithoutTotal_doesNotStopAfterTheFirstPage() {
-        // The regression this guards: no `total` field at all, which used to read as zero.
+        // A response carrying no count at all must still reach the second page.
         givenPages("{\"issues\":[{\"key\":\"HV-1\",\"fields\":{\"summary\":\"s\"}}],"
                         + "\"nextPageToken\":\"tok-2\",\"isLast\":false}",
                    "{\"issues\":[{\"key\":\"HV-2\",\"fields\":{\"summary\":\"s\"}}],"
@@ -139,7 +138,7 @@ class JiraCollectorPagingTest {
 
     @Test
     void collectIssues_repeatedToken_stopsInsteadOfLooping() {
-        // A server that keeps handing back the same token would otherwise page for ever.
+        // A server handing back the same token would otherwise page for ever.
         givenPages(page(List.of("HV-1"), "same", false),
                    page(List.of("HV-2"), "same", false));
 

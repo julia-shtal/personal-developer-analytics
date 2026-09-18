@@ -33,10 +33,8 @@ import static org.mockito.Mockito.when;
  * Pins the population of {@link MetricType#PR_SIZE_COMPLEXITY_SCORE}: enriched merged pull
  * requests only.
  *
- * <p>The merged-PR query is shared with the metrics that count every merged PR, so the
- * restriction lives in the calculator and nothing but a test holds it there. An unenriched
- * PR carries additions and deletions of zero as a placeholder, and a zero admitted to the
- * median is an observation that was never measured.</p>
+ * <p>The merged-PR query is shared with metrics that count every merged PR, so the
+ * restriction lives in the calculator and nothing but a test holds it there.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class PrSizeComplexityCalculatorTest {

@@ -37,13 +37,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Pins that resolving the credential owner's Jira account cannot prevent issues from being
- * collected.
+ * Pins that resolving the credential owner's account cannot prevent issues from collecting.
  *
- * <p>The accountId spares the user from typing their own identifier and is a no-op when they
- * already have one, so it is a convenience. A Jira site that serves its issues to anyone but
- * answers {@code /myself} only to its own members is a real configuration — an open-source
- * project's tracker is exactly that — and on one of those the issues must still collect.</p>
+ * <p>A site may serve its issues to anyone while answering {@code /myself} only to its own
+ * members, so the identifier can be unavailable where the data is not.</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -126,8 +123,6 @@ class JiraCollectorAccountIdTest {
 
     @Test
     void collectIssues_myselfFails_doesNotAbortBeforeTheSearch() {
-        // The search runs first now, so a failing /myself cannot stop it: the regression this
-        // guards against collected zero issues from a publicly readable project.
         when(restTemplate.exchange(eq(MYSELF), eq(HttpMethod.GET), any(), eq(String.class)))
                 .thenThrow(new HttpClientErrorException(HttpStatus.UNAUTHORIZED));
 

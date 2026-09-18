@@ -61,9 +61,8 @@ class MetricsServiceTest {
     // ------------------------------------------------------------------
 
     // ------------------------------------------------------------------
-    // The window is cleared before it is rebuilt, because calculators upsert and write
-    // nothing for a day with no data - so a recalculation alone could not retract a day
-    // whose records went away.
+    // Clearing before rebuilding: calculators upsert, so a recalculation alone cannot
+    // retract a day whose records went away.
     // ------------------------------------------------------------------
 
     @Test
@@ -81,8 +80,7 @@ class MetricsServiceTest {
 
     @Test
     void calculateDailyMetrics_emptyRepoScope_clearsNothing() {
-        // With nothing to recompute from, clearing would delete a history rather than
-        // rebuild it - the same reason the coverage ledger is left alone here.
+        // Nothing to rebuild from means clearing would delete rather than rebuild.
         User user = new User();
         user.setId(1L);
         when(userRepository.getReferenceById(1L)).thenReturn(user);

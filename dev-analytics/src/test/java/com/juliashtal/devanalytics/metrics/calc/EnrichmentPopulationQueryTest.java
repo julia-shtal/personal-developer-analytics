@@ -20,12 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Pins which commits enter the two line-count populations, and which only enter the count.
  *
- * <p>An unenriched commit carries additions and deletions of zero as a placeholder, so the
- * two figures the daily queries return are drawn from different populations: the commit
- * count is over every attributed commit, the line-count aggregates over enriched commits
- * only. Run against the real schema because the split is expressed in SQL — a conditional
- * aggregate in one query and a where clause in the other — and the difference between the
- * two shapes is exactly what a mock cannot show.</p>
+ * <p>Run against the real schema because the split is expressed in SQL — a conditional
+ * aggregate in one query, a where clause in the other — and the difference between those
+ * two shapes is what a mock cannot show.</p>
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -75,10 +72,8 @@ class EnrichmentPopulationQueryTest {
 
     @Test
     void aggregateCommitsDaily_allCommitsPending_countsThemButReturnsNoAverage() {
-        // The conditional aggregate has nothing to average, so the projection reports null and
-        // DailyCommitsCalculator stores 0.0 -- a day the read side cannot tell from genuinely
-        // empty commits, which is why the document calls a 0 alongside a non-zero count
-        // provisional.
+        // Nothing to average, so the projection reports null and the calculator stores 0.0 -
+        // indistinguishable on the read side from a day of genuinely empty commits.
         insertCommit("pending-a", 0, 0, "PENDING", DAY_ONE);
         insertCommit("pending-b", 0, 0, "PENDING", DAY_ONE);
 
