@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.metrics;
 
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;
 import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
 import com.juliashtal.devanalytics.user.model.Team;
@@ -36,6 +37,7 @@ class MetricsServiceCoverageTest {
     @Mock
     MetricCoverageRepository coverageRepository;
     @Mock AuthorIdentityResolver authorIdentityResolver;
+    @Mock MetricSnapshotRepository snapshotRepository;
 
     MetricsService service;
     User user;
@@ -43,7 +45,8 @@ class MetricsServiceCoverageTest {
     @BeforeEach
     void setUp() {
         service = new MetricsService(registry, userRepository, teamRepository,
-                repoScopeResolver, authorIdentityResolver, coverageRepository);
+                repoScopeResolver, authorIdentityResolver, coverageRepository,
+                snapshotRepository);
         user = new User();
         user.setId(1L);
         when(registry.all()).thenReturn(List.of());

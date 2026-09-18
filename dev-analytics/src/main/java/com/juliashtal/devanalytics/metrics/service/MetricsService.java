@@ -2,6 +2,7 @@ package com.juliashtal.devanalytics.metrics.service;
 
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalcContext;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;
@@ -37,6 +38,7 @@ public class MetricsService {
     private final RepoScopeResolver repoScopeResolver;
     private final AuthorIdentityResolver authorIdentityResolver;
     private final MetricCoverageRepository coverageRepository;
+    private final MetricSnapshotRepository snapshotRepository;
 
     /** Personal metrics — uses only the user's own data sources, saved with team=null. */
     @Transactional
@@ -77,6 +79,16 @@ public class MetricsService {
         List<Long> repoIds = repoScopeResolver.resolve(user, team);
         // Resolved once per run, not per calculator: re-reading it per week multiplies queries.
         AuthorIdentity identity = authorIdentityResolver.resolve(user);
+
+        // The window is cleared before it is rebuilt, because calculators upsert and write
+        // nothing for a day with no data — so a recalculation alone cannot retract a day whose
+        // records went away. Guarded on a non-empty scope for the same reason coverage is:
+        // with nothing to recompute from, clearing would delete a history rather than rebuild
+        // it. Same transaction as the rebuild, so a failure rolls both back together.
+        if (!repoIds.isEmpty()) {
+            snapshotRepository.deleteForRecalculation(
+                    user.getId(), team != null ? team.getId() : null, fromDate, toDate);
+        }
 
         List<MetricCalculator> seriesCalculators = new ArrayList<>();
         List<MetricCalculator> aggregateCalculators = new ArrayList<>();

@@ -194,6 +194,66 @@ class MetricsControllerTest {
     }
 
     // =========================================================================
+    // Read surface: every in-scope metric type needs a way for its owner to read it, and
+    // the cross-repository aggregate must not accept a filter it cannot honour.
+    // =========================================================================
+
+    @Test
+    @WithMockUser
+    void getDailyCommitsAvgSize_returnsTheSeriesItsOwnerCouldNotPreviouslyRead() throws Exception {
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(
+                any(), eq(MetricType.DAILY_COMMITS_AVG_SIZE), eq(FROM), eq(TO)))
+                .thenReturn(List.of(dailySnapshot(MetricType.DAILY_COMMITS_AVG_SIZE, FROM, 42.0)));
+
+        mvc.perform(get("/api/metrics/daily-commits-avg-size")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].value").value(42.0))
+                .andExpect(jsonPath("$[0].metricType").value("DAILY_COMMITS_AVG_SIZE"));
+    }
+
+    @Test
+    @WithMockUser
+    void getKnowledgeSilo_ignoresARepoIdRatherThanAnsweringZero() throws Exception {
+        // The score is stored as one cross-repository row, so a repository filter can never
+        // match. It used to answer 0.0 - a value this metric also uses to mean "owns none of
+        // it", which is the opposite of "not measured".
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
+                any(), eq(MetricType.KNOWLEDGE_SILO_SCORE), eq(FROM), eq(TO)))
+                .thenReturn(List.of(aggregateSnapshot(MetricType.KNOWLEDGE_SILO_SCORE, 0.66, FROM, TO)));
+
+        mvc.perform(get("/api/metrics/knowledge-silo-score")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString())
+                        .param("repoId", "34"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value(0.66));
+
+        // Never narrowed to a repository, whatever the caller sent.
+        verify(snapshotService, never())
+                .getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(
+                        any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @WithMockUser
+    void getDailyCommitsAvgSize_acrossRepositories_averagesRatherThanSums() throws Exception {
+        // Two repositories, 40 and 20 changed lines per commit on the same day. Summing
+        // would report 60 lines per commit, which no commit had.
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeAndDateBetween(
+                any(), eq(MetricType.DAILY_COMMITS_AVG_SIZE), eq(FROM), eq(TO)))
+                .thenReturn(List.of(dailySnapshot(MetricType.DAILY_COMMITS_AVG_SIZE, FROM, 40.0),
+                                    dailySnapshot(MetricType.DAILY_COMMITS_AVG_SIZE, FROM, 20.0)));
+
+        mvc.perform(get("/api/metrics/daily-commits-avg-size")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].value").value(30.0));
+    }
+
+    // =========================================================================
     // Personal aggregate endpoints (delegate to getPersonalLeadTimeAggregate)
     // =========================================================================
 

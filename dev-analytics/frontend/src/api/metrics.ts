@@ -17,6 +17,9 @@ export const metricsApi = {
   dailyPrMerged: (from: string, to: string, repoId?: number) =>
     api.get<MetricPointDto[]>('/metrics/daily-pr-merged', { params: { from, to, repoId } }),
 
+  dailyCommitsAvgSize: (from: string, to: string, repoId?: number) =>
+    api.get<MetricPointDto[]>('/metrics/daily-commits-avg-size', { params: { from, to, repoId } }),
+
   dailyChurn: (from: string, to: string, repoId?: number) =>
     api.get<MetricPointDto[]>('/metrics/daily-churn-ratio', { params: { from, to, repoId } }),
 
@@ -69,8 +72,10 @@ export const metricsApi = {
   wipOpenPrAge: (repoId?: number) =>
     api.get<MetricPointInTimeDto>('/metrics/wip-open-pr-age', { params: { repoId } }),
 
-  knowledgeSilo: (from: string, to: string, repoId?: number) =>
-    api.get<MetricAggregateDto>('/metrics/knowledge-silo-score', { params: { from, to, repoId } }),
+  // No repoId: the score is the maximum ownership share across the user's repositories,
+  // stored as one cross-repository row, so there is nothing for a filter to select.
+  knowledgeSilo: (from: string, to: string) =>
+    api.get<MetricAggregateDto>('/metrics/knowledge-silo-score', { params: { from, to } }),
 
   reviewParticipation: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/review-participation', { params: { from, to } }),

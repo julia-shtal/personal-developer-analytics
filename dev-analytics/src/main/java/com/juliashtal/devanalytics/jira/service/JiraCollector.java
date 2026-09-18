@@ -28,7 +28,9 @@ import java.net.URI;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -73,9 +75,6 @@ public class JiraCollector {
         String[] parts = decryptedToken.split(":", 2);
         headers.setBasicAuth(parts[0], parts[1]);
 
-        String accountId = fetchCurrentUserAccountId(baseUrl, headers);
-        log.info("Jira authenticated for dataSourceId={}", config.getId());
-
         String jql = buildJql(project.getProjectKey());
 
         log.info("Starting Jira issue collection from: {}, project: {}, jql: {}",
@@ -85,11 +84,7 @@ public class JiraCollector {
 
         project.setLastScanAt(Instant.now());
 
-        // Links the token owner's Jira account so they never type an accountId. A no-op when
-        // they already have one, or when another user holds it.
-        if (config.getUser() != null) {
-            authorIdentityService.claimJiraAccountIdIfAbsent(config.getUser().getId(), accountId);
-        }
+        claimAccountIdIfPossible(baseUrl, headers, config);
 
         log.info("Jira collection complete: {} issues collected from {}, project: {}",
                 saved, baseUrl, project.getProjectKey());
@@ -97,21 +92,52 @@ public class JiraCollector {
     }
 
     /**
+     * Links the credential owner's Jira account to the user, if the instance will say who
+     * that is.
+     *
+     * <p>A convenience — it spares the user from typing their own accountId — so it runs
+     * after the issues are saved and never prevents them from being saved. A Jira site that
+     * serves its issues to anyone but answers {@code /myself} only to its own members is a
+     * real configuration, and on one of those the identifier is simply unavailable: the
+     * issues still collect and the user can enter the accountId in Settings.</p>
+     */
+    private void claimAccountIdIfPossible(String baseUrl, HttpHeaders headers, DataSourceConfig config) {
+        if (config.getUser() == null) return;
+        try {
+            String accountId = fetchCurrentUserAccountId(baseUrl, headers);
+            authorIdentityService.claimJiraAccountIdIfAbsent(config.getUser().getId(), accountId);
+        } catch (RuntimeException e) {
+            log.warn("Could not resolve the Jira account for dataSourceId={}; issues were "
+                    + "collected and the accountId can be set in Settings: {}",
+                    config.getId(), e.getMessage());
+        }
+    }
+
+    /**
      * Pages through the Jira search endpoint and upserts each returned issue against
-     * {@code project}, advancing {@code startAt} until all results have been fetched.
+     * {@code project}, following {@code nextPageToken} until the response says it is last.
+     *
+     * <p>Token-based because {@code /rest/api/3/search/jql} reports no total and accepts no
+     * offset. Paging toward a count would stop after the first page: an absent {@code total}
+     * deserialises to zero, and a collection that ends one page in reports success for a
+     * truncated result.</p>
      */
     private int fetchAndUpsertIssues(String searchUrl, String jql, HttpHeaders headers, JiraProjectEntity project) {
         int saved = 0;
-        int startAt = 0;
-        int total = Integer.MAX_VALUE;
+        int page = 0;
+        String pageToken = null;
+        // A token that repeats means the endpoint is not advancing; stopping beats looping.
+        Set<String> tokensSeen = new HashSet<>();
 
-        while (startAt < total) {
-            URI uri = UriComponentsBuilder.fromUriString(searchUrl)
+        while (true) {
+            UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(searchUrl)
                     .queryParam("jql", jql)
-                    .queryParam("startAt", startAt)
                     .queryParam("maxResults", pageSize)
-                    .queryParam("fields", "key,summary,description,assignee,reporter,created,updated,resolutiondate,status,labels")
-                    .build().toUri();
+                    .queryParam("fields", "key,summary,description,assignee,reporter,created,updated,resolutiondate,status,labels");
+            if (pageToken != null) {
+                builder.queryParam("nextPageToken", pageToken);
+            }
+            URI uri = builder.build().toUri();
 
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             ResponseEntity<String> response = restTemplate.exchange(uri, HttpMethod.GET, entity, String.class);
@@ -121,8 +147,6 @@ public class JiraCollector {
             }
 
             JiraSearchResponse resp = parseResponse(response.getBody());
-            total = resp.getTotal();
-
             List<JiraSearchResponse.JiraIssue> issues = resp.getIssues();
             if (issues == null || issues.isEmpty()) break;
 
@@ -130,9 +154,19 @@ public class JiraCollector {
                 upsertJiraIssue(project, ji);
                 saved++;
             }
+            page++;
+            log.debug("Jira page fetched: page={}, saved={}, isLast={}", page, saved, resp.getIsLast());
 
-            startAt += issues.size();
-            log.debug("Jira page fetched: saved={}, startAt={}, total={}", saved, startAt, total);
+            if (Boolean.TRUE.equals(resp.getIsLast())) break;
+
+            pageToken = resp.getNextPageToken();
+            if (pageToken == null || pageToken.isBlank() || !tokensSeen.add(pageToken)) {
+                if (pageToken != null && !pageToken.isBlank()) {
+                    log.warn("Jira returned a repeated page token for project {}; stopping after {} issues",
+                            project.getProjectKey(), saved);
+                }
+                break;
+            }
         }
 
         return saved;

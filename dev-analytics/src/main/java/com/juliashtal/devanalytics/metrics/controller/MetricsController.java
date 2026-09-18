@@ -72,6 +72,16 @@ public class MetricsController {
         return getPersonalDailySeries(DAILY_COMMITS_COUNT, from, to, repoId);
     }
 
+    @Operation(summary = "Daily Commits Average Size series (changed lines per commit) for the current user")
+    @GetMapping("/daily-commits-avg-size")
+    public List<MetricPointDto> getDailyCommitsAvgSize(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getPersonalDailySeries(DAILY_COMMITS_AVG_SIZE, from, to, repoId);
+    }
+
     @Operation(summary = "Daily PRs Created series for the current user")
     @GetMapping("/daily-pr-created")
     public List<MetricPointDto> getDailyPrCreated(
@@ -254,13 +264,18 @@ public class MetricsController {
     }
 
     @Operation(summary = "Knowledge Silo Score for the current user")
+    /**
+     * Takes no {@code repoId}: the score is the maximum ownership share across the user's
+     * repositories and is stored as one cross-repository row, so there is nothing for a
+     * repository filter to select. It used to accept one and answer 0.0 — a value this
+     * metric also uses to mean "owns none of it", which is the opposite of "not measured".
+     */
     @GetMapping("/knowledge-silo-score")
     public MetricAggregateDto getKnowledgeSilo(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) Long repoId
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        return getPersonalLeadTimeAggregate(KNOWLEDGE_SILO_SCORE, from, to, repoId);
+        return getPersonalLeadTimeAggregate(KNOWLEDGE_SILO_SCORE, from, to, null);
     }
 
     @Operation(summary = "PR Size Complexity Score (median changed lines per commit across merged PRs) for the current user")
@@ -370,9 +385,13 @@ public class MetricsController {
         User user = checkHelper.currentUser();
 
         if (repoId == null) {
-            // DAILY_CHURN_RATIO is a ratio: averaging per-repo daily values gives the correct cross-repo estimate.
-            // All other daily-series metrics are counts: summing per-repo values is correct.
-            boolean isRatio = type == DAILY_CHURN_RATIO;
+            // Counts sum across repositories; a ratio or a per-commit average does not.
+            // DAILY_CHURN_RATIO is a ratio and DAILY_COMMITS_AVG_SIZE is changed lines per
+            // commit, so adding one repository's figure to another's would be meaningless -
+            // both are averaged instead. The mean of per-repository means is unweighted, so
+            // it approximates the true cross-repository average unless the repositories
+            // contributed equal numbers of commits that day.
+            boolean isRatio = type == DAILY_CHURN_RATIO || type == DAILY_COMMITS_AVG_SIZE;
 
             Map<LocalDate, List<Double>> valuesByDate = new TreeMap<>();
             metricSnapshotService

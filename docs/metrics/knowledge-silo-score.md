@@ -37,6 +37,7 @@ knowledge_silo_score = MAX(share(R)) over all R with total_commits(R) > 0
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied to both the numerator and the denominator. The score measures how concentrated *human* ownership of a repository is, so automated commits belong in neither term: counting them in the denominator alone would deflate every contributor's share in proportion to how much CI writes to the repo. See [author-attribution.md](author-attribution.md).
 - Snapshots calculated before this policy took effect were computed against an unfiltered denominator and read lower. They are overwritten by the `MetricSnapshotWriter` upsert as each window is recalculated; no migration backfills them.
 - Saved as aggregate shape: `periodFrom = fromDate`, `periodTo = toDate`, `repository = null`.
+- Read with `GET /api/metrics/knowledge-silo-score`, which takes no `repoId`: the score is already a maximum across repositories and is stored as one cross-repository row, so there is nothing for a repository filter to select.
 
 ## Edge cases
 

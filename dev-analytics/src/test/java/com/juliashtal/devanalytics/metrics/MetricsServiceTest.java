@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.metrics.calc.MetricCalculator;
 import com.juliashtal.devanalytics.metrics.calc.MetricCalculatorRegistry;
 import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.metrics.repository.MetricCoverageRepository;
+import com.juliashtal.devanalytics.metrics.repository.MetricSnapshotRepository;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
 import com.juliashtal.devanalytics.user.model.Role;
@@ -34,6 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +49,7 @@ class MetricsServiceTest {
     @Mock AuthorIdentityResolver authorIdentityResolver;
     @Mock
     MetricCoverageRepository coverageRepository;
+    @Mock MetricSnapshotRepository snapshotRepository;
 
     @InjectMocks MetricsService metricsService;
 
@@ -56,6 +59,40 @@ class MetricsServiceTest {
     // ------------------------------------------------------------------
     // Personal path: calculateDailyMetrics
     // ------------------------------------------------------------------
+
+    // ------------------------------------------------------------------
+    // The window is cleared before it is rebuilt, because calculators upsert and write
+    // nothing for a day with no data - so a recalculation alone could not retract a day
+    // whose records went away.
+    // ------------------------------------------------------------------
+
+    @Test
+    void calculateDailyMetrics_clearsTheWindowBeforeRebuildingIt() {
+        User user = new User();
+        user.setId(1L);
+        when(userRepository.getReferenceById(1L)).thenReturn(user);
+        when(repoScopeResolver.resolve(user, null)).thenReturn(List.of(10L));
+        when(metricCalculatorRegistry.all()).thenReturn(List.of(mock(MetricCalculator.class)));
+
+        metricsService.calculateDailyMetrics(1L, FROM, TO);
+
+        verify(snapshotRepository).deleteForRecalculation(1L, null, FROM, TO);
+    }
+
+    @Test
+    void calculateDailyMetrics_emptyRepoScope_clearsNothing() {
+        // With nothing to recompute from, clearing would delete a history rather than
+        // rebuild it - the same reason the coverage ledger is left alone here.
+        User user = new User();
+        user.setId(1L);
+        when(userRepository.getReferenceById(1L)).thenReturn(user);
+        when(repoScopeResolver.resolve(user, null)).thenReturn(List.of());
+        when(metricCalculatorRegistry.all()).thenReturn(List.of(mock(MetricCalculator.class)));
+
+        metricsService.calculateDailyMetrics(1L, FROM, TO);
+
+        verifyNoInteractions(snapshotRepository);
+    }
 
     @Test
     void calculateDailyMetrics_invokesAllCalculators() {

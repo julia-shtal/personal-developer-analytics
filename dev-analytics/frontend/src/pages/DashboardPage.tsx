@@ -198,8 +198,8 @@ export function DashboardPage() {
   });
 
   const knowledgeSilo = useQuery({
-    queryKey: ['knowledge-silo-score', from, to, repoId],
-    queryFn: () => metricsApi.knowledgeSilo(from, to, rId).then((r) => r.data),
+    queryKey: ['knowledge-silo-score', from, to],
+    queryFn: () => metricsApi.knowledgeSilo(from, to).then((r) => r.data),
   });
 
   const reviewParticipation = useQuery({

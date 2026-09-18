@@ -299,4 +299,29 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
     @Modifying
     @Query("DELETE FROM MetricSnapshot s WHERE s.user.id = :userId")
     void deleteByUserId(@Param("userId") Long userId);
+
+    /**
+     * Clears one scope's snapshots for a window so a recalculation can rebuild it.
+     *
+     * <p>Calculators upsert and write nothing for a day that has no data, so without this a
+     * day whose records went away — a force-push, a squashed branch, a repository detached —
+     * keeps the row it had. {@code FOCUS_RATIO_DAYS_TASKS} is the sharp case, because its
+     * read side counts rows: the ratio could rise and never fall.</p>
+     *
+     * <p>Scoped by team so a personal recalculation cannot remove team rows or the reverse.
+     * Flushed before running; nothing snapshot-shaped is loaded at the point the caller
+     * invokes it, so the persistence context has nothing to resurrect afterwards.</p>
+     */
+    @Transactional
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            DELETE FROM MetricSnapshot s
+             WHERE s.user.id = :userId
+               AND s.date BETWEEN :fromDate AND :toDate
+               AND ((:teamId IS NULL AND s.team IS NULL) OR s.team.id = :teamId)
+            """)
+    int deleteForRecalculation(@Param("userId") Long userId,
+                               @Param("teamId") Long teamId,
+                               @Param("fromDate") LocalDate fromDate,
+                               @Param("toDate") LocalDate toDate);
 }
