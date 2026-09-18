@@ -15,25 +15,29 @@ The fraction of changed lines that are deletions on a given calendar day, comput
 
 ```
 FOR each calendar day D in [from, to):
-  total_additions = SUM(additions)  FROM git_commits WHERE <attributed to user> AND day = D
-  total_deletions = SUM(deletions)  FROM git_commits WHERE <attributed to user> AND day = D
+  -- enriched commits only: stats_status = 'COMPLETE'
+  total_additions = SUM(additions)  FROM git_commits WHERE <attributed, enriched> AND day = D
+  total_deletions = SUM(deletions)  FROM git_commits WHERE <attributed, enriched> AND day = D
   total_changes   = total_additions + total_deletions
 
   daily_churn_ratio(D) =
     IF total_changes > 0
       THEN total_deletions / total_changes
-      ELSE 0.0                             -- denominator guard; no snapshot saved when 0 commits
+      ELSE 0.0                             -- denominator guard; a day with no enriched
+                                           -- commit produces no row and so no snapshot
 ```
 
 - Time window: calendar day boundaries in UTC. See [timezone.md](timezone.md).
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied in the query. Attribution can match on a declared email address, and a local commit carries no `author_github_id`, so an automation account configured with the user's address would otherwise be attributed to them. See [author-attribution.md](author-attribution.md).
-- Denominator guard: if `total_changes = 0` (no commits or all enrichment still PENDING), no snapshot is saved for that day.
-- For GitHub-sourced commits: enrichment via `StatsEnrichmentScheduler` must complete before `additions`/`deletions` are reliable. Until then, both are 0 and the ratio would be 0.0. The implementation saves the snapshot with whatever stats are available; the value is provisional until all commits on that day reach `stats_status = COMPLETE`.
+- Population: enriched commits only, `stats_status = 'COMPLETE'`, applied in the `WHERE` clause. A day on which nothing was enriched therefore produces no row at all, and no snapshot — which is the point of filtering here rather than inside the sums: summing placeholder zeros would store a ratio of 0.0 that reads as an all-additions day.
+- Denominator guard: if a day has enriched commits whose diffs are genuinely empty, `total_changes = 0` and the snapshot is saved as 0.0. The guard prevents the division, not the write.
+- For GitHub-sourced commits: enrichment via `StatsEnrichmentScheduler` must complete before a commit enters this metric at all. The ratio describes the enriched commits of a day, so an early reading can rest on fewer commits than the day holds; it is not biased toward 0 by the unenriched ones.
 
 ## Edge cases
 
-- **All commits PENDING**: additions = 0, deletions = 0 → `total_changes = 0` → snapshot skipped (denominator guard prevents divide-by-zero).
+- **All commits PENDING**: the population is empty, the query returns no row for that day, and no snapshot is saved. The day reappears in the series once `StatsEnrichmentScheduler` reaches it.
+- **Enriched commits with empty diffs** (a merge with no changes, an empty commit): the row exists, `total_changes = 0`, and 0.0 is saved. Indistinguishable on the read side from a genuine all-additions day — both are 0.0 for different reasons.
 - **Pure deletion commits** (e.g. file removal): ratio = 1.0 for those commits; pulls the daily ratio toward 1.
 - **Merge commits** with no diff: contribute 0 to both numerator and denominator, neutral effect.
 - **Multiple repos**: each repo contributes its own rows; all are summed per day before computing the ratio. One snapshot is saved per (user, repo, day) triplet.

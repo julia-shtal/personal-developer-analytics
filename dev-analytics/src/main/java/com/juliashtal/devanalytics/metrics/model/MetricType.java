@@ -28,7 +28,7 @@ public enum MetricType {
     // Code quality signals
     /** Fraction of commits where deletions > additions (refactoring indicator). */
     REFACTOR_RATIO(false, false, false),
-    /** Median of (additions + deletions) / commitsCount per merged PR (review complexity proxy). */
+    /** Median of (additions + deletions) / commitsCount per enriched merged PR (review complexity proxy). */
     PR_SIZE_COMPLEXITY_SCORE(false, false, false),
     /** Fraction of merged PRs that had zero reviews. */
     MERGE_WITHOUT_REVIEW_RATIO(false, false, false),

@@ -63,11 +63,23 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     // double-count a record nor drop one. Callers pass toDate + 1 at midnight UTC.
     // -------------------------------------------------------------------------
 
+    /**
+     * Daily commit count and average changed lines per commit, for one author in a window.
+     *
+     * <p>The two figures are drawn from different populations on purpose. The count is over
+     * every attributed commit, because counting a commit needs nothing but its date. The
+     * average is over enriched commits only: an unenriched commit carries additions and
+     * deletions of zero as a placeholder, and averaging that in would fabricate an
+     * observation rather than omit one. Non-enriched rows are narrowed to null inside the
+     * aggregate rather than by the where clause, so the count keeps its own population and
+     * one round-trip still serves both metrics.</p>
+     */
     @Query("""
     select date(c.authorDate) as day,
            r.id               as repoId,
            count(c.id)        as commitsCount,
-           avg(c.additions + c.deletions) as avgSize
+           avg(case when c.statsStatus = com.juliashtal.devanalytics.git.model.StatsStatus.COMPLETE
+                    then c.additions + c.deletions end) as avgSize
     from GitCommitEntity c
     join c.repository r
     where r.id IN :repoIds
@@ -85,6 +97,15 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
             @Param("from") Instant from,
             @Param("to") Instant to);
 
+    /**
+     * Daily added and deleted line totals for one author in a window, over enriched commits.
+     *
+     * <p>Restricted to {@code COMPLETE} in the where clause rather than inside the sums,
+     * because the churn ratio needs the day to disappear when nothing on it was enriched:
+     * summing placeholder zeros would otherwise store a ratio of 0.0 that reads as an
+     * all-additions day. A day with enriched commits whose diffs are genuinely empty still
+     * produces a row, and the calculator's denominator guard stores 0.0 for it.</p>
+     */
     @Query("""
     select date(c.authorDate) as day,
            r.id               as repoId,
@@ -95,6 +116,7 @@ public interface GitCommitEntityRepository extends JpaRepository<GitCommitEntity
     where r.id IN :repoIds
       and (c.authorGithubId = :githubUserId or lower(c.authorEmail) in :emails)
       and c.authorName not like '%[bot]%'
+      and c.statsStatus = com.juliashtal.devanalytics.git.model.StatsStatus.COMPLETE
       and c.authorDate >= :from
       and c.authorDate  < :to
     group by date(c.authorDate), r.id

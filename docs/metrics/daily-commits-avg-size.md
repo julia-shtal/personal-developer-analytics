@@ -16,7 +16,8 @@ The average number of changed lines (additions plus deletions) per commit author
 ```
 FOR each calendar day D in [from, to):
   daily_commits_avg_size(D) =
-    AVG(additions + deletions)
+    AVG(CASE WHEN stats_status = 'COMPLETE'
+             THEN additions + deletions END)     -- enriched commits only
     FROM git_commits
     WHERE repository_id IN :repoIds
       AND ( author_github_id = user.githubUserId
@@ -29,12 +30,13 @@ FOR each calendar day D in [from, to):
 - Time window: calendar day boundaries in UTC. See [timezone.md](timezone.md).
 - Attribution: `author_github_id = user.githubUserId` **OR** `lower(author_email) IN user.commitEmails`. Either path alone is sufficient; a commit matching both is counted once. See [author-attribution.md](author-attribution.md).
 - Bot exclusion: `author_name NOT LIKE '%[bot]%'`, applied in the query. Attribution can match on a declared email address, and a local commit carries no `author_github_id`, so an automation account configured with the user's address would otherwise be attributed to them. See [author-attribution.md](author-attribution.md).
-- The query (`aggregateCommitsDailyByRepoIdsAndIdentity`) returns `AVG(c.additions + c.deletions)` alongside the daily commit count; a single DB round-trip produces both `DAILY_COMMITS_COUNT` and `DAILY_COMMITS_AVG_SIZE`.
-- For GitHub-sourced commits, `additions` and `deletions` are populated by `StatsEnrichmentScheduler`. Until enrichment completes, those commits contribute 0 to the average, making the value unreliable. The metric is saved regardless; users should treat values close to 0 for recent days as provisional.
+- Population: enriched commits only, `stats_status = 'COMPLETE'`. The restriction is applied inside the aggregate rather than in the `WHERE` clause, because `DAILY_COMMITS_COUNT` is read from the same query and counts every attributed commit — counting a commit needs nothing but its date. A day on which no commit is enriched yields a null average.
+- The query (`aggregateCommitsDailyByRepoIdsAndIdentity`) returns that conditional average alongside the daily commit count; a single DB round-trip produces both `DAILY_COMMITS_COUNT` and `DAILY_COMMITS_AVG_SIZE`.
+- For GitHub-sourced commits, `additions` and `deletions` are populated by `StatsEnrichmentScheduler`. Until enrichment completes, those commits are excluded from the average rather than averaged in as zeros: an unenriched row carries placeholder zeros, and admitting one would fabricate an observation instead of omitting it. The average therefore describes the enriched commits of a day, which may be fewer than the day's commit count.
 
 ## Edge cases
 
-- **No enriched stats**: if all commits on a day are `PENDING`, the average is 0. The snapshot is still saved; the read side cannot distinguish "genuinely 0-line commits" from "not yet enriched". Consider treating very small values (< 1) as provisional in the UI.
+- **No enriched stats**: if no commit on a day is `COMPLETE`, the conditional average is null and the snapshot is saved as 0. The read side cannot distinguish that from a day of genuinely 0-line commits, so a value of 0 alongside a non-zero `DAILY_COMMITS_COUNT` should be read as provisional rather than as small commits.
 - **Zero commits**: no snapshot saved for that day.
 - **Local Git repos**: stats are always complete (JGit reads the diff directly), so `avg_size` is accurate immediately.
 - **Merge commits**: merge commits with no diff (fast-forward) contribute 0 additions and 0 deletions, pulling the average down.

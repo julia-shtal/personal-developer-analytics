@@ -49,6 +49,14 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    volumes:
+      # A GIT_LOCAL data source is a filesystem path that JGit opens, so it has to resolve
+      # inside the container: without this mount DataSourceValidator rejects every local
+      # path as non-existent and the data source cannot be created at all. Point
+      # LOCAL_REPOS_PATH at the directory holding the working copies; register each
+      # repository under its container path, /repos/<name>.
+      # Read-only, because the platform analyses repositories and never writes to them.
+      - ${LOCAL_REPOS_PATH:-./repos}:/repos:ro
     depends_on:
       db:
         condition: service_healthy

@@ -111,6 +111,8 @@ class MetricsProjectionTest {
 
     @Test
     void dailyCommitsProjection_nullAvgSize_savedAsZero() {
+        // Null is what the conditional aggregate returns for a day on which no commit was
+        // enriched; EnrichmentPopulationQueryTest pins that at the query level.
         DailyCommitsProjection row = mock(DailyCommitsProjection.class);
         when(row.getDay()).thenReturn(Date.valueOf(DATE));
         when(row.getRepoId()).thenReturn(REPO_ID);

@@ -128,6 +128,22 @@ The app is available at **http://localhost:8080**.
 Captured emails are viewable in MailHog at **http://localhost:8025**.
 First boot pulls the llama3.2 model (~2 GB) — allow a few minutes before the AI features work.
 
+### Analysing local Git repositories
+
+A `GIT_LOCAL` data source is a filesystem path that JGit opens, so the path has to exist
+**inside the app container**. Compose bind-mounts `LOCAL_REPOS_PATH` (default `./repos`)
+read-only at `/repos`, so put the working copies there and register each repository under
+its container path:
+
+```bash
+# in dev-analytics/.env
+LOCAL_REPOS_PATH=/home/you/code
+```
+
+A repository at `/home/you/code/my-project` is then registered as `/repos/my-project`.
+The mount is read-only: the platform reads commit history and never writes to a repository.
+Running the backend outside Docker needs none of this — the host path is registered directly.
+
 ## Building the Fat JAR
 
 Maven does **not** build the frontend — there is no `frontend-maven-plugin`.

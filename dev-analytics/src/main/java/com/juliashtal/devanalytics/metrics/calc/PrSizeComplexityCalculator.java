@@ -1,5 +1,6 @@
 package com.juliashtal.devanalytics.metrics.calc;
 
+import com.juliashtal.devanalytics.git.model.StatsStatus;
 import com.juliashtal.devanalytics.git.repository.GitRepositoryEntityRepository;
 import com.juliashtal.devanalytics.github.model.GitHubPullRequestEntity;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
@@ -43,6 +44,9 @@ public class PrSizeComplexityCalculator implements MetricCalculator {
 
         Map<Long, List<Double>> perRepo = new HashMap<>();
         for (GitHubPullRequestEntity pr : prs) {
+            // An unenriched PR carries additions and deletions of zero as a placeholder, and
+            // a zero admitted here is an observation the median never measured.
+            if (pr.getStatsStatus() != StatsStatus.COMPLETE) continue;
             int size = pr.getAdditions() + pr.getDeletions();
             int commits = Math.max(MIN_COMMIT_COUNT, pr.getCommitsCount());
             double complexity = (double) size / commits;
