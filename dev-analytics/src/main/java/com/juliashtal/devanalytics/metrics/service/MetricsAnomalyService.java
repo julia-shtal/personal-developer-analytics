@@ -24,9 +24,10 @@ public class MetricsAnomalyService {
     /**
      * Mirrors {@code AiContextBuilderService.CONTEXT_METRIC_TYPES}. Declared here rather
      * than imported because {@code ai} depends on {@code metrics} and not the reverse;
-     * {@code MetricTypeTest} asserts the two lists agree.
+     * {@code MetricsAnomalyServiceContextTypesTest} pins it to the {@code inAiContext} flag,
+     * which the builder's own list is pinned to, so the two cannot drift apart.
      */
-    private static final List<MetricType> CONTEXT_METRIC_TYPES = List.of(
+    static final List<MetricType> CONTEXT_METRIC_TYPES = List.of(
             DAILY_COMMITS_COUNT, DAILY_PR_CREATED, DAILY_PR_MERGED,
             DAILY_ISSUES_CREATED, DAILY_ISSUES_CLOSED, DAILY_CHURN_RATIO,
             PR_LEAD_TIME_HOURS_MEDIAN, PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,

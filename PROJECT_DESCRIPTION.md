@@ -217,7 +217,7 @@ enrichment service — so the two-phase pattern is legible from the tree.
 #### Services
 
 **`AuthService`** — Dependencies: `UserRepository`, `PasswordEncoder`, `AuthenticationManager`, `JwtService`, `RefreshTokenService`
-- `register(RegisterRequest)` — Validates unique username/email, BCrypt-hashes password, saves `User` with `DEVELOPER` role.
+- `register(RegisterRequest)` — Validates unique username/email, BCrypt-hashes password, saves `User`. Role: an invite carries its own; otherwise the first account on an empty instance becomes `ADMIN` and every later one `DEVELOPER`. The bootstrap tests for *no users at all*, never for *no administrator*, so registering on a populated instance is not a route to the role.
 - `login(LoginRequest)` — Delegates to `AuthenticationManager`, generates access token + refresh token, returns `AuthResponse`.
 - `refreshToken(String)` — Calls `RefreshTokenService.verifyToken()`, rotates token, issues new access token.
 - `logout(String)` — Revokes all user refresh tokens, increments `tokenVersion`.

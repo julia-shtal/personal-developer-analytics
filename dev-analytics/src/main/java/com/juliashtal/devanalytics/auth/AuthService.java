@@ -59,7 +59,7 @@ public class AuthService {
         user.setUsername(request.getUsername());
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-        user.setRole(inviteInfo != null ? Role.valueOf(inviteInfo.role()) : Role.DEVELOPER);
+        user.setRole(resolveRole(inviteInfo));
         user.setGithubLogin(request.getGithubLogin());
 
         User saved = userRepository.save(user);
@@ -70,6 +70,19 @@ public class AuthService {
         }
 
         log.info("New user registered: username={}, viaInvite={}", request.getUsername(), inviteInfo != null);
+    }
+
+    /**
+     * Resolves the role a registration grants.
+     * <p>An invite carries its own role. Otherwise the very first account on an empty instance
+     * becomes the administrator, because every role-granting endpoint is itself behind
+     * {@code hasRole('ADMIN')} and an operator would otherwise have no way to reach the first
+     * one. The test is "no users at all", never "no administrator": on an instance that already
+     * has accounts, registering must not be a way to acquire the role.</p>
+     */
+    private Role resolveRole(InviteInfoDto inviteInfo) {
+        if (inviteInfo != null) return Role.valueOf(inviteInfo.role());
+        return userRepository.count() == 0 ? Role.ADMIN : Role.DEVELOPER;
     }
 
     /**
