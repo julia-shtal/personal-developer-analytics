@@ -14,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.Callable;
+
 /**
  * {@link SourceCollector} adapter for {@link DataSourceType#GITHUB}.
  * Runs commits → PRs → (conditional) issues in sequence.
@@ -49,25 +51,34 @@ public class GitHubSourceCollector implements SourceCollector {
 
         int total = 0;
         for (var repo : gitRepoRepository.findAllByDataSourceConfig(cfg)) {
-            try {
-                if (jobState != null) tracker.setPhase(jobState, "commits", -1);
-                int commits = commitCollector.collectForRepository(repo.getId(), jobState);
-
-                if (jobState != null) tracker.setPhase(jobState, "pull requests", -1);
-                int prs = prCollector.collectForRepository(repo.getId(), jobState);
-
-                int issues = 0;
-                if (repo.isCollectIssues()) {
-                    if (jobState != null) tracker.setPhase(jobState, "issues", -1);
-                    issues = issuesCollector.collectIssuesForRepo(cfg, repo);
-                }
-
-                total += commits + prs + issues;
-            } catch (Exception e) {
-                log.warn("Collection failed for repo {}: {}", repo.getId(), e.getMessage());
+            total += runStage(repo, "commits", jobState,
+                    () -> commitCollector.collectForRepository(repo.getId(), jobState));
+            total += runStage(repo, "pull requests", jobState,
+                    () -> prCollector.collectForRepository(repo.getId(), jobState));
+            if (repo.isCollectIssues()) {
+                total += runStage(repo, "issues", jobState,
+                        () -> issuesCollector.collectIssuesForRepo(cfg, repo));
             }
         }
         return total;
+    }
+
+    /**
+     * Runs one stage, so that its failure costs only its own result.
+     *
+     * <p>The three stages share no transaction and none reads another's output, so a stage that
+     * throws must not discard what the stages before it already collected and persisted.</p>
+     */
+    private int runStage(GitRepositoryEntity repo, String phase, SyncJobTracker.JobState jobState,
+                         Callable<Integer> stage) {
+        if (jobState != null) tracker.setPhase(jobState, phase, -1);
+        try {
+            return stage.call();
+        } catch (Exception e) {
+            log.error("Collection stage '{}' failed for repo {} ({}): {}",
+                    phase, repo.getId(), repo.getRepoFullName(), e.getMessage(), e);
+            return 0;
+        }
     }
 
     /**

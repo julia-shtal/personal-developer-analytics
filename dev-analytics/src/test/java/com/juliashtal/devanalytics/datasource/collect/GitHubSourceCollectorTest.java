@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.List;
 
@@ -93,5 +94,55 @@ class GitHubSourceCollectorTest {
         int result = collector.collect(cfg, null);
 
         assertThat(result).isEqualTo(7);
+    }
+
+    @Test
+    void collect_issueStageThrows_keepsCommitAndPrCounts() {
+        DataSourceConfig cfg = new DataSourceConfig();
+        GitRepositoryEntity r = repo(12L, "owner/long-title", true);
+        when(gitRepoRepository.findAllByDataSourceConfig(cfg)).thenReturn(List.of(r));
+        when(commitCollector.collectForRepository(eq(12L), any())).thenReturn(1633);
+        when(prCollector.collectForRepository(eq(12L), any())).thenReturn(1126);
+        when(issuesCollector.collectIssuesForRepo(
+                any(DataSourceConfig.class), any(GitRepositoryEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("value too long"));
+
+        int result = collector.collect(cfg, null);
+
+        assertThat(result).isEqualTo(2759);
+    }
+
+    @Test
+    void collect_commitStageThrows_stillCollectsPrsAndIssues() {
+        DataSourceConfig cfg = new DataSourceConfig();
+        GitRepositoryEntity r = repo(13L, "owner/repo", true);
+        when(gitRepoRepository.findAllByDataSourceConfig(cfg)).thenReturn(List.of(r));
+        when(commitCollector.collectForRepository(eq(13L), any()))
+                .thenThrow(new IllegalStateException("upstream refused"));
+        when(prCollector.collectForRepository(eq(13L), any())).thenReturn(2);
+        when(issuesCollector.collectIssuesForRepo(
+                any(DataSourceConfig.class), any(GitRepositoryEntity.class))).thenReturn(4);
+
+        int result = collector.collect(cfg, null);
+
+        assertThat(result).isEqualTo(6);
+    }
+
+    @Test
+    void collect_oneRepoFailsEntirely_otherRepoStillCounted() {
+        DataSourceConfig cfg = new DataSourceConfig();
+        GitRepositoryEntity bad = repo(14L, "owner/bad", false);
+        GitRepositoryEntity good = repo(15L, "owner/good", false);
+        when(gitRepoRepository.findAllByDataSourceConfig(cfg)).thenReturn(List.of(bad, good));
+        when(commitCollector.collectForRepository(eq(14L), any()))
+                .thenThrow(new IllegalStateException("boom"));
+        when(prCollector.collectForRepository(eq(14L), any()))
+                .thenThrow(new IllegalStateException("boom"));
+        when(commitCollector.collectForRepository(eq(15L), any())).thenReturn(5);
+        when(prCollector.collectForRepository(eq(15L), any())).thenReturn(3);
+
+        int result = collector.collect(cfg, null);
+
+        assertThat(result).isEqualTo(8);
     }
 }

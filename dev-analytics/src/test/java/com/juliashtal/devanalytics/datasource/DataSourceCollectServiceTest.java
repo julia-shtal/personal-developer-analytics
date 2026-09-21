@@ -59,7 +59,7 @@ class DataSourceCollectServiceTest {
     }
 
     @Test
-    void collectForDataSource_collectorReturnsZero_summaryIsNothingToCollect() {
+    void collectForDataSource_collectorReturnsZero_summaryStatesNothingCollected() {
         DataSourceConfig cfg = cfg(DataSourceType.GIT_LOCAL);
         when(dataSourceService.getForUser(USER_ID, DS_ID)).thenReturn(cfg);
 
@@ -72,7 +72,7 @@ class DataSourceCollectServiceTest {
 
         String result = collectService.collectForDataSource(USER_ID, DS_ID, null);
 
-        assertThat(result).isEqualTo("Nothing to collect (no repos registered)");
+        assertThat(result).isEqualTo("Nothing collected");
     }
 
     @Test

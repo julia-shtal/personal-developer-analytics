@@ -42,7 +42,10 @@ public class DataSourceCollectService {
         cfg.setLastSuccessSync(Instant.now());
         configRepository.save(cfg);
 
-        String summary = total == 0 ? "Nothing to collect (no repos registered)" : total + " items collected";
+        // A zero here means only that nothing was collected. The reason - no repositories, nothing
+        // new upstream, or a stage that failed - is known to the collector, which logs it, and
+        // naming one of them from this side stated a cause that had not been established.
+        String summary = total == 0 ? "Nothing collected" : total + " items collected";
         log.info("Collection finished: dataSourceId={}, total={}", dataSourceId, total);
         return summary;
     }
