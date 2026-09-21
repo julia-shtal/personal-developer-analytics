@@ -126,17 +126,21 @@ public class GitLocalCollector {
     private PendingCommits collectPendingMetadata(Git git, GitRepositoryEntity dbRepo, Set<String> existingHashes)
             throws IOException, GitAPIException {
         List<CommitMeta> pending = new ArrayList<>();
-        String newestHash = dbRepo.getLastFetchedCommitHash();
+        // Empty, not the current watermark: seeding it with the old value would leave the
+        // assignment below unreachable and the watermark never moves.
+        String newestHash = null;
 
         for (RevCommit commit : git.log().call()) {
             String hash = commit.getName();
 
             // Stop at the last commit we already fetched.
             if (hash.equals(dbRepo.getLastFetchedCommitHash())) break;
-            if (existingHashes.contains(hash)) continue;
 
-            // First commit in log order is the newest.
+            // Before the already-stored check: a newest commit that arrived by another path
+            // must still move the watermark, or every later scan re-walks it.
             if (newestHash == null) newestHash = hash;
+
+            if (existingHashes.contains(hash)) continue;
 
             pending.add(new CommitMeta(
                     commit.getId(),

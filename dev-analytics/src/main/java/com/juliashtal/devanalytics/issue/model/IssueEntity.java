@@ -45,11 +45,6 @@ public class IssueEntity {
     @JoinColumn(name = "repository_id")
     private GitRepositoryEntity repository;
 
-    // Snapshot label: repo full name for GITHUB, project key for JIRA.
-    // Named source_context (not repo_name) because Jira issues aren't repo-scoped.
-    @Column(name = "source_context")
-    private String sourceContext;
-
     @Column(nullable = false)
     private String title;
 

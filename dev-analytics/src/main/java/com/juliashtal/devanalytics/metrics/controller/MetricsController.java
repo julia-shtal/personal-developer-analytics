@@ -452,22 +452,23 @@ public class MetricsController {
      */
     private MetricPointInTimeDto getPersonalPointInTime(MetricType type, Long repoId) {
         User user = checkHelper.currentUser();
+        GitRepositoryEntity repo = repoId == null
+                ? null
+                : repoService.getAccessibleRepo(user.getId(), repoId);
 
-        Optional<LocalDate> latest = metricSnapshotService.findLatestPersonalDate(user.getId(), type);
+        // Scoped before the date is chosen: picking it globally can name a date this
+        // repository has no row for.
+        Optional<LocalDate> latest =
+                metricSnapshotService.findDateOfLatestCalculation(user.getId(), type, repo);
         if (latest.isEmpty()) {
             return new MetricPointInTimeDto(type, 0.0, null);
         }
         LocalDate calculatedAt = latest.get();
 
-        List<MetricSnapshot> rows;
-        if (repoId == null) {
-            rows = metricSnapshotService
-                    .getPersonalSnapshotsByMetricTypeAndDate(user, type, calculatedAt);
-        } else {
-            GitRepositoryEntity repo = repoService.getAccessibleRepo(user.getId(), repoId);
-            rows = metricSnapshotService
-                    .getPersonalSnapshotsByMetricTypeAndRepositoryAndDate(user, type, repo, calculatedAt);
-        }
+        List<MetricSnapshot> rows = repo == null
+                ? metricSnapshotService.getPersonalSnapshotsByMetricTypeAndDate(user, type, calculatedAt)
+                : metricSnapshotService.getPersonalSnapshotsByMetricTypeAndRepositoryAndDate(
+                        user, type, repo, calculatedAt);
 
         // The value is an age ending at the moment of calculation, so a date cannot carry it.
         Instant computedAt = rows.stream()

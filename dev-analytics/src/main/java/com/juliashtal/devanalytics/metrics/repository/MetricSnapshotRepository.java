@@ -180,16 +180,36 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
     // writer emits one row per repository and the cross-repo figure reduces across them.
     // -------------------------------------------------------------------------
 
-    /** Most recent calculation date for a personal point-in-time metric. */
+    /**
+     * Dates of a personal point-in-time metric's calculations, most recently calculated first.
+     *
+     * <p>Ordered by {@code calculatedAt} because {@code date} carries the window a run was
+     * asked for, not when it ran.</p>
+     */
     @Query("""
-            SELECT MAX(s.date) FROM MetricSnapshot s
+            SELECT s.date FROM MetricSnapshot s
             WHERE s.user.id = :userId
               AND s.team IS NULL
               AND s.metricType = :metricType
+            ORDER BY s.calculatedAt DESC NULLS LAST, s.date DESC
             """)
-    Optional<LocalDate> findLatestPersonalDate(
+    List<LocalDate> findDatesByLatestCalculation(
             @Param("userId") Long userId,
             @Param("metricType") MetricType metricType);
+
+    /** Repository-scoped variant of {@link #findDatesByLatestCalculation}. */
+    @Query("""
+            SELECT s.date FROM MetricSnapshot s
+            WHERE s.user.id = :userId
+              AND s.team IS NULL
+              AND s.metricType = :metricType
+              AND s.repository = :repository
+            ORDER BY s.calculatedAt DESC NULLS LAST, s.date DESC
+            """)
+    List<LocalDate> findDatesByLatestCalculationForRepository(
+            @Param("userId") Long userId,
+            @Param("metricType") MetricType metricType,
+            @Param("repository") GitRepositoryEntity repository);
 
     /** Every personal row a single calculation wrote for a metric, one per repository. */
     @Query("""

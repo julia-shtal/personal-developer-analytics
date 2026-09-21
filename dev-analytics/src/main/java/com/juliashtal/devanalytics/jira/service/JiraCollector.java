@@ -229,7 +229,6 @@ public class JiraCollector {
 
         issue.setJiraProject(project);
         issue.setSource(IssueSource.JIRA);
-        issue.setSourceContext(project.getProjectKey());
         issue.setSourceIssueKey(sourceIssueKey);
 
         JiraSearchResponse.Fields f = jiraIssue.getFields();

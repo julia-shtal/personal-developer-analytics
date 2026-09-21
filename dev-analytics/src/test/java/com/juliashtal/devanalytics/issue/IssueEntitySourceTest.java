@@ -15,22 +15,18 @@ class IssueEntitySourceTest {
     }
 
     @Test
-    void githubIssue_sourceAndContext() {
+    void githubIssue_carriesItsSource() {
         IssueEntity issue = new IssueEntity();
         issue.setSource(IssueSource.GITHUB);
-        issue.setSourceContext("owner/repo");
 
         assertThat(issue.getSource()).isEqualTo(IssueSource.GITHUB);
-        assertThat(issue.getSourceContext()).isEqualTo("owner/repo");
     }
 
     @Test
-    void jiraIssue_sourceAndContext() {
+    void jiraIssue_carriesItsSource() {
         IssueEntity issue = new IssueEntity();
         issue.setSource(IssueSource.JIRA);
-        issue.setSourceContext("PDA");
 
         assertThat(issue.getSource()).isEqualTo(IssueSource.JIRA);
-        assertThat(issue.getSourceContext()).isEqualTo("PDA");
     }
 }

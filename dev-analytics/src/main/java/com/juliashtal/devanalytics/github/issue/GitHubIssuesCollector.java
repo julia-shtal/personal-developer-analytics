@@ -92,7 +92,6 @@ public class GitHubIssuesCollector {
         issue.setDataSource(config);
         issue.setRepository(repo);
         issue.setSource(IssueSource.GITHUB);
-        issue.setSourceContext(repo.getRepoFullName());
         issue.setSourceIssueKey(sourceIssueKey);
 
         issue.setTitle(gi.getTitle());

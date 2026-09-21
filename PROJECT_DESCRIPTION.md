@@ -98,7 +98,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
                              │
 ┌────────────────────────────▼────────────────────────────────────┐
 │                        PostgreSQL 16                            │
-│            Schema managed by Flyway (59 migrations)             │
+│            Schema managed by Flyway (70 migrations)             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -579,7 +579,7 @@ Metric queries join through this table to include Jira issues in repository-scop
 - `listMappings(jiraProjectId, userId)` → `List<RepoDto>` — returns repos mapped to the project; verifies project access.
 
 **`JiraCollector`** — Collects issues for a single `JiraProjectEntity`.
-- `collectIssues(JiraProjectEntity project)` — authenticates via Basic Auth (email:token), builds JQL scoped to the project key, paginates through results, upserts `IssueEntity` rows keyed by `(jira_project_id, external_id)`. Resolves the mapped `GitRepositoryEntity` via `JiraProjectRepoMappingRepository` and sets `repository_id` on each collected issue so it appears in repo-scoped metric queries.
+- `collectIssues(JiraProjectEntity project)` — authenticates via Basic Auth (email:token), builds JQL scoped to the project key, paginates through results, upserts `IssueEntity` rows keyed by `(jira_project_id, source_issue_key)`. Resolves the mapped `GitRepositoryEntity` via `JiraProjectRepoMappingRepository` and sets `repository_id` on each collected issue so it appears in repo-scoped metric queries.
 
 #### DTOs
 
@@ -906,20 +906,25 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 
 #### Entity
 
-**`IssueEntity`** — Table `issues`, UNIQUE `(data_source_id, external_id)`
+**`IssueEntity`** — Table `issues`, partial UNIQUE on `(data_source_id, source_issue_key)` for
+GitHub and `(jira_project_id, source_issue_key)` for Jira
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | BIGSERIAL PK | |
 | `data_source_id` | FK → data_source_configs CASCADE | |
-| `external_id` | VARCHAR(255) | `PROJ-42` (Jira) or `owner/repo#17` (GitHub) |
+| `source_issue_key` | VARCHAR(255) | `PROJ-42` (Jira) or `owner/repo#17` (GitHub) |
+| `source` | VARCHAR(16) NOT NULL | `GITHUB` / `JIRA` discriminator |
 | `repository_id` | FK → git_repositories | Nullable; GitHub issues only |
-| `repo_name` | TEXT | Denormalized |
-| `title` / `description` | TEXT | |
+| `jira_project_id` | FK → jira_projects | Nullable; Jira issues only |
+| `title` | TEXT | Widened from VARCHAR(255) by V69 — GitHub does not cap titles |
+| `description` | TEXT | |
 | `state` | VARCHAR(32) | `open` / `closed` / `done` |
-| `assignee` / `creator` | VARCHAR(255) | |
+| `assignee` / `creator` | VARCHAR(255) | Display values only; never matched on |
+| `creator_github_id` / `assignee_github_id` | BIGINT | What GitHub issue metrics match on |
+| `reporter_account_id` / `assignee_account_id` | VARCHAR(128) | What Jira issue metrics match on |
 | `created_at` / `updated_at` / `closed_at` | TIMESTAMPTZ | |
-| `labels` | TEXT | Comma-separated |
+| `labels` | VARCHAR(1024) | Comma-separated |
 
 #### Repository
 
@@ -980,7 +985,7 @@ The ledger records the computation rather than inferring it from the output, whi
 
 #### MetricType (Enum) — 21 values
 
-Each value carries three boolean flags: `(inAiContext, dailySum, aggregatePeriod)`. `inAiContext` marks whether the metric is included in the AI summary context; `dailySum` marks daily-count metrics (summed per-day); `aggregatePeriod` marks the metrics computed on the canonical **ISO calendar week** grain.
+Each value carries three boolean flags — `(inAiContext, dailySum, aggregatePeriod)`, the triple shown in the Flags column below — and a display unit. The unit is declared on the constant so a new metric cannot be added without one; `TeamExportController` reads `type.unit` for the CSV `unit` column rather than keeping a mapping of its own. `inAiContext` marks whether the metric is included in the AI summary context; `dailySum` marks daily-count metrics (summed per-day); `aggregatePeriod` marks the metrics computed on the canonical **ISO calendar week** grain.
 
 `aggregatePeriod` is *not* a storage-shape flag. Thirteen types are written with `period_from`/`period_to` (see the AGGREGATE shape in `MetricSnapshot`), but only the five flagged ones are recomputed once per ISO week by `MetricsService`; the rest keep whatever window the calculation request covered. Read paths therefore route on the stored row shape (`period_from IS NULL`) rather than on this flag — routing on the flag is what silently dropped the other eight from every aggregate endpoint.
 
@@ -1147,7 +1152,7 @@ Read-only; behind `GET /api/metrics/stats-coverage`.
 | GET | `/commits-per-week-avg` | `from`, `to` | `MetricAggregateDto` |
 | GET | `/knowledge-silo-score` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/pr-size-complexity` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
-| GET | `/wip-open-pr-age` | `repoId?` | `MetricPointInTimeDto` — point-in-time, not windowed: the most recent calculation's figure with its `calculatedAt` date |
+| GET | `/wip-open-pr-age` | `repoId?` | `MetricPointInTimeDto` — point-in-time, not windowed. Resolved by `calculated_at`, and inside the requested repository when `repoId` is given, so a calculation over another window or another repository cannot decide which figure is returned |
 | GET | `/merge-without-review-ratio` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/review-participation` | `from`, `to` | `MetricAggregateDto` — cross-repo, no `repoId` param |
 | GET | `/anomalies` | `from`, `to` | `Map<String, Boolean>` — per-metric 2σ anomaly flags |
@@ -1515,6 +1520,10 @@ validates the invite, creates the user, and calls `redeemInvite`.
 | V64 | `V64__metric_summaries_prompt_version.sql` | ALTER `metric_summaries` ADD `prompt_version` VARCHAR(16) NOT NULL; backfill existing rows to `PRE_VERSIONING`; rebuild `uix_metric_summaries_identity` with `prompt_version` as the last key column. A summary recorded `model_name` but nothing about the instruction that produced it, so any figure computed over stored summaries spanned an unknown mixture of prompt revisions. Rows predating the column genuinely cannot be attributed, so they are labelled rather than backfilled with a hash |
 | V65 | `V65__remaining_timestamps_to_timestamptz.sql` | ALTER the remaining `Instant`-backed columns from TIMESTAMP to TIMESTAMPTZ across `ai_conversations`, `ai_messages`, `git_commits`, `git_repositories`, `github_pr_reviews`, `github_pull_requests`, `invite_tokens`, `messages`, `password_reset_tokens`, `refresh_tokens` and `teams`, reinterpreting existing values as UTC — the zone the application writes in. `hibernate.jdbc.time_zone` is *not* configured, so daily bucketing still resolves in the database session zone; see `docs/metrics/timezone.md`. V55 converted the first four such columns; these are the rest. A type change rewrites the table and discards its statistics, so the migration ends with `ANALYZE` on the four largest tables, otherwise the planner stops choosing the partial stats indexes until autovacuum catches up |
 | V66 | `V66__metric_snapshots_comment_refresh.sql` | Restate the `metric_snapshots` table comment. V57 (itself a restatement of V40) had gone stale on two counts: it named `MetricsService.saveMetric`, extracted since to `MetricSnapshotWriter`, and its AGGREGATE list omitted `REVIEW_PARTICIPATION_COUNT` and `WIP_OPEN_PR_AGE_HOURS_MEDIAN`. `COMMENT ON TABLE` has no partial form and V57 is frozen, so the comment is restated in full: 8 DAILY + 13 AGGREGATE = 21 types, exhaustive and disjoint. It also records that the storage shape is a property of the calculator, not of `MetricType.aggregatePeriod`, which selects ISO-week window resolution and is true for only five of the thirteen AGGREGATE types. Comment-only — no DDL, no data change, re-running is a no-op |
+| V67 | `V67__commit_hash_unique_per_repository.sql` | Replace the global unique index on `git_commits.hash` with `(repository_id, hash)`. A revision is unique within a repository, not within the table: a fork and its upstream legitimately share commits, and the global constraint made the second of them uningestible. `findByHash` becomes `findByRepositoryIdAndHash` so the read side matches the new scope |
+| V68 | `V68__metric_snapshot_calculated_at.sql` | ALTER `metric_snapshots` ADD `calculated_at` TIMESTAMPTZ, backfilled from `date`. A point-in-time metric measures an age ending at the moment of calculation, and `date` carries the window's first day, so a reader could not tell when the figure was taken. Also the ordering key for point-in-time reads: `date` carries the window a run was asked for, so selecting on it returns whichever window reached furthest rather than whichever run happened last |
+| V69 | `V69__widen_issue_title.sql` | ALTER `issues.title` from VARCHAR(255) to TEXT. Jira caps a summary at 255 upstream and GitHub does not, so the width suited one tracker and silently rejected the other — a single 550-character title aborted a whole repository's issue collection. `git_commits.message` and `github_pull_requests.title` were already TEXT; this column had kept the JPA default |
+| V70 | `V70__drop_issue_source_context.sql` | DROP `issues.source_context`. It held a denormalised label — repository full name for GitHub, project key for Jira — that nothing read, duplicating `jira_project_id` on a Jira row and `repository_id` on a GitHub one. Catalogue-only change; `IF EXISTS` so a re-run is a no-op |
 
 ### 4.2 Entity-Relationship Overview
 

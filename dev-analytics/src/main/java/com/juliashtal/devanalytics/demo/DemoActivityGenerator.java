@@ -204,7 +204,6 @@ public final class DemoActivityGenerator {
         IssueEntity e = new IssueEntity();
         e.setSourceIssueKey("demo/demo-repo#" + number);
         e.setSource(IssueSource.GITHUB);
-        e.setSourceContext("demo/demo-repo");
         e.setTitle("demo issue " + number);
         e.setDescription("Synthetic issue for the demo profile.");
         e.setCreator(login);

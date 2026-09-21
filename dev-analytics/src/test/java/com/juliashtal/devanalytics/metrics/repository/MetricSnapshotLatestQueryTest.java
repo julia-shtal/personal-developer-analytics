@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -74,7 +75,7 @@ class MetricSnapshotLatestQueryTest {
         return repo;
     }
 
-    private void snapshot(GitRepositoryEntity repo, LocalDate date, double value) {
+    private MetricSnapshot snapshot(GitRepositoryEntity repo, LocalDate date, double value) {
         MetricSnapshot s = new MetricSnapshot();
         s.setUser(user);
         s.setTeam(null);
@@ -85,15 +86,43 @@ class MetricSnapshotLatestQueryTest {
         s.setPeriodFrom(date);
         s.setPeriodTo(date);
         entityManager.persist(s);
+        return s;
     }
 
     @Test
-    void findLatestPersonalDate_multipleCalculationDates_returnsTheMostRecent() {
+    void findDatesByLatestCalculation_noCalculationTimes_fallsBackToDateOrder() {
         entityManager.flush();
         entityManager.clear();
 
-        assertThat(repository.findLatestPersonalDate(user.getId(),
-                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).contains(LATEST);
+        assertThat(repository.findDatesByLatestCalculation(user.getId(),
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).first().isEqualTo(LATEST);
+    }
+
+    @Test
+    void findDatesByLatestCalculation_laterDateCalculatedEarlier_isNotFirst() {
+        // The row whose window reaches furthest is not the row computed most recently.
+        MetricSnapshot stale = snapshot(repoA, LATEST.plusDays(30), 812.0);
+        stale.setCalculatedAt(Instant.parse("2026-09-21T08:01:44Z"));
+        MetricSnapshot fresh = snapshot(repoA, OLD, 813.0);
+        fresh.setCalculatedAt(Instant.parse("2026-09-21T09:34:28Z"));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(repository.findDatesByLatestCalculation(user.getId(),
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).first().isEqualTo(OLD);
+    }
+
+    @Test
+    void findDatesByLatestCalculationForRepository_staysInsideTheRepository() {
+        MetricSnapshot other = snapshot(repoB, LATEST.plusDays(30), 99.0);
+        other.setCalculatedAt(Instant.parse("2026-09-21T10:00:00Z"));
+        entityManager.flush();
+        entityManager.clear();
+        GitRepositoryEntity mRepo = entityManager.find(GitRepositoryEntity.class, repoA.getId());
+
+        assertThat(repository.findDatesByLatestCalculationForRepository(user.getId(),
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, mRepo))
+                .doesNotContain(LATEST.plusDays(30));
     }
 
     @Test
@@ -124,11 +153,11 @@ class MetricSnapshotLatestQueryTest {
     }
 
     @Test
-    void findLatestPersonalDate_metricNeverCalculated_returnsEmpty() {
+    void findDatesByLatestCalculation_metricNeverCalculated_returnsEmpty() {
         entityManager.flush();
         entityManager.clear();
 
-        assertThat(repository.findLatestPersonalDate(user.getId(),
+        assertThat(repository.findDatesByLatestCalculation(user.getId(),
                 MetricType.KNOWLEDGE_SILO_SCORE)).isEmpty();
     }
 }

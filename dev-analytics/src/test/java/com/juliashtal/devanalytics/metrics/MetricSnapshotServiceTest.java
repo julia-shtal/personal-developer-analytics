@@ -53,6 +53,48 @@ class MetricSnapshotServiceTest {
     }
 
     @Test
+    void findDateOfLatestCalculation_noRepository_returnsTheFirstRowOfTheOrderedQuery() {
+        LocalDate latestRun = LocalDate.of(2025, 9, 1);
+        when(repository.findDatesByLatestCalculation(1L, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN))
+                .thenReturn(List.of(latestRun, LocalDate.of(2026, 9, 14)));
+
+        assertThat(service.findDateOfLatestCalculation(
+                1L, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, null)).contains(latestRun);
+    }
+
+    @Test
+    void findDateOfLatestCalculation_laterWindowCalculatedEarlier_isNotChosen() {
+        // A later date whose calculation ran earlier must not win.
+        when(repository.findDatesByLatestCalculation(1L, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN))
+                .thenReturn(List.of(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 9, 14)));
+
+        assertThat(service.findDateOfLatestCalculation(
+                1L, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, null))
+                .contains(LocalDate.of(2026, 6, 1));
+    }
+
+    @Test
+    void findDateOfLatestCalculation_withRepository_asksTheScopedQuery() {
+        GitRepositoryEntity repo = new GitRepositoryEntity();
+        LocalDate date = LocalDate.of(2026, 6, 1);
+        when(repository.findDatesByLatestCalculationForRepository(
+                1L, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, repo)).thenReturn(List.of(date));
+
+        assertThat(service.findDateOfLatestCalculation(
+                1L, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, repo)).contains(date);
+        verify(repository, never()).findDatesByLatestCalculation(any(), any());
+    }
+
+    @Test
+    void findDateOfLatestCalculation_neverCalculated_returnsEmpty() {
+        when(repository.findDatesByLatestCalculation(1L, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN))
+                .thenReturn(List.of());
+
+        assertThat(service.findDateOfLatestCalculation(
+                1L, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, null)).isEmpty();
+    }
+
+    @Test
     void findMaxPersonalDate_noSnapshots_returnsEmpty() {
         when(repository.findMaxPersonalDate(1L)).thenReturn(Optional.empty());
 

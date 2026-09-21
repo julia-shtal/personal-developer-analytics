@@ -64,7 +64,7 @@ public class TeamExportController {
                 double total = snapshots.stream().mapToDouble(MetricSnapshot::getValue).sum();
                 csv.append(String.format("\"%s\",%s,%.4f,%s,%s,%s\n",
                         member.getUsername().replace("\"", "\\\""),
-                        type.name(), total, unitFor(type), from, to));
+                        type.name(), total, type.unit, from, to));
             }
         }
 
@@ -74,27 +74,4 @@ public class TeamExportController {
                 .body(csv.toString());
     }
 
-    private static String unitFor(MetricType type) {
-        return switch (type) {
-            case DAILY_COMMITS_COUNT                           -> "commits";
-            case DAILY_COMMITS_AVG_SIZE                        -> "ln/commit";
-            case DAILY_PR_CREATED, DAILY_PR_MERGED             -> "prs";
-            case DAILY_ISSUES_CREATED, DAILY_ISSUES_CLOSED     -> "issues";
-            case DAILY_CHURN_RATIO,
-                 AFTER_HOURS_COMMIT_RATIO,
-                 KNOWLEDGE_SILO_SCORE,
-                 REFACTOR_RATIO,
-                 MERGE_WITHOUT_REVIEW_RATIO,
-                 FOCUS_RATIO_DAYS_TASKS                        -> "%";
-            case PR_LEAD_TIME_HOURS_MEDIAN,
-                 PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN,
-                 REVIEW_RESPONSE_TIME_HOURS_MEDIAN,
-                 ISSUE_LEAD_TIME_HOURS_MEDIAN,
-                 WIP_OPEN_PR_AGE_HOURS_MEDIAN                  -> "h";
-            case DEEP_WORK_STREAK_DAYS                         -> "d";
-            case PR_SIZE_COMPLEXITY_SCORE                      -> "ln/c";
-            case COMMITS_PER_WEEK_AVG                          -> "/wk";
-            case REVIEW_PARTICIPATION_COUNT                    -> "prs";
-        };
-    }
 }

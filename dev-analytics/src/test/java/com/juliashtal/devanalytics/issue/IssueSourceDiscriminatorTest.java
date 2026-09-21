@@ -107,16 +107,6 @@ class IssueSourceDiscriminatorTest {
     }
 
     @Test
-    void collectIssues_setsSourceContextToProjectKey() {
-        ArgumentCaptor<IssueEntity> captor = ArgumentCaptor.forClass(IssueEntity.class);
-
-        jiraCollector.collectIssues(project);
-
-        verify(issueRepository).save(captor.capture());
-        assertThat(captor.getValue().getSourceContext()).isEqualTo("PDA");
-    }
-
-    @Test
     void collectIssues_setsJiraProjectOnSavedEntity() {
         ArgumentCaptor<IssueEntity> captor = ArgumentCaptor.forClass(IssueEntity.class);
 

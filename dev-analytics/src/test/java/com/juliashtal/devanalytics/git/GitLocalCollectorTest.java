@@ -200,6 +200,34 @@ class GitLocalCollectorTest {
     }
 
     @Test
+    void collectForRepository_secondRun_advancesWatermarkToTheNewestCommit() throws Exception {
+        buildThreeCommitRepo();
+        GitRepositoryEntity dbRepo = dbRepoPointingAtTempDir();
+        dbRepo.setLastFetchedCommitHash(secondCommit.getName());
+        when(repoRepository.findByIdWithDataSourceConfig(REPO_ID)).thenReturn(Optional.of(dbRepo));
+        when(commitRepository.findHashesByRepositoryId(REPO_ID)).thenReturn(List.of());
+
+        collector.collectForRepository(REPO_ID, null);
+
+        assertThat(dbRepo.getLastFetchedCommitHash()).isEqualTo(thirdCommit.getName());
+    }
+
+    @Test
+    void collectForRepository_newestCommitAlreadyStored_stillAdvancesWatermark() throws Exception {
+        // Skipped as already-stored, but the watermark must still reach it.
+        buildThreeCommitRepo();
+        GitRepositoryEntity dbRepo = dbRepoPointingAtTempDir();
+        dbRepo.setLastFetchedCommitHash(rootCommit.getName());
+        when(repoRepository.findByIdWithDataSourceConfig(REPO_ID)).thenReturn(Optional.of(dbRepo));
+        when(commitRepository.findHashesByRepositoryId(REPO_ID))
+                .thenReturn(List.of(thirdCommit.getName()));
+
+        collector.collectForRepository(REPO_ID, null);
+
+        assertThat(dbRepo.getLastFetchedCommitHash()).isEqualTo(thirdCommit.getName());
+    }
+
+    @Test
     void collectForRepository_allHashesAlreadyPersisted_returnsZeroAndTouchesScanTime() throws Exception {
         buildThreeCommitRepo();
         GitRepositoryEntity dbRepo = dbRepoPointingAtTempDir();

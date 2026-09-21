@@ -204,7 +204,8 @@ class MetricsControllerTest {
         // An age ending at the moment of calculation cannot be read without that moment.
         MetricSnapshot row = aggregateSnapshot(
                 MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, 48.0, FROM, TO);
-        when(snapshotService.findLatestPersonalDate(any(), eq(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)))
+        when(snapshotService.findDateOfLatestCalculation(
+                any(), eq(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN), isNull()))
                 .thenReturn(Optional.of(TO));
         when(snapshotService.getPersonalSnapshotsByMetricTypeAndDate(
                 any(), eq(MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN), eq(TO)))
@@ -411,8 +412,8 @@ class MetricsControllerTest {
     @WithMockUser
     void getWipOpenPrAge_noWindowParameters_returnsLatestValueWithItsCalculationDate() throws Exception {
         LocalDate calculatedAt = LocalDate.of(2026, 3, 8);
-        when(snapshotService.findLatestPersonalDate(currentUser.getId(),
-                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).thenReturn(Optional.of(calculatedAt));
+        when(snapshotService.findDateOfLatestCalculation(currentUser.getId(),
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, null)).thenReturn(Optional.of(calculatedAt));
         when(snapshotService.getPersonalSnapshotsByMetricTypeAndDate(
                 currentUser, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, calculatedAt))
                 .thenReturn(List.of(
@@ -432,8 +433,8 @@ class MetricsControllerTest {
     @WithMockUser
     void getWipOpenPrAge_withFromAndTo_ignoresThemRatherThanClaimingAWindow() throws Exception {
         LocalDate calculatedAt = LocalDate.of(2026, 3, 8);
-        when(snapshotService.findLatestPersonalDate(currentUser.getId(),
-                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).thenReturn(Optional.of(calculatedAt));
+        when(snapshotService.findDateOfLatestCalculation(currentUser.getId(),
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, null)).thenReturn(Optional.of(calculatedAt));
         when(snapshotService.getPersonalSnapshotsByMetricTypeAndDate(
                 currentUser, MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, calculatedAt))
                 .thenReturn(List.of(
@@ -448,8 +449,8 @@ class MetricsControllerTest {
     @Test
     @WithMockUser
     void getWipOpenPrAge_neverCalculated_returnsZeroWithNoCalculationDate() throws Exception {
-        when(snapshotService.findLatestPersonalDate(currentUser.getId(),
-                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).thenReturn(Optional.empty());
+        when(snapshotService.findDateOfLatestCalculation(currentUser.getId(),
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN, null)).thenReturn(Optional.empty());
 
         mvc.perform(get("/api/metrics/wip-open-pr-age"))
                 .andExpect(status().isOk())

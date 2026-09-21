@@ -52,4 +52,15 @@ class MetricTypeTest {
     void totalMetricCount_isTwentyOne() {
         assertThat(MetricType.values()).hasSize(21);
     }
+
+    @Test
+    void everyMetric_declaresADisplayUnit() {
+        // A blank unit would put the export back to needing its own mapping.
+        List<MetricType> withoutUnit = Arrays.stream(MetricType.values())
+                .filter(t -> t.unit == null || t.unit.isBlank())
+                .toList();
+        assertThat(withoutUnit)
+                .as("Every metric type must declare a non-blank display unit")
+                .isEmpty();
+    }
 }
