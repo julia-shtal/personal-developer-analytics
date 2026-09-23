@@ -82,6 +82,11 @@ ai:
     model: ${OLLAMA_MODEL:llama3.2}
     num-predict: ${OLLAMA_NUM_PREDICT:1024}
     seed: ${OLLAMA_SEED:42}
+    num-thread: ${OLLAMA_NUM_THREAD:1}
+    top-k: ${OLLAMA_TOP_K:1}
+    top-p: ${OLLAMA_TOP_P:0.0}
+    repeat-penalty: ${OLLAMA_REPEAT_PENALTY:1.0}
+    num-ctx: ${OLLAMA_NUM_CTX:8192}
 
 management:
   endpoints:

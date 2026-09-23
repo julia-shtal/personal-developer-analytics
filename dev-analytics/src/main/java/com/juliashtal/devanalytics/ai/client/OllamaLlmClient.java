@@ -24,14 +24,29 @@ public class OllamaLlmClient implements LlmClient {
     private final RestTemplate restTemplate;
 
     private final int seed;
+    private final int numThread;
+    private final int topK;
+    private final double topP;
+    private final double repeatPenalty;
+    private final int numCtx;
 
     public OllamaLlmClient(
             @Value("${ai.ollama.base-url:http://localhost:11434}") String baseUrl,
             @Value("${ai.ollama.num-predict:1024}") int numPredict,
-            @Value("${ai.ollama.seed:42}") int seed) {
+            @Value("${ai.ollama.seed:42}") int seed,
+            @Value("${ai.ollama.num-thread:1}") int numThread,
+            @Value("${ai.ollama.top-k:1}") int topK,
+            @Value("${ai.ollama.top-p:0.0}") double topP,
+            @Value("${ai.ollama.repeat-penalty:1.0}") double repeatPenalty,
+            @Value("${ai.ollama.num-ctx:8192}") int numCtx) {
         this.baseUrl = baseUrl;
         this.numPredict = numPredict;
         this.seed = seed;
+        this.numThread = numThread;
+        this.topK = topK;
+        this.topP = topP;
+        this.repeatPenalty = repeatPenalty;
+        this.numCtx = numCtx;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(300_000); // 5 minutes — LLM inference can be slow
@@ -46,9 +61,18 @@ public class OllamaLlmClient implements LlmClient {
         req.setPrompt(userPrompt);
         req.setStream(false);
         if (jsonMode) req.setFormat("json");
-        req.setOptions(Map.of("num_predict", numPredict, "temperature", 0.0, "seed", seed));
+        req.setOptions(Map.of(
+                "num_predict", numPredict,
+                "temperature", 0.0,
+                "seed", seed,
+                "num_thread", numThread,
+                "top_k", topK,
+                "top_p", topP,
+                "repeat_penalty", repeatPenalty,
+                "num_ctx", numCtx));
 
-        log.debug("Sending request to Ollama: model={}, promptLength={}, numPredict={}, seed={}", model, userPrompt.length(), numPredict, seed);
+        log.debug("Sending request to Ollama: model={}, promptLength={}, numPredict={}, seed={}, numThread={}, topK={}, topP={}, repeatPenalty={}, numCtx={}",
+                model, userPrompt.length(), numPredict, seed, numThread, topK, topP, repeatPenalty, numCtx);
         try {
             OllamaResponse resp = restTemplate.postForObject(
                     baseUrl + "/api/generate", req, OllamaResponse.class);
