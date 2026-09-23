@@ -1242,17 +1242,19 @@ Index: `(conversation_id, created_at)`.
 
 - **`generateSummary(User, from, to, repoId)`** — personal/repo scope:
   1. Delegates to `AiContextBuilderService.buildPersonalContext()` → `AggregatedMetricsContext`.
-  2. Serialises context to JSON, builds structured system + user prompt.
-  3. Calls `LlmClient.complete(model, systemPrompt, userPrompt)`.
-  4. Parses JSON response into `MetricsSummaryDto` with headline, overview, insights, recommendations; strips markdown code fences if present.
-  5. Persists to `metric_summaries` table; result cached in `ai_summaries` by `(userId, from, to, repoId, promptVersion)`.
+  2. **Empty-context guard**: if `ctx.getMetrics()` is empty, skips the LLM entirely and persists a fixed "No data for this period" `MetricsSummaryDto` (empty insights/recommendations, no raw model output) — F-036 fix: previously called the model unconditionally, which fabricated confident, fully invented claims (trend percentages, "PR Lead Time improved") from an empty context.
+  3. Serialises context to JSON, builds structured system + user prompt.
+  4. Calls `LlmClient.complete(model, systemPrompt, userPrompt)`.
+  5. Parses JSON response into `MetricsSummaryDto` with headline, overview, insights, recommendations; strips markdown code fences if present.
+  6. Persists to `metric_summaries` table; result cached in `ai_summaries` by `(userId, from, to, repoId, promptVersion)`.
 
 - **`generateTeamSummary(User requestingUser, Long teamId, from, to)`** — team scope (MANAGER or ADMIN only):
   1. Delegates to `AiContextBuilderService.buildTeamContext()` → `TeamMetricsContext`.
-  2. Same prompt/parse flow as personal summary; generates team-scoped `metric_summaries` row with `team_id` set, `user_id = NULL`.
-  3. Cached by `("team", teamId, from, to, promptVersion)`.
+  2. **Empty-context guard**: if every member's metrics map is empty, skips the LLM and persists the same fixed "No data for this period" summary — same F-036 fix as `generateSummary`.
+  3. Same prompt/parse flow as personal summary; generates team-scoped `metric_summaries` row with `team_id` set, `user_id = NULL`.
+  4. Cached by `("team", teamId, from, to, promptVersion)`.
 
-- **`generateMemberSummary(User requestingUser, Long teamId, Long memberId, from, to)`** — per-member AI summary used by the 1:1 meeting prep export.
+- **`generateMemberSummary(User requestingUser, Long teamId, Long memberId, from, to)`** — per-member AI summary used by the 1:1 meeting prep export. Builds context via the same `buildPersonalContext()` call as `generateSummary` and carries the identical empty-context guard.
 
 - **Prompt versioning**: the two system prompts live in `SystemPrompts` (constants only); `PromptVersionProvider` hashes them at construction and `hashFor(scope)` returns the first 16 hex characters of the sha256. That version is stamped on every generated `MetricsSummaryDto`, persisted on the row, returned by the API, and folded into the cache key, so a stored summary is attributable to the instruction that produced it. `PromptVersionProviderTest` pins the committed versions, so editing a prompt fails the build until the expected values are updated deliberately.
 
@@ -1260,7 +1262,7 @@ Index: `(conversation_id, created_at)`.
 
 **`MetricsAnomalyService`** — Anomaly detection service.
 - `computeAnomalies(User, from, to)` → `Map<MetricType, Boolean>` — per metric, returns true if any value is >2σ from mean.
-- Uses same 11 context metric types as `MetricsAiService`.
+- Uses same 12 context metric types as `MetricsAiService`.
 - Requires ≥3 data points per metric; fewer returns false (no anomaly signal).
 - Called by dashboard to display anomaly badges on KPI tiles.
 
