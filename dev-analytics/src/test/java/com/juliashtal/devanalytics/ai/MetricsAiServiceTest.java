@@ -29,6 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.HashSet;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,15 +67,29 @@ class MetricsAiServiceTest {
                 new PromptVersionProvider());
         ReflectionTestUtils.setField(service, "model", MODEL);
 
-        // Return minimal empty contexts so toJson() does not throw.
+        // Non-empty by default so the LLM path is exercised; empty-context tests override this
+        // explicitly to pin the no-data guard instead.
         // lenient: not every test exercises every summary path.
         lenient().when(contextBuilder.buildPersonalContext(any(), any(), any(), any()))
-                .thenReturn(new AggregatedMetricsContext());
-
-        TeamMetricsContext emptyTeam = new TeamMetricsContext();
-        emptyTeam.setMembers(List.of());
+                .thenReturn(nonEmptyPersonalContext());
         lenient().when(contextBuilder.buildTeamContext(any(), any(), any()))
-                .thenReturn(emptyTeam);
+                .thenReturn(nonEmptyTeamContext());
+    }
+
+    private AggregatedMetricsContext nonEmptyPersonalContext() {
+        AggregatedMetricsContext ctx = new AggregatedMetricsContext();
+        ctx.setMetrics(Map.of("DAILY_COMMITS_COUNT", AggregatedMetricsContext.MetricAggregate.builder()
+                .min("1").max("5").median("3").total(9).trendPct(0.0).anomaly(false).build()));
+        return ctx;
+    }
+
+    private TeamMetricsContext nonEmptyTeamContext() {
+        TeamMetricsContext.MemberMetrics mm = new TeamMetricsContext.MemberMetrics();
+        mm.setUsername("member");
+        mm.setMetrics(Map.of("DAILY_COMMITS_COUNT", 5.0));
+        TeamMetricsContext ctx = new TeamMetricsContext();
+        ctx.setMembers(List.of(mm));
+        return ctx;
     }
 
     @Test
@@ -358,5 +373,95 @@ class MetricsAiServiceTest {
 
         verify(llmClient, never()).complete(any(), any(), any(), anyBoolean());
         verify(persistenceService, never()).savePersonal(any(), any());
+    }
+
+    // -------------------------------------------------------------------------
+    // Empty-context guard
+    // -------------------------------------------------------------------------
+
+    @Test
+    void generateSummary_emptyContext_skipsLlmAndReturnsNoDataSummary() {
+        when(contextBuilder.buildPersonalContext(any(), any(), any(), any()))
+                .thenReturn(new AggregatedMetricsContext());
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getScope()).isEqualTo("PERSONAL");
+        assertThat(dto.getHeadline()).isEqualTo("No data for this period");
+        assertThat(dto.getInsights()).isEmpty();
+        assertThat(dto.getRecommendations()).isEmpty();
+        verify(llmClient, never()).complete(any(), any(), any(), anyBoolean());
+        verify(persistenceService).savePersonal(user, dto);
+    }
+
+    @Test
+    void generateSummary_emptyContext_withRepo_scopesAsRepositoryAndSkipsLlm() {
+        GitRepositoryEntity repo = new GitRepositoryEntity();
+        repo.setId(5L);
+        repo.setName("dev-analytics");
+        when(repoService.getAccessibleRepo(user.getId(), 5L)).thenReturn(repo);
+        when(contextBuilder.buildPersonalContext(any(), any(), any(), any()))
+                .thenReturn(new AggregatedMetricsContext());
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, 5L);
+
+        assertThat(dto.getScope()).isEqualTo("REPOSITORY");
+        assertThat(dto.getContextRepoName()).isEqualTo("dev-analytics");
+        verify(llmClient, never()).complete(any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void generateTeamSummary_noMembers_skipsLlmAndReturnsNoDataSummary() {
+        User manager = userWithRole(1L, Role.MANAGER);
+        Team team = team(10L, manager, manager);
+        when(teamService.getById(10L)).thenReturn(team);
+        TeamMetricsContext emptyCtx = new TeamMetricsContext();
+        emptyCtx.setMembers(List.of());
+        when(contextBuilder.buildTeamContext(any(), any(), any())).thenReturn(emptyCtx);
+
+        MetricsSummaryDto dto = service.generateTeamSummary(manager, 10L, from, to);
+
+        assertThat(dto.getScope()).isEqualTo("TEAM");
+        assertThat(dto.getHeadline()).isEqualTo("No data for this period");
+        verify(llmClient, never()).complete(any(), any(), any(), anyBoolean());
+        verify(persistenceService).saveTeam(team, dto);
+    }
+
+    @Test
+    void generateTeamSummary_membersWithNoAttributableMetrics_skipsLlm() {
+        User manager = userWithRole(1L, Role.MANAGER);
+        Team team = team(10L, manager, manager);
+        when(teamService.getById(10L)).thenReturn(team);
+        TeamMetricsContext.MemberMetrics mm = new TeamMetricsContext.MemberMetrics();
+        mm.setUsername("manager");
+        mm.setMetrics(Map.of());
+        TeamMetricsContext ctx = new TeamMetricsContext();
+        ctx.setMembers(List.of(mm));
+        when(contextBuilder.buildTeamContext(any(), any(), any())).thenReturn(ctx);
+
+        MetricsSummaryDto dto = service.generateTeamSummary(manager, 10L, from, to);
+
+        verify(llmClient, never()).complete(any(), any(), any(), anyBoolean());
+        verify(persistenceService).saveTeam(team, dto);
+    }
+
+    @Test
+    void generateMemberSummary_emptyContext_skipsLlmAndReturnsNoDataSummary() {
+        User manager = userWithRole(1L, Role.MANAGER);
+        User member = new User();
+        member.setId(2L);
+        member.setUsername("alice");
+        Team team = team(10L, manager, manager, member);
+        when(teamService.getById(10L)).thenReturn(team);
+        when(userService.getById(2L)).thenReturn(member);
+        when(contextBuilder.buildPersonalContext(eq(member), any(), any(), any()))
+                .thenReturn(new AggregatedMetricsContext());
+
+        MetricsSummaryDto dto = service.generateMemberSummary(manager, 10L, 2L, from, to);
+
+        assertThat(dto.getScope()).isEqualTo("PERSONAL");
+        assertThat(dto.getContextRepoName()).isEqualTo("alice");
+        verify(llmClient, never()).complete(any(), any(), any(), anyBoolean());
+        verify(persistenceService).savePersonal(member, dto);
     }
 }

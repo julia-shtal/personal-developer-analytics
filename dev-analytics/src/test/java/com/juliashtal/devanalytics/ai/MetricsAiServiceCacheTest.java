@@ -64,8 +64,11 @@ class MetricsAiServiceCacheTest {
         cacheManager.getCache("ai_summaries").clear();
 
         when(promptVersionProvider.hashFor(any())).thenAnswer(inv -> promptVersion.get());
-        when(contextBuilder.buildPersonalContext(any(), any(), any(), any()))
-                .thenReturn(new AggregatedMetricsContext());
+
+        AggregatedMetricsContext ctx = new AggregatedMetricsContext();
+        ctx.setMetrics(java.util.Map.of("DAILY_COMMITS_COUNT", AggregatedMetricsContext.MetricAggregate.builder()
+                .min("1").max("5").median("3").total(9).trendPct(0.0).anomaly(false).build()));
+        when(contextBuilder.buildPersonalContext(any(), any(), any(), any())).thenReturn(ctx);
         when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(VALID_JSON);
     }
 

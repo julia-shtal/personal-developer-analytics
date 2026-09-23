@@ -45,6 +45,10 @@ public class MetricsAiService {
     @Value("${ai.ollama.model:llama3}")
     private String model;
 
+    private static final String NO_DATA_HEADLINE = "No data for this period";
+    private static final String NO_DATA_OVERVIEW =
+            "No attributable activity was recorded for this period, so no summary was generated.";
+
     // -------------------------------------------------------------------------
     // Personal / repository summary
     // -------------------------------------------------------------------------
@@ -56,15 +60,26 @@ public class MetricsAiService {
         GitRepositoryEntity repo = repoId != null
                 ? repoService.getAccessibleRepo(user.getId(), repoId)
                 : null;
+        String scope = repo != null ? "REPOSITORY" : "PERSONAL";
+        String scopeName = repo != null ? repo.getName() : null;
 
         AggregatedMetricsContext ctx = contextBuilder.buildPersonalContext(user, from, to, repo);
+
+        if (ctx.getMetrics().isEmpty()) {
+            log.info("No metrics in context, skipping LLM: userId={}, scope={}, from={}, to={}",
+                    user.getId(), scope, from, to);
+            MetricsSummaryDto dto = noDataSummary(from, to, scope, scopeName);
+            persistenceService.savePersonal(user, dto);
+            return dto;
+        }
+
         String ctxJson = toJson(ctx);
 
         String systemPrompt = SystemPrompts.PERSONAL;
         String userPrompt = buildUserPrompt(from, to, repo, ctxJson);
 
         log.info("Generating AI summary: userId={}, scope={}, from={}, to={}, model={}, promptLen={}",
-                user.getId(), repo != null ? "REPOSITORY" : "PERSONAL", from, to, model, userPrompt.length());
+                user.getId(), scope, from, to, model, userPrompt.length());
 
         long startedAt = System.currentTimeMillis();
         String raw = llmClient.complete(model, systemPrompt, userPrompt, true);
@@ -72,8 +87,7 @@ public class MetricsAiService {
 
         log.info("AI summary generated: userId={}, durationMs={}, responseLen={}", user.getId(), durationMs, raw.length());
 
-        MetricsSummaryDto dto = parseSummary(raw, from, to, repo != null ? "REPOSITORY" : "PERSONAL",
-                repo != null ? repo.getName() : null);
+        MetricsSummaryDto dto = parseSummary(raw, from, to, scope, scopeName);
         persistenceService.savePersonal(user, dto);
         return dto;
     }
@@ -90,6 +104,14 @@ public class MetricsAiService {
         assertManagerOrAdmin(requestingUser, team);
 
         TeamMetricsContext ctx = contextBuilder.buildTeamContext(team, from, to);
+
+        if (teamContextHasNoData(ctx)) {
+            log.info("No metrics in team context, skipping LLM: teamId={}, from={}, to={}", teamId, from, to);
+            MetricsSummaryDto dto = noDataSummary(from, to, "TEAM", team.getName());
+            persistenceService.saveTeam(team, dto);
+            return dto;
+        }
+
         String ctxJson = toJson(ctx);
 
         String systemPrompt = SystemPrompts.TEAM;
@@ -124,6 +146,15 @@ public class MetricsAiService {
         User member = userService.getById(memberId);
 
         AggregatedMetricsContext ctx = contextBuilder.buildPersonalContext(member, from, to, null);
+
+        if (ctx.getMetrics().isEmpty()) {
+            log.info("No metrics in context, skipping LLM: memberId={}, teamId={}, from={}, to={}",
+                    memberId, teamId, from, to);
+            MetricsSummaryDto dto = noDataSummary(from, to, "PERSONAL", member.getUsername());
+            persistenceService.savePersonal(member, dto);
+            return dto;
+        }
+
         String ctxJson = toJson(ctx);
 
         String systemPrompt = SystemPrompts.PERSONAL;
@@ -171,6 +202,33 @@ public class MetricsAiService {
                 Team Metrics JSON:
                 %s
                 """.formatted(teamName, from, to, ctxJson);
+    }
+
+    // -------------------------------------------------------------------------
+    // Empty-context guard
+    // -------------------------------------------------------------------------
+
+    /** True when no team member has any attributable metric in the period, so a summary would have nothing to ground itself in. */
+    private boolean teamContextHasNoData(TeamMetricsContext ctx) {
+        return ctx.getMembers() == null
+                || ctx.getMembers().stream().allMatch(m -> m.getMetrics() == null || m.getMetrics().isEmpty());
+    }
+
+    /** Placeholder summary for a period with no attributable metrics, skipping the LLM call entirely. */
+    private MetricsSummaryDto noDataSummary(LocalDate from, LocalDate to, String scope, String scopeName) {
+        return MetricsSummaryDto.builder()
+                .from(from)
+                .to(to)
+                .scope(scope)
+                .contextRepoName(scopeName)
+                .headline(NO_DATA_HEADLINE)
+                .overview(NO_DATA_OVERVIEW)
+                .insights(List.of())
+                .recommendations(List.of())
+                .rawModelOutput(null)
+                .modelName(model)
+                .promptVersion(promptVersionProvider.hashFor(scope))
+                .build();
     }
 
     // -------------------------------------------------------------------------
