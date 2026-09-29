@@ -21,6 +21,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AssignableTypeFilter;
 
 import java.sql.Date;
 import java.time.Instant;
@@ -46,7 +48,9 @@ import static org.mockito.Mockito.when;
  * <p>Asserted against a checked-in expected set rather than against
  * {@code MetricType.aggregatePeriod}, so the two cannot drift unnoticed: adding a calculator that
  * writes a period fails here until the type is given a reduction in
- * {@link AggregateWindowResolver}.</p>
+ * {@link AggregateWindowResolver}. {@link #buildRegistry()} is a hand-written list, which by
+ * itself would let a new calculator go unexercised; {@link #buildRegistry_includesEveryMetricCalculatorImplementation()}
+ * closes that gap with a classpath scan.</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -189,6 +193,42 @@ class AggregateStorageShapeDriftTest {
         assertThat(declared)
                 .as("AggregateWindowResolver declares a reduction for a type no calculator stores with a period")
                 .containsExactlyInAnyOrderElementsOf(EXPECTED_PERIOD_STORED);
+    }
+
+    /**
+     * {@link #buildRegistry()} is a hand-written list of calculators; without this check a new
+     * {@link MetricCalculator} implementation could be added under {@code metrics.calc} and
+     * never be exercised by the two tests above, silently exempting it from the reduction check.
+     */
+    @Test
+    void buildRegistry_includesEveryMetricCalculatorImplementation() {
+        Set<Class<?>> discovered = discoverCalculatorImplementations();
+        Set<Class<?>> registered = buildRegistry().all().stream()
+                .map(Object::getClass)
+                .collect(Collectors.toSet());
+
+        assertThat(registered)
+                .as("a MetricCalculator implementation exists under metrics.calc that "
+                        + "AggregateStorageShapeDriftTest.buildRegistry() does not construct — "
+                        + "add it there so this drift test actually runs it")
+                .containsExactlyInAnyOrderElementsOf(discovered);
+    }
+
+    private static Set<Class<?>> discoverCalculatorImplementations() {
+        ClassPathScanningCandidateComponentProvider scanner =
+                new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AssignableTypeFilter(MetricCalculator.class));
+
+        return scanner.findCandidateComponents("com.juliashtal.devanalytics.metrics.calc").stream()
+                .map(bd -> {
+                    try {
+                        return Class.forName(bd.getBeanClassName());
+                    } catch (ClassNotFoundException e) {
+                        throw new IllegalStateException(e);
+                    }
+                })
+                .filter(c -> !c.isInterface())
+                .collect(Collectors.toSet());
     }
 
     // ------------------------------------------------------------------

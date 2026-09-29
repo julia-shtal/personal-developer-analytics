@@ -1,6 +1,7 @@
 package com.juliashtal.devanalytics.ai.client;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,14 +25,17 @@ public class OllamaLlmClient implements LlmClient {
     private final RestTemplate restTemplate;
 
     private final int seed;
+    private final String keepAlive;
 
     public OllamaLlmClient(
             @Value("${ai.ollama.base-url:http://localhost:11434}") String baseUrl,
             @Value("${ai.ollama.num-predict:1024}") int numPredict,
-            @Value("${ai.ollama.seed:42}") int seed) {
+            @Value("${ai.ollama.seed:42}") int seed,
+            @Value("${ai.ollama.keep-alive:0}") String keepAlive) {
         this.baseUrl = baseUrl;
         this.numPredict = numPredict;
         this.seed = seed;
+        this.keepAlive = keepAlive;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(300_000); // 5 minutes — LLM inference can be slow
@@ -47,6 +51,7 @@ public class OllamaLlmClient implements LlmClient {
         req.setStream(false);
         if (jsonMode) req.setFormat("json");
         req.setOptions(Map.of("num_predict", numPredict, "temperature", 0.0, "seed", seed));
+        req.setKeepAlive(keepAlive);
 
         log.debug("Sending request to Ollama: model={}, promptLength={}, numPredict={}, seed={}", model, userPrompt.length(), numPredict, seed);
         try {
@@ -76,6 +81,9 @@ public class OllamaLlmClient implements LlmClient {
         private boolean stream;
         private String format;
         private Map<String, Object> options;
+        /** How long Ollama keeps the model resident after this request; {@code "0"} unloads it immediately. */
+        @JsonProperty("keep_alive")
+        private String keepAlive;
     }
 
     @Data

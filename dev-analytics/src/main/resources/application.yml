@@ -82,6 +82,7 @@ ai:
     model: ${OLLAMA_MODEL:llama3.2}
     num-predict: ${OLLAMA_NUM_PREDICT:1024}
     seed: ${OLLAMA_SEED:42}
+    keep-alive: ${OLLAMA_KEEP_ALIVE:0}
 
 management:
   endpoints:
