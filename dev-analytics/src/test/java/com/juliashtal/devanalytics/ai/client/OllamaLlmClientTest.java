@@ -51,6 +51,17 @@ class OllamaLlmClientTest {
     }
 
     @Test
+    void complete_requestBody_carriesTheKeepAliveProperty(WireMockRuntimeInfo wm) throws Exception {
+        stubFor(post(urlEqualTo("/api/generate"))
+                .willReturn(okJson("{\"model\":\"llama3.2\",\"response\":\"ok\"}")));
+
+        new OllamaLlmClient(wm.getHttpBaseUrl(), 1024, 42, "0")
+                .complete("llama3.2", "system", "prompt", false);
+
+        assertThat(sentBody().get("keep_alive").asText()).isEqualTo("0");
+    }
+
+    @Test
     void complete_jsonModeTrue_setsFormatJson(WireMockRuntimeInfo wm) throws Exception {
         stubFor(post(urlEqualTo("/api/generate"))
                 .willReturn(okJson("{\"model\":\"llama3.2\",\"response\":\"{}\"}")));
@@ -110,7 +121,7 @@ class OllamaLlmClientTest {
     void complete_unreachableHost_wrapsAsServiceUnavailable() {
         // Exercises the same catch-all path a real read timeout would: nothing answers, the
         // client cannot distinguish "slow" from "down", and both fail the same way.
-        OllamaLlmClient client = new OllamaLlmClient("http://127.0.0.1:1", 1024, 42);
+        OllamaLlmClient client = new OllamaLlmClient("http://127.0.0.1:1", 1024, 42, "0");
 
         assertThatThrownBy(() -> client.complete("llama3.2", "system", "prompt", false))
                 .isInstanceOf(ResponseStatusException.class)
@@ -142,6 +153,6 @@ class OllamaLlmClientTest {
     }
 
     private static OllamaLlmClient client(WireMockRuntimeInfo wm, int numPredict, int seed) {
-        return new OllamaLlmClient(wm.getHttpBaseUrl(), numPredict, seed);
+        return new OllamaLlmClient(wm.getHttpBaseUrl(), numPredict, seed, "0");
     }
 }
