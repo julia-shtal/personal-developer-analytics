@@ -8,9 +8,12 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 /**
@@ -162,6 +165,54 @@ class AggregateWindowResolverTest {
         assertThat(resolver.periodStoredTypes())
                 .containsAll(java.util.Arrays.stream(MetricType.values())
                         .filter(t -> t.aggregatePeriod).toList());
+    }
+
+    // ------------------------------------------------------------------
+    // R-NF-14: a missing reduction rule fails loudly instead of defaulting to MEDIAN
+    // ------------------------------------------------------------------
+
+    @Test
+    void perWindow_typeWithNoDeclaredReduction_throwsInsteadOfDefaultingToMedian() {
+        assertThatThrownBy(() -> resolver.perWindow(
+                List.of(window(W1_FROM, W1_TO, 10.0)), MetricType.DAILY_COMMITS_COUNT))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("DAILY_COMMITS_COUNT");
+    }
+
+    @Test
+    void resolve_typeWithNoDeclaredReduction_throwsInsteadOfDefaultingToMedian() {
+        assertThatThrownBy(() -> resolver.resolve(
+                List.of(window(W1_FROM, W1_TO, 10.0)), MetricType.DAILY_COMMITS_COUNT))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("DAILY_COMMITS_COUNT");
+    }
+
+    /**
+     * A DAILY-shape context metric is still passed through {@code resolve}/{@code perWindow}
+     * with an empty row list by callers that iterate every context type unconditionally
+     * (e.g. {@code AiContextBuilderService.buildTeamContext}); the missing-reduction guard must
+     * not fire when there is nothing to combine.
+     */
+    @Test
+    void perWindow_noRowsForATypeWithNoDeclaredReduction_returnsEmptyWithoutThrowing() {
+        assertThat(resolver.perWindow(List.of(), MetricType.DAILY_COMMITS_COUNT)).isEmpty();
+    }
+
+    @Test
+    void resolve_noRowsForATypeWithNoDeclaredReduction_returnsEmptyWithoutThrowing() {
+        assertThat(resolver.resolve(List.of(), MetricType.DAILY_COMMITS_COUNT)).isEmpty();
+    }
+
+    @Test
+    void validateAggregatePeriodCoverage_missingEntryForAnAggregatePeriodType_throws() {
+        assertThatThrownBy(() -> AggregateWindowResolver.validateAggregatePeriodCoverage(Map.of()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("PR_LEAD_TIME_HOURS_MEDIAN");
+    }
+
+    @Test
+    void validateAggregatePeriodCoverage_realReductions_doesNotThrow() {
+        assertThatCode(AggregateWindowResolver::new).doesNotThrowAnyException();
     }
 
     private static MetricSnapshot window(LocalDate from, LocalDate to, double value) {

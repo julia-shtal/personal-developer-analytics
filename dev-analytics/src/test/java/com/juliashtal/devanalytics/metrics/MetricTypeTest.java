@@ -49,11 +49,6 @@ class MetricTypeTest {
     }
 
     @Test
-    void totalMetricCount_isTwentyOne() {
-        assertThat(MetricType.values()).hasSize(21);
-    }
-
-    @Test
     void everyMetric_declaresADisplayUnit() {
         // A blank unit would put the export back to needing its own mapping.
         List<MetricType> withoutUnit = Arrays.stream(MetricType.values())

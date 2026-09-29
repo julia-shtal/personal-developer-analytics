@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -64,6 +65,27 @@ public class AggregateWindowResolver {
         REDUCTIONS = Map.copyOf(m);
     }
 
+    /**
+     * Fails application startup when a {@code MetricType.aggregatePeriod} metric has no
+     * {@link Reduction}, naming the type and this class so the gap is fixed before it can hide
+     * behind a silent default (see {@link #reductionOrThrow}).
+     */
+    public AggregateWindowResolver() {
+        validateAggregatePeriodCoverage(REDUCTIONS);
+    }
+
+    static void validateAggregatePeriodCoverage(Map<MetricType, Reduction> reductions) {
+        List<MetricType> missing = Arrays.stream(MetricType.values())
+                .filter(t -> t.aggregatePeriod)
+                .filter(t -> !reductions.containsKey(t))
+                .toList();
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException(
+                    "AggregateWindowResolver.REDUCTIONS has no Reduction for " + missing
+                            + " — every MetricType.aggregatePeriod metric must be added there.");
+        }
+    }
+
     /** One stored window and the value covering it, after cross-repository rows are combined. */
     public record WindowValue(LocalDate periodFrom, LocalDate periodTo, double value) {}
 
@@ -100,8 +122,6 @@ public class AggregateWindowResolver {
      * Used where the read side wants a series rather than a single figure.
      */
     public List<WindowValue> perWindow(List<MetricSnapshot> aggregateRows, MetricType type) {
-        Reduction reduction = REDUCTIONS.getOrDefault(type, Reduction.MEDIAN);
-
         Map<List<LocalDate>, List<Double>> byWindow = new LinkedHashMap<>();
         aggregateRows.stream()
                 .sorted(Comparator.comparing(MetricSnapshot::getPeriodFrom)
@@ -109,6 +129,14 @@ public class AggregateWindowResolver {
                 .forEach(s -> byWindow
                         .computeIfAbsent(List.of(s.getPeriodFrom(), s.getPeriodTo()), k -> new ArrayList<>())
                         .add(s.getValue()));
+
+        // Nothing to combine: the reduction lookup is skipped so a type with no rows never
+        // trips the missing-reduction guard below, regardless of whether it is declared.
+        if (byWindow.isEmpty()) {
+            return List.of();
+        }
+
+        Reduction reduction = reductionOrThrow(type);
 
         // Rows sharing a window differ only by repository, so WIDEST_WINDOW can still median them.
         Reduction crossRepo = reduction == Reduction.WIDEST_WINDOW ? Reduction.MEDIAN : reduction;
@@ -127,7 +155,7 @@ public class AggregateWindowResolver {
         List<WindowValue> windows = perWindow(aggregateRows, type);
         if (windows.isEmpty()) return Optional.empty();
 
-        Reduction reduction = REDUCTIONS.getOrDefault(type, Reduction.MEDIAN);
+        Reduction reduction = reductionOrThrow(type);
 
         if (reduction == Reduction.WIDEST_WINDOW) {
             WindowValue widest = windows.stream()
@@ -142,6 +170,21 @@ public class AggregateWindowResolver {
         LocalDate from = windows.stream().map(WindowValue::periodFrom).min(Comparator.naturalOrder()).orElseThrow();
         LocalDate to   = windows.stream().map(WindowValue::periodTo).max(Comparator.naturalOrder()).orElseThrow();
         return Optional.of(new ResolvedAggregate(value, from, to));
+    }
+
+    /**
+     * The declared {@link Reduction}, or a loud failure instead of the median it used to fall
+     * back to silently — a type reaching here with rows to combine but no entry is exactly the
+     * gap a new calculator can open by writing a period without one.
+     */
+    private Reduction reductionOrThrow(MetricType type) {
+        Reduction reduction = REDUCTIONS.get(type);
+        if (reduction == null) {
+            throw new IllegalStateException(
+                    "No Reduction declared for " + type + " in AggregateWindowResolver.REDUCTIONS "
+                            + "— add one before rows for this type can be combined across windows.");
+        }
+        return reduction;
     }
 
     private double combine(List<Double> values, Reduction reduction) {
