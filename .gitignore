@@ -44,3 +44,4 @@ CLAUDE.md
 node_modules/
 skills-lock.json
 dev-analytics/tasks/lessons.md
+/TASK_*.md
