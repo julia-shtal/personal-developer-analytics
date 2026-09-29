@@ -38,7 +38,7 @@
 | Multi-source collection | Local Git (JGit), GitHub commits + PRs + Issues (Kohsuke), Jira Issues (REST) |
 | Two-phase async enrichment | Fast ingest → immediate enrich top 150 → background scheduler for the rest |
 | Incremental sync | Resumes from last fetched commit hash; no full re-scans |
-| 20 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, commits per week, code review participation |
+| 21 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, commits per week, WIP open-PR age, code review participation |
 | Dual-scope metrics | Personal (`team = NULL`) and team-scoped (per-member attribution on shared repos) |
 | AI insights | On-demand and weekly scheduled summaries via local Ollama (llama3.2); personal and team scopes; Spring Cache backed |
 | Stateless JWT auth | HS256 access tokens (15 min), rotating refresh tokens (7 days), token-version logout invalidation; single-flight concurrent 401 refresh (one `POST /auth/refresh` per burst) |
@@ -1272,7 +1272,7 @@ Index: `(conversation_id, created_at)`.
 - `getLatestTeamSummary(Team)` → most recent team summary.
 - Uses upsert guard with functional index on `(COALESCE(user_id,-1), ...)` to deduplicate by scope identity; `prompt_version` is part of the lookup, so a summary generated under a revised prompt inserts a new row rather than overwriting one that belongs to the previous prompt.
 
-**`OllamaLlmClient`** (`LlmClient` impl) — Posts to `{ollamaBaseUrl}/api/chat` with model, messages, stream=false, seed, num_predict. Extracts `message.content` from response.
+**`OllamaLlmClient`** (`LlmClient` impl) — Posts to `{ollamaBaseUrl}/api/generate` with model, system, prompt, stream=false, format (`"json"` when structured output is requested), options (`num_predict`, `temperature=0.0`, `seed`), and `keep_alive`. Extracts the `response` field from the returned JSON.
 
 #### Scheduler
 
@@ -1731,7 +1731,7 @@ AiSummaryController / MeetingExportController
         ├─▶ AiContextBuilderService  (fetch snapshots, compute min/max/median/trend/2σ)
         │     └─▶ MetricSnapshotService
         ├─▶ buildPrompt              (structured JSON system + user prompt)
-        ├─▶ OllamaLlmClient          (POST /api/chat → llama3.2)
+        ├─▶ OllamaLlmClient          (POST /api/generate → llama3.2)
         └─▶ parseResponse            (strip code fences, deserialize JSON)
               └─▶ MetricsSummaryDto  (overview, insights[], recommendations[])
                     └─▶ cached in "ai_summaries" (Caffeine)
@@ -1739,7 +1739,7 @@ AiSummaryController / MeetingExportController
 
 ### 9.2 Context Building
 
-Context building is handled by `AiContextBuilderService`. It uses 11 of the 20 metric types as AI context — those with `inAiContext=true`: the 6 daily-count metrics, `DAILY_CHURN_RATIO`, the 4 aggregate lead/review time metrics, and `FOCUS_RATIO_DAYS_TASKS`. For each metric it computes:
+Context building is handled by `AiContextBuilderService`. It uses 12 of the 21 metric types as AI context — those with `inAiContext=true`: 6 activity metrics (5 daily counts plus `DAILY_CHURN_RATIO`), the 4 flow/lead-time metrics, `REVIEW_PARTICIPATION_COUNT`, and `FOCUS_RATIO_DAYS_TASKS`. For each metric it computes:
 
 | Aggregate | How |
 |---|---|
@@ -1758,6 +1758,7 @@ Aggregate metrics (lead times, review time) use an exact `periodFrom/periodTo` q
 | Model | `ai.ollama.model` | `llama3.2` |
 | Max tokens | `ai.ollama.num-predict` | `1024` |
 | Seed | `ai.ollama.seed` | `42` |
+| Keep-alive | `ai.ollama.keep-alive` | `0` (unload the model immediately after each request — a model left resident across two otherwise-identical requests was found to change the output nondeterministically) |
 
 ### 9.4 Caching
 
