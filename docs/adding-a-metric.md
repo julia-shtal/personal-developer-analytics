@@ -9,7 +9,7 @@ drift guard.
 Use the `add-metric` skill for the generative parts of this procedure (endpoint boilerplate,
 frontend wiring). This document is the authoritative list of couplings; the skill's own
 "Actual project layout" section predates the `MetricCalculator`/`MetricCalculatorRegistry`
-architecture described below and should not be followed for step 3.
+architecture described below and should not be followed for step 4.
 
 ## 1. Define the metric
 
@@ -20,19 +20,19 @@ after the fact.
 
 **Coupling:** none yet — this file is read by nothing at runtime. **Not caught** if it is
 skipped; it is a documentation obligation, checked only by review and by the thesis
-cross-check in step 9.
+cross-check in step 10.
 
 ## 2. `MetricType` enum constant
 
 Add the constant to `metrics/model/MetricType.java`, in the category grouping that matches
 its neighbours, with:
 
-- `inAiContext` — true only if the AI summary should see it (step 5).
+- `inAiContext` — true only if the AI summary should see it (step 6).
 - `dailySum` — true only for a DAILY-shape metric that sums rather than averages over a
-  window; must imply `inAiContext` (see step 7).
+  window; must imply `inAiContext` (see step 8).
 - `aggregatePeriod` — true only if the metric is recomputed per ISO week
   (`MetricsService.writesAggregatePeriod`, which dispatches the calculator's invocation
-  cadence). This is **not** the same thing as "stored in AGGREGATE shape" — see step 4.
+  cadence). This is **not** the same thing as "stored in AGGREGATE shape" — see step 5.
 - `unit` — non-blank; the CSV export column header.
 
 **Coupling:** the enum constant itself. **Caught by test**
@@ -44,7 +44,22 @@ subset rules). The three exact-count assertions in the same file
 constant sets the corresponding flag — **caught by test**, but the fix is manual, not
 automatic.
 
-## 3. Calculator
+## 3. `metric_snapshots` table comment
+
+Restate the `metric_snapshots` table comment in a new migration, listing the new type under
+its DAILY or AGGREGATE section by storage shape (step 5), not by `aggregatePeriod`.
+`COMMENT ON TABLE` has no partial form, so the full comment is restated, not patched — see
+`V66__metric_snapshots_comment_refresh.sql` for the pattern. Migrations are append-only (the
+project's schema non-negotiable); do not edit a prior comment migration.
+
+**Coupling:** the comment text, read back from `pg_description` rather than duplicated in a
+second checked-in list. **Caught by test** (`MetricSnapshotTableCommentTest`) —
+`tableComment_bothSections_accountForEveryMetricType` fails for a type missing from both
+sections regardless of shape, and the section-specific assertions fail if a type is placed in
+the wrong section relative to `AggregateStorageShapeDriftTest.EXPECTED_PERIOD_STORED`
+(step 5).
+
+## 4. Calculator
 
 Implement `MetricCalculator` in `metrics/calc`, annotated `@Component`, returning the new
 type (or types, for a multi-metric calculator) from `produces()`. Persist through
@@ -70,7 +85,7 @@ as of R-NF-14, a classpath scan of `metrics.calc`
 `buildRegistry()` list, so a new calculator cannot go silently unexercised by the shape-drift
 checks below.
 
-## 4. Reduction entry — AGGREGATE-shape types only
+## 5. Reduction entry — AGGREGATE-shape types only
 
 If the calculator writes `periodFrom`/`periodTo` (AGGREGATE shape), add an entry to
 `AggregateWindowResolver.REDUCTIONS` naming how several stored windows (or several
@@ -95,7 +110,7 @@ ISO-week grain). Do not use the flag as a proxy for "needs a reduction."
   `MEDIAN` (R-NF-14 block 1b) — a loud 500, not a wrong number, but this is a **last resort**,
   not a substitute for the two checks above.
 
-## 5. Context list — AI-context types only
+## 6. Context list — AI-context types only
 
 If `inAiContext = true`, add the constant to **both**
 `AiContextBuilderService.CONTEXT_METRIC_TYPES` and
@@ -115,7 +130,7 @@ If the metric is central to a thesis research question, also read
 "When touching the AI layer" rule) — the prompt must be told about the type, or the model
 never mentions data it was silently given.
 
-## 6. Read endpoint
+## 7. Read endpoint
 
 Add a `@GetMapping` to `MetricsController` (personal scope) and, if the metric is
 team-relevant, `MetricsTeamController`. Reuse `MetricSnapshotService`'s existing
@@ -131,7 +146,7 @@ endpoint's only indirect signal is the `datasource.controller`/`metrics.controll
 coverage gate (Block 2) dropping if the new route ships untested — that gate does not detect
 a route that was never added at all.
 
-## 7. Tests
+## 8. Tests
 
 All three layers, per the project's testing rules:
 
@@ -146,13 +161,20 @@ All three layers, per the project's testing rules:
 Also update, if the new type touches what they check:
 
 - `MetricTypeTest` — the three exact-count assertions named in step 2.
-- `AggregateStorageShapeDriftTest` — `EXPECTED_PERIOD_STORED` and `buildRegistry()` (step 3
-  and 4).
+- `MetricSnapshotTableCommentTest` — no edit needed; it reads the comment migration directly
+  (step 3), but it will fail if that migration is missing or the type lands in the wrong
+  section.
+- `AggregateStorageShapeDriftTest` — `EXPECTED_PERIOD_STORED` and `buildRegistry()` (step 4
+  and 5).
+- `MetricCalculatorCharacterisationTest` — add the new calculator to the hand-written list in
+  `buildRegistry()` (step 4). Unlike `AggregateStorageShapeDriftTest.buildRegistry()`, this
+  second, independent list has no classpath-scan self-check — a forgotten calculator fails
+  only `registry_coversEveryMetricType`, not a drift guard that names the missing class.
 - `AiContextBuilderServiceTest` / `MetricsAnomalyServiceContextTypesTest` — no edit needed;
-  they read the flag directly (step 5), but they will fail if the context list edit is
+  they read the flag directly (step 6), but they will fail if the context list edit is
   missing.
 
-## 8. Frontend
+## 9. Frontend
 
 `frontend/src/api/metrics.ts` (typed fetcher), `frontend/src/types/index.ts` if a new DTO
 shape is needed, and a chart/card on `DashboardPage.tsx` (or the team dashboard). Run
@@ -162,14 +184,14 @@ shape is needed, and a chart/card on `DashboardPage.tsx` (or the team dashboard)
 repository; a metric can ship with a working API and no UI indefinitely. Confirm in the
 browser before calling the metric done, per the project's UI verification rule.
 
-## 9. Thesis cross-check
+## 10. Thesis cross-check
 
 `docs/metrics/<slug>.md`'s wording must match the controller Javadoc and any UI label
 verbatim (the project's thesis-code consistency rule). Manually verify the total metric
 count against the thesis appendix table — this repository does not pin
 `MetricType.values().length` to a fixed number (R-NF-14 removed
 `MetricTypeTest.totalMetricCount_isTwentyOne`, since a raw count test needs editing on every
-addition and adds no invariant beyond what steps 2–7 already enforce more specifically).
+addition and adds no invariant beyond what steps 2–8 already enforce more specifically).
 **Not caught** by any test; this is the one step with no automated backstop at all — treat it
 as a required manual checklist item, not optional.
 
@@ -181,7 +203,9 @@ as a required manual checklist item, not optional.
 |---|---|
 | `MetricType` constant (unit, flag subset rules) | test |
 | `MetricType` constant (exact-count assertions) | test (manual fix required) |
+| `metric_snapshots` table comment (every type listed) | caught (test) — `MetricSnapshotTableCommentTest` |
 | Calculator registration and type coverage | startup + test |
+| Calculator added to `MetricCalculatorCharacterisationTest`'s list | caught (test) — `MetricCalculatorCharacterisationTest` |
 | Reduction entry, `aggregatePeriod = true` type | startup + test |
 | Reduction entry, other AGGREGATE type | test (+ runtime `IllegalStateException` as last resort) |
 | Context list (both declarations) | test |
