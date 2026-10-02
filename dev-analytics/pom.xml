@@ -198,6 +198,9 @@
                             <goal>check</goal>
                         </goals>
                         <configuration>
+                            <!-- Explicit although it is the plugin default: makes the gate's
+                                 intent unambiguous rather than relying on an unstated default. -->
+                            <haltOnFailure>true</haltOnFailure>
                             <rules>
                                 <rule>
                                     <element>PACKAGE</element>
