@@ -29,13 +29,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.juliashtal.devanalytics.metrics.model.MetricType.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -94,9 +94,6 @@ class AggregateStorageShapeDriftTest {
         repo.setId(REPO_ID);
 
         when(gitRepoRepository.getReferenceById(REPO_ID)).thenReturn(repo);
-        when(snapshotRepository.findExisting(any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(Optional.empty());
-        when(snapshotRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         // Every projection mock is created before any stubbing begins: building a mock inside
         // a when(...).thenReturn(...) argument is an UnfinishedStubbing failure.
@@ -255,10 +252,25 @@ class AggregateStorageShapeDriftTest {
 
         buildRegistry().all().forEach(c -> c.calculate(ctx));
 
-        org.mockito.ArgumentCaptor<MetricSnapshot> captor =
-                org.mockito.ArgumentCaptor.forClass(MetricSnapshot.class);
-        org.mockito.Mockito.verify(snapshotRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
-        return captor.getAllValues();
+        // The writer passes raw identity fields to the native upsert rather than a MetricSnapshot
+        // entity, so this rebuilds just-enough snapshots from the captured call arguments.
+        org.mockito.ArgumentCaptor<String> metricTypeCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.ArgumentCaptor<LocalDate> periodFromCaptor = org.mockito.ArgumentCaptor.forClass(LocalDate.class);
+        org.mockito.Mockito.verify(snapshotRepository, org.mockito.Mockito.atLeastOnce()).upsert(
+                any(), any(), any(), any(), metricTypeCaptor.capture(), anyDouble(),
+                periodFromCaptor.capture(), any());
+
+        List<String> metricTypes = metricTypeCaptor.getAllValues();
+        List<LocalDate> periodFroms = periodFromCaptor.getAllValues();
+
+        List<MetricSnapshot> written = new java.util.ArrayList<>();
+        for (int i = 0; i < metricTypes.size(); i++) {
+            MetricSnapshot s = new MetricSnapshot();
+            s.setMetricType(MetricType.valueOf(metricTypes.get(i)));
+            s.setPeriodFrom(periodFroms.get(i));
+            written.add(s);
+        }
+        return written;
     }
 
     private MetricCalculatorRegistry buildRegistry() {

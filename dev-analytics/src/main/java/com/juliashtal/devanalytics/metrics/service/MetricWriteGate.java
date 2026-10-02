@@ -8,10 +8,10 @@ import java.util.concurrent.locks.ReentrantLock;
  * Serialises the scheduled jobs that write {@code metric_snapshots}; request threads, the
  * {@code collect-} pool and the attribution listener still write outside it.
  *
- * <p>The table carries no unique key, so the guard in {@code MetricSnapshotWriter} is a
- * read-then-write: two writers computing the same window both miss {@code findExisting} and both
- * insert. A process-local lock narrows that to the scheduled writers; a unique index over the
- * {@code findExisting} columns is what would close it for every caller.</p>
+ * <p>{@code uix_metric_snapshots_identity} (V72) now closes the identity race at the database
+ * for every caller, so this gate is a secondary throttle on the scheduled writers specifically —
+ * reducing wasted recomputation when two scheduled runs overlap — rather than what prevents a
+ * duplicate row.</p>
  */
 @Component
 public class MetricWriteGate {

@@ -309,6 +309,42 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
             @Param("periodTo") LocalDate periodTo);
 
     /**
+     * Inserts or, on an identity collision, overwrites the value and recalculation instant.
+     *
+     * <p>Native because JPQL cannot express {@code ON CONFLICT}; the conflict target matches
+     * {@code uix_metric_snapshots_identity} (V72), COALESCE-d the same way {@link #findExisting}
+     * compares nullable dimensions. Closes the read-then-write race that guard left open for any
+     * caller outside {@code MetricWriteGate}.</p>
+     */
+    @Transactional
+    @Modifying
+    @Query(nativeQuery = true, value = """
+            INSERT INTO metric_snapshots
+                (user_id, team_id, repository_id, date, metric_type, value, period_from, period_to, calculated_at)
+            VALUES
+                (:userId, :teamId, :repoId, :date, :metricType, :value, :periodFrom, :periodTo, now())
+            ON CONFLICT (
+                user_id,
+                COALESCE(team_id, -1),
+                COALESCE(repository_id, -1),
+                date,
+                metric_type,
+                COALESCE(period_from, DATE '0001-01-01'),
+                COALESCE(period_to, DATE '0001-01-01')
+            )
+            DO UPDATE SET value = EXCLUDED.value, calculated_at = EXCLUDED.calculated_at
+            """)
+    void upsert(
+            @Param("userId") Long userId,
+            @Param("teamId") Long teamId,
+            @Param("repoId") Long repoId,
+            @Param("date") LocalDate date,
+            @Param("metricType") String metricType,
+            @Param("value") double value,
+            @Param("periodFrom") LocalDate periodFrom,
+            @Param("periodTo") LocalDate periodTo);
+
+    /**
      * Deletes every snapshot belonging to a user, personal and team-scoped alike.
      *
      * <p>Used when the attribution identity changes: calculators upsert and never delete, so

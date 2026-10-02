@@ -29,7 +29,6 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -69,9 +68,6 @@ class MetricsProjectionTest {
         repo.setId(REPO_ID);
 
         when(gitRepoRepository.getReferenceById(REPO_ID)).thenReturn(repo);
-        when(snapshotRepository.findExisting(any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(Optional.empty());
-        when(snapshotRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         writer = new MetricSnapshotWriter(snapshotRepository);
 
@@ -81,6 +77,21 @@ class MetricsProjectionTest {
         // non-empty enough for each calculator's guard to let it through.
         AuthorIdentity identity = new AuthorIdentity(Set.of("dev@example.com"), 101L, "jira-acct-1");
         ctx = new MetricCalcContext(user, null, List.of(REPO_ID), identity, from, to, DATE, DATE);
+    }
+
+    /**
+     * Reads a metric's upserted value back off the captured invocation rather than an entity.
+     * <p>{@code upsert} takes raw identity fields and a primitive {@code double}, so there is no
+     * {@code MetricSnapshot} to inspect, and capturing the primitive with an {@link ArgumentCaptor}
+     * would unbox a null and throw.</p>
+     */
+    private double capturedValue(MetricType type) {
+        return mockingDetails(snapshotRepository).getInvocations().stream()
+                .filter(inv -> inv.getMethod().getName().equals("upsert"))
+                .filter(inv -> type.name().equals(inv.getArgument(4)))
+                .map(inv -> (double) inv.getArgument(5))
+                .findFirst()
+                .orElseThrow(() -> new java.util.NoSuchElementException("No upsert captured for " + type));
     }
 
     // ── DailyCommitsProjection ────────────────────────────────────────────────
@@ -97,16 +108,8 @@ class MetricsProjectionTest {
 
         new DailyCommitsCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
 
-        ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
-        verify(snapshotRepository, atLeast(2)).save(cap.capture());
-
-        MetricSnapshot commits = cap.getAllValues().stream()
-                .filter(s -> s.getMetricType() == MetricType.DAILY_COMMITS_COUNT).findFirst().orElseThrow();
-        MetricSnapshot avg = cap.getAllValues().stream()
-                .filter(s -> s.getMetricType() == MetricType.DAILY_COMMITS_AVG_SIZE).findFirst().orElseThrow();
-
-        assertThat(commits.getValue()).isEqualTo(7.0);
-        assertThat(avg.getValue()).isEqualTo(42.0);
+        assertThat(capturedValue(MetricType.DAILY_COMMITS_COUNT)).isEqualTo(7.0);
+        assertThat(capturedValue(MetricType.DAILY_COMMITS_AVG_SIZE)).isEqualTo(42.0);
     }
 
     @Test
@@ -122,12 +125,7 @@ class MetricsProjectionTest {
 
         new DailyCommitsCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
 
-        ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
-        verify(snapshotRepository, atLeast(2)).save(cap.capture());
-
-        MetricSnapshot avg = cap.getAllValues().stream()
-                .filter(s -> s.getMetricType() == MetricType.DAILY_COMMITS_AVG_SIZE).findFirst().orElseThrow();
-        assertThat(avg.getValue()).isEqualTo(0.0);
+        assertThat(capturedValue(MetricType.DAILY_COMMITS_AVG_SIZE)).isEqualTo(0.0);
     }
 
     // ── DailyChurnProjection ──────────────────────────────────────────────────
@@ -144,12 +142,7 @@ class MetricsProjectionTest {
 
         new DailyChurnCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
 
-        ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
-        verify(snapshotRepository, atLeast(1)).save(cap.capture());
-
-        MetricSnapshot churn = cap.getAllValues().stream()
-                .filter(s -> s.getMetricType() == MetricType.DAILY_CHURN_RATIO).findFirst().orElseThrow();
-        assertThat(churn.getValue()).isEqualTo(0.25);
+        assertThat(capturedValue(MetricType.DAILY_CHURN_RATIO)).isEqualTo(0.25);
     }
 
     // ── RepoCountProjection ───────────────────────────────────────────────────
@@ -169,12 +162,7 @@ class MetricsProjectionTest {
 
         new KnowledgeSiloCalculator(commitRepository, gitRepoRepository, writer).calculate(ctx);
 
-        ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
-        verify(snapshotRepository, atLeast(1)).save(cap.capture());
-
-        MetricSnapshot silo = cap.getAllValues().stream()
-                .filter(s -> s.getMetricType() == MetricType.KNOWLEDGE_SILO_SCORE).findFirst().orElseThrow();
-        assertThat(silo.getValue()).isEqualTo(0.6);
+        assertThat(capturedValue(MetricType.KNOWLEDGE_SILO_SCORE)).isEqualTo(0.6);
     }
 
     // ── CommitDetailProjection ────────────────────────────────────────────────
@@ -194,12 +182,7 @@ class MetricsProjectionTest {
 
         new AfterHoursAndRefactorCalculator(commitRepository, writer).calculate(ctx);
 
-        ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
-        verify(snapshotRepository, atLeast(1)).save(cap.capture());
-
-        MetricSnapshot afterHours = cap.getAllValues().stream()
-                .filter(s -> s.getMetricType() == MetricType.AFTER_HOURS_COMMIT_RATIO).findFirst().orElseThrow();
-        assertThat(afterHours.getValue()).isEqualTo(1.0);  // 1 out-of-hours / 1 total
+        assertThat(capturedValue(MetricType.AFTER_HOURS_COMMIT_RATIO)).isEqualTo(1.0);  // 1 out-of-hours / 1 total
     }
 
     @Test
@@ -217,11 +200,6 @@ class MetricsProjectionTest {
 
         new AfterHoursAndRefactorCalculator(commitRepository, writer).calculate(ctx);
 
-        ArgumentCaptor<MetricSnapshot> cap = ArgumentCaptor.forClass(MetricSnapshot.class);
-        verify(snapshotRepository, atLeast(1)).save(cap.capture());
-
-        MetricSnapshot refactor = cap.getAllValues().stream()
-                .filter(s -> s.getMetricType() == MetricType.REFACTOR_RATIO).findFirst().orElseThrow();
-        assertThat(refactor.getValue()).isEqualTo(1.0);  // 1 refactor / 1 enriched
+        assertThat(capturedValue(MetricType.REFACTOR_RATIO)).isEqualTo(1.0);  // 1 refactor / 1 enriched
     }
 }
