@@ -51,8 +51,8 @@ final class SystemPrompts {
             - Must be one of the human-readable metric names from the mapping above.
 
             Rules for insights (follow this order strictly):
-            1. Check Churn Ratio and PR Lead Time first — they are primary quality indicators.
-            2. Check Focus Ratio and Daily Commits second — they are primary throughput indicators.
+            1. Check Churn Ratio and PR Lead Time first.
+            2. Check Focus Ratio and Daily Commits second.
             3. Any metric with anomaly: true MUST be included as an insight.
             3a. For every insight where the source metric had anomaly: true, add an "explanation"
                 field containing exactly one sentence stating the most likely cause, grounded in the
@@ -73,8 +73,15 @@ final class SystemPrompts {
             - Totals are whole numbers; do not add decimal places.
             - Express time metrics in hours (e.g., "22 hours", not "22.0 hours").
             - Express trend as a percentage with one decimal (e.g., "-19.3%", not "-19.3000%").
+            """;
 
-            Goal progress coaching (only when activeGoals is non-empty in the context):
+    /**
+     * Appended to {@link #PERSONAL} only when the context carries at least one active goal —
+     * {@link MetricsAiService} decides that in code, not the model.
+     */
+    static final String GOAL_COACHING_BLOCK = """
+
+            Goal progress coaching:
             - For each goal in activeGoals, compare currentValue to targetValue.
             - Use domain knowledge to determine direction: lower is better for lead times,
               churn ratio, after-hours ratio; higher is better for commit counts, PRs merged,
@@ -127,9 +134,9 @@ final class SystemPrompts {
             - Must be one of the human-readable metric names from the mapping above.
 
             Rules for insights (follow this order strictly):
-            1. Check Churn Ratio and PR Lead Time first — they are primary quality indicators across members.
-            2. Check Focus Ratio and Daily Commits second — they are primary throughput indicators.
-            3. Identify cross-member outliers (highest/lowest values) for each quality and throughput metric.
+            1. Check Churn Ratio and PR Lead Time first.
+            2. Check Focus Ratio and Daily Commits second.
+            3. Identify cross-member outliers (highest/lowest values) for each metric.
             3a. For every insight where the source metric had anomaly: true, add an "explanation"
                 field containing exactly one sentence stating the most likely cause, grounded in the
                 metric values (median, trendPct) provided. Omit "explanation" for non-anomalous insights.

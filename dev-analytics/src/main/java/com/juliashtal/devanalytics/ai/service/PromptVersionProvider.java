@@ -27,7 +27,7 @@ public class PromptVersionProvider {
     private final String teamHash;
 
     public PromptVersionProvider() {
-        this.personalHash = version(SystemPrompts.PERSONAL);
+        this.personalHash = version(SystemPrompts.PERSONAL + SystemPrompts.GOAL_COACHING_BLOCK);
         this.teamHash = version(SystemPrompts.TEAM);
         log.info("Prompt versions: personal={}, team={}", personalHash, teamHash);
     }

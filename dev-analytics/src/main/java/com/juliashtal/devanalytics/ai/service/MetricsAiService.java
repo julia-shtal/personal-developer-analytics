@@ -10,6 +10,7 @@ import com.juliashtal.devanalytics.ai.model.TeamMetricsContext;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
+import com.juliashtal.devanalytics.metrics.model.MetricType;
 import com.juliashtal.devanalytics.user.model.Role;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
@@ -23,7 +24,11 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Orchestrates AI metric-summary generation: builds context, prompts the LLM, and parses the JSON response.
@@ -41,6 +46,7 @@ public class MetricsAiService {
     private final ObjectMapper objectMapper;
     private final MetricSummaryPersistenceService persistenceService;
     private final PromptVersionProvider promptVersionProvider;
+    private final SummaryValidator summaryValidator;
 
     @Value("${ai.ollama.model:llama3}")
     private String model;
@@ -75,7 +81,7 @@ public class MetricsAiService {
 
         String ctxJson = toJson(ctx);
 
-        String systemPrompt = SystemPrompts.PERSONAL;
+        String systemPrompt = personalSystemPrompt(ctx);
         String userPrompt = buildUserPrompt(from, to, repo, ctxJson);
 
         log.info("Generating AI summary: userId={}, scope={}, from={}, to={}, model={}, promptLen={}",
@@ -87,7 +93,8 @@ public class MetricsAiService {
 
         log.info("AI summary generated: userId={}, durationMs={}, responseLen={}", user.getId(), durationMs, raw.length());
 
-        MetricsSummaryDto dto = parseSummary(raw, from, to, scope, scopeName);
+        MetricsSummaryDto dto = parseSummary(raw, from, to, scope, scopeName,
+                validMetricNames(ctx.getMetrics().keySet()), anomalousMetricNames(ctx.getMetrics()));
         persistenceService.savePersonal(user, dto);
         return dto;
     }
@@ -126,7 +133,8 @@ public class MetricsAiService {
 
         log.info("Team AI summary generated: teamId={}, durationMs={}, responseLen={}", teamId, durationMs, raw.length());
 
-        MetricsSummaryDto dto = parseSummary(raw, from, to, "TEAM", team.getName());
+        MetricsSummaryDto dto = parseSummary(raw, from, to, "TEAM", team.getName(),
+                validMetricNames(teamMetricKeys(ctx)), Set.of());
         persistenceService.saveTeam(team, dto);
         return dto;
     }
@@ -157,7 +165,7 @@ public class MetricsAiService {
 
         String ctxJson = toJson(ctx);
 
-        String systemPrompt = SystemPrompts.PERSONAL;
+        String systemPrompt = personalSystemPrompt(ctx);
         String userPrompt = buildUserPrompt(from, to, null, ctxJson);
 
         log.info("Generating member AI summary: requesterId={}, teamId={}, memberId={}, from={}, to={}, model={}",
@@ -169,7 +177,8 @@ public class MetricsAiService {
 
         log.info("Member AI summary generated: memberId={}, durationMs={}, responseLen={}", memberId, durationMs, raw.length());
 
-        MetricsSummaryDto dto = parseSummary(raw, from, to, "PERSONAL", member.getUsername());
+        MetricsSummaryDto dto = parseSummary(raw, from, to, "PERSONAL", member.getUsername(),
+                validMetricNames(ctx.getMetrics().keySet()), anomalousMetricNames(ctx.getMetrics()));
         persistenceService.savePersonal(member, dto);
         return dto;
     }
@@ -177,6 +186,13 @@ public class MetricsAiService {
     // -------------------------------------------------------------------------
     // Prompts — personal / repository
     // -------------------------------------------------------------------------
+
+    /** Appends the goal-coaching block only when the context actually carries an active goal. */
+    private String personalSystemPrompt(AggregatedMetricsContext ctx) {
+        return ctx.getActiveGoals().isEmpty()
+                ? SystemPrompts.PERSONAL
+                : SystemPrompts.PERSONAL + SystemPrompts.GOAL_COACHING_BLOCK;
+    }
 
     private String buildUserPrompt(LocalDate from, LocalDate to, GitRepositoryEntity repo, String ctxJson) {
         String scopeInfo = repo != null ? " for repository " + repo.getName() : "";
@@ -237,7 +253,8 @@ public class MetricsAiService {
     // -------------------------------------------------------------------------
 
     private MetricsSummaryDto parseSummary(String raw, LocalDate from, LocalDate to,
-                                           String scope, String scopeName) {
+                                           String scope, String scopeName,
+                                           Set<String> validMetricNames, Set<String> anomalousMetricNames) {
         String cleaned = raw.strip();
         // Strip markdown code fences that models sometimes add despite instructions
         if (cleaned.startsWith("```")) {
@@ -280,6 +297,8 @@ public class MetricsAiService {
                 }
             }
 
+            SummaryValidator.Result validated = summaryValidator.validate(insights, validMetricNames, anomalousMetricNames);
+
             return MetricsSummaryDto.builder()
                     .from(from)
                     .to(to)
@@ -287,12 +306,13 @@ public class MetricsAiService {
                     .contextRepoName(scopeName)
                     .headline(headline)
                     .overview(overview)
-                    .insights(insights)
+                    .insights(validated.insights())
                     .recommendations(recommendations)
                     .rawModelOutput(raw)
                     .modelName(model)
                     .promptVersion(promptVersionProvider.hashFor(scope))
                     .runtimeVersion(llmClient.runtimeVersion())
+                    .validationReport(toJson(validated.report()))
                     .build();
         } catch (JsonProcessingException e) {
             log.error("Failed to parse AI JSON output, returning raw text as overview. Error: {}", e.getMessage());
@@ -311,6 +331,45 @@ public class MetricsAiService {
                     .runtimeVersion(llmClient.runtimeVersion())
                     .build();
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Metric-name lookups for validation
+    // -------------------------------------------------------------------------
+
+    private Optional<String> humanName(String contextKey) {
+        try {
+            return Optional.ofNullable(MetricDisplayNames.BY_TYPE.get(MetricType.valueOf(contextKey)));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    private Set<String> validMetricNames(Set<String> contextKeys) {
+        Set<String> names = new HashSet<>();
+        for (String key : contextKeys) {
+            humanName(key).ifPresent(names::add);
+        }
+        return names;
+    }
+
+    private Set<String> anomalousMetricNames(Map<String, AggregatedMetricsContext.MetricAggregate> metrics) {
+        Set<String> names = new HashSet<>();
+        metrics.forEach((key, aggregate) -> {
+            if (aggregate.isAnomaly()) {
+                humanName(key).ifPresent(names::add);
+            }
+        });
+        return names;
+    }
+
+    /** TEAM context carries no anomaly flag per metric, so only metric presence is checked at this scope. */
+    private Set<String> teamMetricKeys(TeamMetricsContext ctx) {
+        Set<String> keys = new HashSet<>();
+        for (TeamMetricsContext.MemberMetrics member : ctx.getMembers()) {
+            keys.addAll(member.getMetrics().keySet());
+        }
+        return keys;
     }
 
     // -------------------------------------------------------------------------

@@ -79,6 +79,10 @@ public class MetricSummaryEntity {
     @Column(length = 64)
     private String runtimeVersion;
 
+    /** JSON-encoded {@link com.juliashtal.devanalytics.ai.model.ValidationReport} for this summary's insights. */
+    @Column(columnDefinition = "text")
+    private String validationReport;
+
     @Column(nullable = false)
     private Instant generatedAt;
 
