@@ -489,16 +489,6 @@ export function DashboardPage() {
             tooltip="Average number of commits you authored per ISO calendar week in the selected window."
             onSetGoal={() => openGoalModal('COMMITS_PER_WEEK_AVG', 'commits per week')}
           />
-          <KpiTile
-            label="merges to main"
-            value={numSuffix(mergesToDefaultBranch.data?.value, '/wk')}
-            sub="default branch · per iso week"
-            accent="accent"
-            icon={<PRMerged />}
-            tooltip="Pull requests you merged into the repository's default branch, per ISO calendar week."
-            badge={<DoraProxyBadge metricKey="MERGES_TO_DEFAULT_BRANCH_PER_WEEK" />}
-            onSetGoal={() => openGoalModal('MERGES_TO_DEFAULT_BRANCH_PER_WEEK', 'merges to main')}
-          />
         </div>
         <div className="divider" />
         <div className="grid-kpi">
@@ -565,6 +555,16 @@ export function DashboardPage() {
             icon={<Review />}
             tooltip="Number of distinct pull requests in which you participated as a reviewer (approved, requested changes, or commented) in the selected period. Self-reviews excluded."
             onSetGoal={() => openGoalModal('REVIEW_PARTICIPATION_COUNT', 'code review participation')}
+          />
+          <KpiTile
+            label="merges to main"
+            value={numSuffix(mergesToDefaultBranch.data?.value, '/wk')}
+            sub="default branch · per iso week"
+            accent="accent"
+            icon={<PRMerged />}
+            tooltip="Pull requests you merged into the repository's default branch, per ISO calendar week."
+            badge={<DoraProxyBadge metricKey="MERGES_TO_DEFAULT_BRANCH_PER_WEEK" />}
+            onSetGoal={() => openGoalModal('MERGES_TO_DEFAULT_BRANCH_PER_WEEK', 'merges to main')}
           />
         </div>
       </div>
