@@ -126,6 +126,10 @@ docker compose up -d
 
 The app is available at **http://localhost:8080**.
 Captured emails are viewable in MailHog at **http://localhost:8025**.
+
+The `ollama` service in `docker-compose.yml` is pinned to a specific image tag (not `latest`),
+matching the version each generated summary records in its `runtime_version` field. Bump the
+tag deliberately when you need a newer Ollama build.
 First boot pulls the llama3.2 model (~2 GB) — allow a few minutes before the AI features work.
 
 ### Analysing local Git repositories

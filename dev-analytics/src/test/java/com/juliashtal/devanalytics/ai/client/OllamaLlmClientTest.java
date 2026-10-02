@@ -143,6 +143,45 @@ class OllamaLlmClientTest {
                 .isEqualTo(SERVICE_UNAVAILABLE);
     }
 
+    @Test
+    void runtimeVersion_success_returnsTheVersionString(WireMockRuntimeInfo wm) {
+        stubFor(get(urlEqualTo("/api/version")).willReturn(okJson("{\"version\":\"0.34.0\"}")));
+
+        assertThat(client(wm).runtimeVersion()).isEqualTo("0.34.0");
+    }
+
+    @Test
+    void runtimeVersion_calledTwice_hitsTheServerOnlyOnce(WireMockRuntimeInfo wm) {
+        stubFor(get(urlEqualTo("/api/version")).willReturn(okJson("{\"version\":\"0.34.0\"}")));
+        OllamaLlmClient client = client(wm);
+
+        client.runtimeVersion();
+        client.runtimeVersion();
+
+        verify(1, getRequestedFor(urlEqualTo("/api/version")));
+    }
+
+    @Test
+    void runtimeVersion_serverError_returnsUnknown(WireMockRuntimeInfo wm) {
+        stubFor(get(urlEqualTo("/api/version")).willReturn(aResponse().withStatus(500)));
+
+        assertThat(client(wm).runtimeVersion()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void runtimeVersion_unreachableHost_returnsUnknown() {
+        OllamaLlmClient client = new OllamaLlmClient("http://127.0.0.1:1", 1024, 42, "0");
+
+        assertThat(client.runtimeVersion()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void runtimeVersion_blankVersionField_returnsUnknown(WireMockRuntimeInfo wm) {
+        stubFor(get(urlEqualTo("/api/version")).willReturn(okJson("{\"version\":\"\"}")));
+
+        assertThat(client(wm).runtimeVersion()).isEqualTo("UNKNOWN");
+    }
+
     private static JsonNode sentBody() throws Exception {
         List<LoggedRequest> requests = findAll(postRequestedFor(urlEqualTo("/api/generate")));
         return new ObjectMapper().readTree(requests.get(requests.size() - 1).getBodyAsString());

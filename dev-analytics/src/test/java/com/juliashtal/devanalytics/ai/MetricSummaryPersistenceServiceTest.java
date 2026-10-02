@@ -66,6 +66,7 @@ class MetricSummaryPersistenceServiceTest {
         assertThat(saved.getScope()).isEqualTo("PERSONAL");
         assertThat(saved.getHeadline()).isEqualTo("Test headline");
         assertThat(saved.getGeneratedAt()).isNotNull();
+        assertThat(saved.getRuntimeVersion()).isEqualTo("0.34.0");
     }
 
     @Test
@@ -350,6 +351,26 @@ class MetricSummaryPersistenceServiceTest {
         assertThat(service.findLatestPersonal(user).orElseThrow().getPromptVersion()).isEqualTo(VERSION);
     }
 
+    @Test
+    void findLatestPersonal_entityWithRuntimeVersion_surfacesItOnTheDto() {
+        User user = new User();
+        user.setId(1L);
+
+        MetricSummaryEntity entity = new MetricSummaryEntity();
+        entity.setId(42L);
+        entity.setUser(user);
+        entity.setPeriodFrom(from);
+        entity.setPeriodTo(to);
+        entity.setScope("PERSONAL");
+        entity.setHeadline("Great week");
+        entity.setRuntimeVersion("0.34.0");
+        entity.setGeneratedAt(Instant.now());
+
+        when(summaryRepository.findTopByUser_IdOrderByGeneratedAtDesc(1L)).thenReturn(Optional.of(entity));
+
+        assertThat(service.findLatestPersonal(user).orElseThrow().getRuntimeVersion()).isEqualTo("0.34.0");
+    }
+
     private MetricsSummaryDto dto(String scope, String contextName) {
         return MetricsSummaryDto.builder()
                 .from(from).to(to)
@@ -363,6 +384,7 @@ class MetricSummaryPersistenceServiceTest {
                 .rawModelOutput("{}")
                 .modelName("llama3.2")
                 .promptVersion(VERSION)
+                .runtimeVersion("0.34.0")
                 .build();
     }
 }

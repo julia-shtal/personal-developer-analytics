@@ -32,6 +32,8 @@ public class MetricsSummaryDto {
     private String modelName;
     /** First 16 hex characters of the sha256 of the system prompt that produced the summary. */
     private String promptVersion;
+    /** Version reported by the LLM runtime's {@code /api/version} at generation time. */
+    private String runtimeVersion;
     private Instant generatedAt;
 
     /**

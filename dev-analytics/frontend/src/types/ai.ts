@@ -18,6 +18,8 @@ export interface MetricsSummaryDto {
   modelName: string;
   /** First 16 hex chars of the sha256 of the system prompt that produced the summary. */
   promptVersion: string;
+  /** Version reported by the LLM runtime's /api/version at generation time. */
+  runtimeVersion?: string;
   generatedAt?: string;
 }
 

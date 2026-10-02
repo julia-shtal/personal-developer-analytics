@@ -75,6 +75,10 @@ public class MetricSummaryEntity {
     @Column(nullable = false, length = 16)
     private String promptVersion;
 
+    /** Version reported by the LLM runtime's {@code /api/version} at generation time. */
+    @Column(length = 64)
+    private String runtimeVersion;
+
     @Column(nullable = false)
     private Instant generatedAt;
 
