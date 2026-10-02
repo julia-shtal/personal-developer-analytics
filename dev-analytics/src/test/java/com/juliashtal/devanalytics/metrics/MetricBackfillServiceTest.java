@@ -11,6 +11,7 @@ import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.UserMetricsPurger;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
+import com.juliashtal.devanalytics.metrics.service.RetentionPolicy;
 import com.juliashtal.devanalytics.user.model.User;
 import com.juliashtal.devanalytics.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,6 +68,7 @@ class MetricBackfillServiceTest {
     MetricCoverageRepository coverageRepository;
     @Mock UserMetricsPurger metricsPurger;
     @Mock MetricsService metricsService;
+    @Mock RetentionPolicy retentionPolicy;
 
     MetricBackfillService service;
     User user;
@@ -96,6 +98,7 @@ class MetricBackfillServiceTest {
         when(commitRepository.findEarliestAuthorDate(List.of(7L))).thenReturn(Optional.empty());
         when(pullRequestRepository.findEarliestCreatedAt(List.of(7L))).thenReturn(Optional.empty());
         when(issueRepository.findEarliestCreatedAt(List.of(7L))).thenReturn(Optional.empty());
+        when(retentionPolicy.horizon()).thenReturn(LocalDate.MIN);
 
         when(coverageRepository.findDatesInRange(anyLong(), any(), any()))
                 .thenAnswer(inv -> {
@@ -119,7 +122,7 @@ class MetricBackfillServiceTest {
         return new MetricBackfillService(userRepository, repoScopeResolver, commitRepository,
                 pullRequestRepository, issueRepository, coverageRepository, metricsPurger,
                 metricsService, new BackfillProperties(maxDaysPerRun),
-                new SystemClock(Clock.fixed(NOW, ZoneOffset.UTC)));
+                new SystemClock(Clock.fixed(NOW, ZoneOffset.UTC)), retentionPolicy);
     }
 
     /** Commits reach back {@code days} days before today, so the target range is {@code days} long. */
@@ -150,6 +153,18 @@ class MetricBackfillServiceTest {
         verify(metricsService).calculateDailyMetrics(
                 1L, TODAY_UTC.minusDays(30), TODAY_UTC.minusDays(1));
         verifyNoMoreInteractions(metricsService);
+    }
+
+    @Test
+    void backfillUser_earliestActivityBeforeHorizon_lowerBoundIsClampedToHorizon() {
+        commitsSpanning(900); // earliest activity is 900 days before today
+        LocalDate horizon = TODAY_UTC.minusDays(100);
+        when(retentionPolicy.horizon()).thenReturn(horizon);
+
+        BackfillResult result = service.backfillUser(1L);
+
+        assertThat(result.coverageFrom()).isEqualTo(horizon);
+        assertThat(result.coverageTo()).isEqualTo(TODAY_UTC.minusDays(1));
     }
 
     @Test

@@ -54,6 +54,7 @@ public class MetricBackfillService implements MetricBackfillTrigger {
     private final MetricsService metricsService;
     private final BackfillProperties properties;
     private final SystemClock systemClock;
+    private final RetentionPolicy retentionPolicy;
 
     /**
      * Users with a backfill pass running. Guards the read-then-write snapshot save, which has no
@@ -204,6 +205,10 @@ public class MetricBackfillService implements MetricBackfillTrigger {
 
         ZoneId zone = UserZone.of(user);
         LocalDate from = LocalDate.ofInstant(earliest.get(), zone);
+        LocalDate horizon = retentionPolicy.horizon();
+        if (from.isBefore(horizon)) {
+            from = horizon;
+        }
         LocalDate to = systemClock.today(zone).minusDays(1);
         if (from.isAfter(to)) {
             return new Coverage(null, null, List.of());

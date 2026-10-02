@@ -376,4 +376,20 @@ public interface MetricSnapshotRepository extends JpaRepository<MetricSnapshot, 
                                @Param("teamId") Long teamId,
                                @Param("fromDate") LocalDate fromDate,
                                @Param("toDate") LocalDate toDate);
+
+    /**
+     * Deletes every snapshot whose period has ended before {@code horizon} — DAILY rows by
+     * {@code date}, AGGREGATE rows by {@code periodTo} — across every user and scope.
+     *
+     * <p>Used by the nightly {@code RetentionScheduler}; the returned count is logged, not
+     * relied on for correctness.</p>
+     */
+    @Transactional
+    @Modifying
+    @Query("""
+            DELETE FROM MetricSnapshot s
+             WHERE (s.periodTo IS NULL AND s.date < :horizon)
+                OR (s.periodTo IS NOT NULL AND s.periodTo < :horizon)
+            """)
+    int deleteExpired(@Param("horizon") LocalDate horizon);
 }

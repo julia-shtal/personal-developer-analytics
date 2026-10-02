@@ -20,11 +20,19 @@ import java.util.*;
 public class MetricSnapshotService {
 
     private final MetricSnapshotRepository repository;
+    private final RetentionPolicy retentionPolicy;
+
+    /** A window starting before the retention horizon is pulled forward to it. */
+    private LocalDate clamp(LocalDate from) {
+        LocalDate horizon = retentionPolicy.horizon();
+        return from.isBefore(horizon) ? horizon : from;
+    }
 
     public List<MetricSnapshot> getMetricSnapshotsByUserAndMetricTypeAndDateBetween(User user,
                                                                              MetricType metricType,
                                                                              LocalDate from,
                                                                              LocalDate to) {
+        from = clamp(from);
         return repository.findByUserAndTeamIsNullAndMetricTypeAndDateBetween(user, metricType, from, to);
     }
 
@@ -33,6 +41,7 @@ public class MetricSnapshotService {
                                                                                           GitRepositoryEntity repo,
                                                                                           LocalDate from,
                                                                                           LocalDate to) {
+        from = clamp(from);
         return repository.findByUserAndTeamIsNullAndMetricTypeAndRepositoryAndDateBetween(user, metricType, repo, from, to);
     }
 
@@ -46,6 +55,7 @@ public class MetricSnapshotService {
                                                                              MetricType metricType,
                                                                              LocalDate from,
                                                                              LocalDate to) {
+        from = clamp(from);
         List<MetricSnapshot> contained = repository.findPersonalInWindow(user, metricType, from, to);
         if (!contained.isEmpty()) return contained;
         return repository.findPersonalAggregateCovering(user, metricType, from, to);
@@ -57,6 +67,7 @@ public class MetricSnapshotService {
                                                                                           GitRepositoryEntity repo,
                                                                                           LocalDate from,
                                                                                           LocalDate to) {
+        from = clamp(from);
         List<MetricSnapshot> contained =
                 repository.findPersonalByRepositoryInWindow(user, metricType, repo, from, to);
         if (!contained.isEmpty()) return contained;
@@ -65,6 +76,7 @@ public class MetricSnapshotService {
 
     public List<MetricSnapshot> getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(
             User user, Team team, MetricType metricType, LocalDate from, LocalDate to) {
+        from = clamp(from);
         return repository.findByUserAndTeamAndMetricTypeAndDateBetween(user, team, metricType, from, to);
     }
 
@@ -74,6 +86,7 @@ public class MetricSnapshotService {
             MetricType metricType,
             LocalDate from,
             LocalDate to) {
+        from = clamp(from);
         return repository.findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(userIds, teamId, metricType, from, to);
     }
 
@@ -88,6 +101,7 @@ public class MetricSnapshotService {
             MetricType metricType,
             LocalDate from,
             LocalDate to) {
+        from = clamp(from);
         return repository.findByUserIdsAndTeamIdAndMetricTypeInWindow(userIds, teamId, metricType, from, to);
     }
 
@@ -98,6 +112,7 @@ public class MetricSnapshotService {
             MetricType metricType,
             LocalDate from,
             LocalDate to) {
+        from = clamp(from);
         return repository.findByUserAndTeamAndMetricTypeInWindow(user, team, metricType, from, to);
     }
 
@@ -108,6 +123,7 @@ public class MetricSnapshotService {
             GitRepositoryEntity repo,
             LocalDate from,
             LocalDate to) {
+        from = clamp(from);
         return repository.findByUserIdsAndTeamIdAndMetricTypeAndRepositoryAndDateBetween(
                 userIds, teamId, metricType, repo, from, to);
     }

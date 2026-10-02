@@ -13,7 +13,9 @@ import java.time.LocalDate;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Pins what a recalculation clears: one user, one scope, one window, and nothing else.
+ * Pins two deletion queries against {@code metric_snapshots}: what one user's recalculation
+ * clears (scoped to that user, team, and window), and what the nightly retention sweep removes
+ * (global, by horizon, across every user).
  *
  * <p>Run against the real schema because the scoping turns on SQL's treatment of a null
  * {@code team_id}.</p>
@@ -77,6 +79,59 @@ class MetricSnapshotPruneQueryTest {
         assertThat(countFor(userId, "1=1")).isEqualTo(1);
     }
 
+    @Test
+    void deleteExpired_dailyRowBeforeHorizon_isRemoved() {
+        insertSnapshot(userId, null, LocalDate.of(2024, 1, 1));
+
+        repository.deleteExpired(LocalDate.of(2024, 6, 1));
+
+        assertThat(countFor(userId, "1=1")).isZero();
+    }
+
+    @Test
+    void deleteExpired_dailyRowOnOrAfterHorizon_isKept() {
+        insertSnapshot(userId, null, LocalDate.of(2024, 6, 1));
+
+        repository.deleteExpired(LocalDate.of(2024, 6, 1));
+
+        assertThat(countFor(userId, "1=1")).isEqualTo(1);
+    }
+
+    @Test
+    void deleteExpired_aggregateRowPeriodToBeforeHorizon_isRemoved() {
+        insertAggregateSnapshot(userId, LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 7));
+
+        repository.deleteExpired(LocalDate.of(2024, 6, 1));
+
+        assertThat(countFor(userId, "1=1")).isZero();
+    }
+
+    @Test
+    void deleteExpired_aggregateRowPeriodToOnOrAfterHorizon_isKept() {
+        insertAggregateSnapshot(userId, LocalDate.of(2024, 5, 26), LocalDate.of(2024, 6, 1));
+
+        repository.deleteExpired(LocalDate.of(2024, 6, 1));
+
+        assertThat(countFor(userId, "1=1")).isEqualTo(1);
+    }
+
+    @Test
+    void deleteExpired_mixOfExpiredAndCurrent_removesOnlyExpired() {
+        insertSnapshot(userId, null, LocalDate.of(2024, 1, 1));       // expired
+        insertSnapshot(userId, null, LocalDate.of(2024, 6, 1));       // current
+        insertAggregateSnapshot(userId, LocalDate.of(2023, 12, 1), LocalDate.of(2023, 12, 7)); // expired
+        insertAggregateSnapshot(userId, LocalDate.of(2024, 5, 26), LocalDate.of(2024, 6, 1));   // current
+        insertSnapshot(otherUserId, null, LocalDate.of(2024, 1, 1)); // expired, another user
+
+        int removed = repository.deleteExpired(LocalDate.of(2024, 6, 1));
+
+        // Global, unscoped delete against the shared dev DB (other rows may match too) — >=
+        // is the only safe bound here; countFor below is what actually pins this fixture.
+        assertThat(removed).isGreaterThanOrEqualTo(3);
+        assertThat(countFor(userId, "1=1")).isEqualTo(2);
+        assertThat(countFor(otherUserId, "1=1")).isZero();
+    }
+
     // -------------------------------------------------------------------------
 
     private long countFor(Long user, String extra) {
@@ -106,5 +161,12 @@ class MetricSnapshotPruneQueryTest {
                 "INSERT INTO metric_snapshots (user_id, team_id, date, metric_type, value) "
                         + "VALUES (?, ?, ?, 'DAILY_COMMITS_COUNT', 1)",
                 user, team, date);
+    }
+
+    private void insertAggregateSnapshot(Long user, LocalDate periodFrom, LocalDate periodTo) {
+        jdbc.update(
+                "INSERT INTO metric_snapshots (user_id, team_id, date, metric_type, value, period_from, period_to) "
+                        + "VALUES (?, NULL, ?, 'PR_LEAD_TIME_HOURS_MEDIAN', 1, ?, ?)",
+                user, periodFrom, periodFrom, periodTo);
     }
 }

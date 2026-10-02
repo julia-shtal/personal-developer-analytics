@@ -11,6 +11,7 @@ import com.juliashtal.devanalytics.metrics.service.MetricBackfillService;
 import com.juliashtal.devanalytics.metrics.service.MetricBackfillTrigger;
 import com.juliashtal.devanalytics.metrics.service.MetricsService;
 import com.juliashtal.devanalytics.metrics.service.RepoScopeResolver;
+import com.juliashtal.devanalytics.metrics.service.RetentionPolicy;
 import com.juliashtal.devanalytics.metrics.service.UserMetricsPurger;
 import com.juliashtal.devanalytics.user.model.AuthorIdentityChangedEvent;
 import com.juliashtal.devanalytics.user.model.User;
@@ -89,7 +90,8 @@ class AttributionRecomputeTest {
         private MetricBackfillService service() {
             return new MetricBackfillService(userRepository, repoScopeResolver, commitRepository,
                     pullRequestRepository, issueRepository, coverageRepository, metricsPurger,
-                    metricsService, new BackfillProperties(30), new SystemClock());
+                    metricsService, new BackfillProperties(30), new SystemClock(),
+                    new RetentionPolicy(24, new SystemClock()));
         }
 
         @Test

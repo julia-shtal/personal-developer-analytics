@@ -6,6 +6,7 @@ import com.juliashtal.devanalytics.ai.model.MetricSummaryEntity;
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.repository.MetricSummaryRepository;
 import com.juliashtal.devanalytics.ai.service.MetricSummaryPersistenceService;
+import com.juliashtal.devanalytics.metrics.service.RetentionPolicy;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,7 @@ import static org.mockito.Mockito.*;
 class MetricSummaryPersistenceServiceTest {
 
     @Mock MetricSummaryRepository summaryRepository;
+    @Mock RetentionPolicy retentionPolicy;
 
     MetricSummaryPersistenceService service;
     ObjectMapper objectMapper;
@@ -42,7 +44,8 @@ class MetricSummaryPersistenceServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        service = new MetricSummaryPersistenceService(summaryRepository, objectMapper);
+        lenient().when(retentionPolicy.horizon()).thenReturn(LocalDate.MIN);
+        service = new MetricSummaryPersistenceService(summaryRepository, objectMapper, retentionPolicy);
     }
 
     @Test
@@ -408,6 +411,100 @@ class MetricSummaryPersistenceServiceTest {
         when(summaryRepository.findTopByUser_IdOrderByGeneratedAtDesc(1L)).thenReturn(Optional.of(entity));
 
         assertThat(service.findLatestPersonal(user).orElseThrow().getRuntimeVersion()).isEqualTo("0.34.0");
+    }
+
+    @Test
+    void findLatestPersonal_entityOlderThanHorizon_returnsEmpty() {
+        User user = new User();
+        user.setId(5L);
+
+        MetricSummaryEntity entity = new MetricSummaryEntity();
+        entity.setId(50L);
+        entity.setUser(user);
+        entity.setPeriodFrom(from);
+        entity.setPeriodTo(to); // 2024-01-31
+        entity.setScope("PERSONAL");
+        entity.setHeadline("Too old");
+        entity.setGeneratedAt(Instant.now());
+
+        when(summaryRepository.findTopByUser_IdOrderByGeneratedAtDesc(5L)).thenReturn(Optional.of(entity));
+        when(retentionPolicy.horizon()).thenReturn(LocalDate.of(2024, 6, 1));
+
+        assertThat(service.findLatestPersonal(user)).isEmpty();
+    }
+
+    @Test
+    void findLatestTeam_entityOlderThanHorizon_returnsEmpty() {
+        Team team = new Team();
+        team.setId(8L);
+
+        MetricSummaryEntity entity = new MetricSummaryEntity();
+        entity.setId(51L);
+        entity.setTeam(team);
+        entity.setPeriodFrom(from);
+        entity.setPeriodTo(to);
+        entity.setScope("TEAM");
+        entity.setHeadline("Too old");
+        entity.setGeneratedAt(Instant.now());
+
+        when(summaryRepository.findTopByTeam_IdOrderByGeneratedAtDesc(8L)).thenReturn(Optional.of(entity));
+        when(retentionPolicy.horizon()).thenReturn(LocalDate.of(2024, 6, 1));
+
+        assertThat(service.findLatestTeam(team)).isEmpty();
+    }
+
+    @Test
+    void findHistoryPersonal_filtersOutEntriesOlderThanHorizon() {
+        User user = new User();
+        user.setId(1L);
+
+        MetricSummaryEntity current = new MetricSummaryEntity();
+        current.setId(1L);
+        current.setUser(user);
+        current.setPeriodFrom(LocalDate.of(2024, 6, 1));
+        current.setPeriodTo(LocalDate.of(2024, 6, 30));
+        current.setScope("PERSONAL");
+        current.setHeadline("Current");
+        current.setGeneratedAt(Instant.now());
+
+        MetricSummaryEntity expired = new MetricSummaryEntity();
+        expired.setId(2L);
+        expired.setUser(user);
+        expired.setPeriodFrom(from);
+        expired.setPeriodTo(to);
+        expired.setScope("PERSONAL");
+        expired.setHeadline("Expired");
+        expired.setGeneratedAt(Instant.now());
+
+        when(summaryRepository.findByUser_IdOrderByGeneratedAtDesc(eq(1L), any(PageRequest.class)))
+                .thenReturn(List.of(current, expired));
+        when(retentionPolicy.horizon()).thenReturn(LocalDate.of(2024, 6, 1));
+
+        List<MetricsSummaryDto> result = service.findHistoryPersonal(user, 5);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getHeadline()).isEqualTo("Current");
+    }
+
+    @Test
+    void findHistoryTeam_filtersOutEntriesOlderThanHorizon() {
+        Team team = new Team();
+        team.setId(7L);
+
+        MetricSummaryEntity expired = new MetricSummaryEntity();
+        expired.setId(3L);
+        expired.setTeam(team);
+        expired.setPeriodFrom(from);
+        expired.setPeriodTo(to);
+        expired.setScope("TEAM");
+        expired.setHeadline("Expired team summary");
+        expired.setGeneratedAt(Instant.now());
+
+        when(summaryRepository.findByTeam_IdOrderByGeneratedAtDesc(eq(7L), any(PageRequest.class)))
+                .thenReturn(List.of(expired));
+        when(retentionPolicy.horizon()).thenReturn(LocalDate.of(2024, 6, 1));
+
+        assertThat(service.findHistoryTeam(team, 5)).isEmpty();
     }
 
     private MetricsSummaryDto dto(String scope, String contextName) {
