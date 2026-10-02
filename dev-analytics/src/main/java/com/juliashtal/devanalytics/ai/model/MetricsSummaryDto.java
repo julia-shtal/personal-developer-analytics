@@ -34,6 +34,8 @@ public class MetricsSummaryDto {
     private String promptVersion;
     /** Version reported by the LLM runtime's {@code /api/version} at generation time. */
     private String runtimeVersion;
+    /** JSON-encoded {@link ValidationReport} for this summary's insights. */
+    private String validationReport;
     private Instant generatedAt;
 
     /**

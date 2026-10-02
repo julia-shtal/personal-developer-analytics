@@ -10,6 +10,7 @@ import com.juliashtal.devanalytics.ai.service.AiContextBuilderService;
 import com.juliashtal.devanalytics.ai.service.MetricSummaryPersistenceService;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
 import com.juliashtal.devanalytics.ai.service.PromptVersionProvider;
+import com.juliashtal.devanalytics.ai.service.SummaryValidator;
 import com.juliashtal.devanalytics.exception.ForbiddenException;
 import com.juliashtal.devanalytics.git.model.GitRepositoryEntity;
 import com.juliashtal.devanalytics.git.service.RepoService;
@@ -64,7 +65,7 @@ class MetricsAiServiceTest {
     void setUp() {
         service = new MetricsAiService(contextBuilder, repoService, teamService, userService, llmClient,
                 new ObjectMapper().registerModule(new JavaTimeModule()), persistenceService,
-                new PromptVersionProvider());
+                new PromptVersionProvider(), new SummaryValidator());
         ReflectionTestUtils.setField(service, "model", MODEL);
 
         // Non-empty by default so the LLM path is exercised; empty-context tests override this
@@ -78,8 +79,13 @@ class MetricsAiServiceTest {
 
     private AggregatedMetricsContext nonEmptyPersonalContext() {
         AggregatedMetricsContext ctx = new AggregatedMetricsContext();
-        ctx.setMetrics(Map.of("DAILY_COMMITS_COUNT", AggregatedMetricsContext.MetricAggregate.builder()
-                .min("1").max("5").median("3").total(9).trendPct(0.0).anomaly(false).build()));
+        ctx.setMetrics(Map.of(
+                "DAILY_COMMITS_COUNT", AggregatedMetricsContext.MetricAggregate.builder()
+                        .min("1").max("5").median("3").total(9).trendPct(0.0).anomaly(false).build(),
+                "PR_LEAD_TIME_HOURS_MEDIAN", AggregatedMetricsContext.MetricAggregate.builder()
+                        .min("1").max("5").median("3").total(0).trendPct(0.0).anomaly(false).build(),
+                "DAILY_CHURN_RATIO", AggregatedMetricsContext.MetricAggregate.builder()
+                        .min("1").max("5").median("3").total(0).trendPct(0.0).anomaly(false).build()));
         return ctx;
     }
 
@@ -199,6 +205,80 @@ class MetricsAiServiceTest {
         });
         assertThat(dto.getInsights().get(0).getText()).isEqualTo("High commit volume");
         assertThat(dto.getInsights().get(1).getText()).isEqualTo("Fast PR reviews");
+    }
+
+    @Test
+    void generateSummary_contextWithoutActiveGoals_omitsGoalCoachingBlockFromSystemPrompt() {
+        ArgumentCaptor<String> systemPromptCaptor = ArgumentCaptor.forClass(String.class);
+        when(llmClient.complete(eq(MODEL), systemPromptCaptor.capture(), any(), anyBoolean()))
+                .thenReturn(VALID_JSON);
+
+        service.generateSummary(user, from, to, null);
+
+        assertThat(systemPromptCaptor.getValue()).doesNotContain("Goal progress coaching");
+    }
+
+    @Test
+    void generateSummary_contextWithActiveGoals_includesGoalCoachingBlockInSystemPrompt() {
+        AggregatedMetricsContext ctx = nonEmptyPersonalContext();
+        ctx.setActiveGoals(List.of(new com.juliashtal.devanalytics.ai.model.GoalSummary(
+                "DAILY_COMMITS_COUNT", 10.0, LocalDate.of(2024, 2, 1), 7.0)));
+        when(contextBuilder.buildPersonalContext(any(), any(), any(), any())).thenReturn(ctx);
+
+        ArgumentCaptor<String> systemPromptCaptor = ArgumentCaptor.forClass(String.class);
+        when(llmClient.complete(eq(MODEL), systemPromptCaptor.capture(), any(), anyBoolean()))
+                .thenReturn(VALID_JSON);
+
+        service.generateSummary(user, from, to, null);
+
+        assertThat(systemPromptCaptor.getValue()).contains("Goal progress coaching");
+    }
+
+    @Test
+    void generateSummary_insightNamesMetricAbsentFromContext_dropsItAndRecordsTheValidationReport() {
+        String json = """
+                {
+                  "headline": "Headline",
+                  "overview": "Overview",
+                  "insights": [
+                    { "kind": "note", "text": "Unrelated.", "metric": "Issues Closed" }
+                  ],
+                  "recommendations": []
+                }
+                """;
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getInsights()).isEmpty();
+        assertThat(dto.getValidationReport()).contains("\"droppedUnknownMetric\":1");
+    }
+
+    @Test
+    void generateSummary_insightOnAnomalousMetricMissingExplanation_dropsIt() {
+        AggregatedMetricsContext ctx = nonEmptyPersonalContext();
+        Map<String, AggregatedMetricsContext.MetricAggregate> metrics = new java.util.HashMap<>(ctx.getMetrics());
+        metrics.put("DAILY_CHURN_RATIO", AggregatedMetricsContext.MetricAggregate.builder()
+                .min("1").max("5").median("3").total(0).trendPct(0.0).anomaly(true).build());
+        ctx.setMetrics(metrics);
+        when(contextBuilder.buildPersonalContext(any(), any(), any(), any())).thenReturn(ctx);
+
+        String json = """
+                {
+                  "headline": "Headline",
+                  "overview": "Overview",
+                  "insights": [
+                    { "kind": "risk", "text": "Churn spiked.", "metric": "Churn Ratio" }
+                  ],
+                  "recommendations": []
+                }
+                """;
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getInsights()).isEmpty();
+        assertThat(dto.getValidationReport()).contains("\"droppedMissingExplanation\":1");
     }
 
     @Test

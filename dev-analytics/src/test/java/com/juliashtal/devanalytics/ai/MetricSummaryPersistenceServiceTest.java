@@ -352,6 +352,45 @@ class MetricSummaryPersistenceServiceTest {
     }
 
     @Test
+    void savePersonal_setsValidationReportOnTheEntity() {
+        User user = new User();
+        user.setId(1L);
+
+        when(summaryRepository.findByIdentity(eq(1L), isNull(), eq(from), eq(to), eq("PERSONAL"), isNull(), eq(VERSION)))
+                .thenReturn(Optional.empty());
+        when(summaryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        MetricsSummaryDto dto = dto("PERSONAL", null);
+        dto.setValidationReport("{\"droppedUnknownMetric\":0,\"droppedMissingExplanation\":0,\"finalInsightCount\":1,\"insightCountInRange\":false}");
+        service.savePersonal(user, dto);
+
+        ArgumentCaptor<MetricSummaryEntity> captor = ArgumentCaptor.forClass(MetricSummaryEntity.class);
+        verify(summaryRepository).save(captor.capture());
+        assertThat(captor.getValue().getValidationReport()).contains("\"droppedUnknownMetric\":0");
+    }
+
+    @Test
+    void findLatestPersonal_entityWithValidationReport_surfacesItOnTheDto() {
+        User user = new User();
+        user.setId(1L);
+
+        MetricSummaryEntity entity = new MetricSummaryEntity();
+        entity.setId(42L);
+        entity.setUser(user);
+        entity.setPeriodFrom(from);
+        entity.setPeriodTo(to);
+        entity.setScope("PERSONAL");
+        entity.setHeadline("Great week");
+        entity.setValidationReport("{\"droppedUnknownMetric\":1,\"droppedMissingExplanation\":0,\"finalInsightCount\":4,\"insightCountInRange\":false}");
+        entity.setGeneratedAt(Instant.now());
+
+        when(summaryRepository.findTopByUser_IdOrderByGeneratedAtDesc(1L)).thenReturn(Optional.of(entity));
+
+        assertThat(service.findLatestPersonal(user).orElseThrow().getValidationReport())
+                .contains("\"droppedUnknownMetric\":1");
+    }
+
+    @Test
     void findLatestPersonal_entityWithRuntimeVersion_surfacesItOnTheDto() {
         User user = new User();
         user.setId(1L);

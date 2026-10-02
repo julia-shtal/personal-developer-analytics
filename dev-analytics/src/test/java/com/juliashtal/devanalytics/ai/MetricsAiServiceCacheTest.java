@@ -8,6 +8,7 @@ import com.juliashtal.devanalytics.ai.service.AiContextBuilderService;
 import com.juliashtal.devanalytics.ai.service.MetricSummaryPersistenceService;
 import com.juliashtal.devanalytics.ai.service.MetricsAiService;
 import com.juliashtal.devanalytics.ai.service.PromptVersionProvider;
+import com.juliashtal.devanalytics.ai.service.SummaryValidator;
 import com.juliashtal.devanalytics.config.CacheConfig;
 import com.juliashtal.devanalytics.git.service.RepoService;
 import com.juliashtal.devanalytics.user.model.User;
@@ -101,15 +102,17 @@ class MetricsAiServiceCacheTest {
         @Bean LlmClient llmClient() { return mock(LlmClient.class); }
         @Bean MetricSummaryPersistenceService persistenceService() { return mock(MetricSummaryPersistenceService.class); }
         @Bean PromptVersionProvider promptVersionProvider() { return mock(PromptVersionProvider.class); }
+        @Bean SummaryValidator summaryValidator() { return new SummaryValidator(); }
 
         @Bean
         MetricsAiService metricsAiService(AiContextBuilderService contextBuilder, RepoService repoService,
                                           TeamService teamService, UserService userService, LlmClient llmClient,
                                           MetricSummaryPersistenceService persistenceService,
-                                          PromptVersionProvider promptVersionProvider) {
+                                          PromptVersionProvider promptVersionProvider,
+                                          SummaryValidator summaryValidator) {
             MetricsAiService service = new MetricsAiService(contextBuilder, repoService, teamService, userService,
                     llmClient, new ObjectMapper().registerModule(new JavaTimeModule()), persistenceService,
-                    promptVersionProvider);
+                    promptVersionProvider, summaryValidator);
             ReflectionTestUtils.setField(service, "model", "llama3.2");
             return service;
         }

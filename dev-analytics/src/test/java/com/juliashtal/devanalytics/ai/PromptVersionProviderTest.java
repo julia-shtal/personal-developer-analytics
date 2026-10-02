@@ -15,8 +15,8 @@ class PromptVersionProviderTest {
      * Prompt versions as committed. A prompt edit invalidates every result collected before it, so
      * changing these values is a deliberate act, not a build fix.
      */
-    private static final String EXPECTED_PERSONAL = "eded29f49ed62b99";
-    private static final String EXPECTED_TEAM = "20df573026957922";
+    private static final String EXPECTED_PERSONAL = "12045e32e039a976";
+    private static final String EXPECTED_TEAM = "2aaaa79775122450";
 
     @Test
     void hashFor_committedPromptText_matchesExpectedVersion() {
