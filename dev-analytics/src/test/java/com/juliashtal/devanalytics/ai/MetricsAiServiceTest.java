@@ -282,6 +282,68 @@ class MetricsAiServiceTest {
     }
 
     @Test
+    void generateSummary_insightNamesMetricByEnumKey_keepsItNormalisedToHumanLabel() {
+        String json = """
+                {
+                  "headline": "Headline",
+                  "overview": "Overview",
+                  "insights": [
+                    { "kind": "note", "text": "Commits steady.", "metric": "DAILY_COMMITS_COUNT" }
+                  ],
+                  "recommendations": []
+                }
+                """;
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getInsights()).hasSize(1);
+        assertThat(dto.getInsights().get(0).getMetric()).isEqualTo("Daily Commits");
+        assertThat(dto.getValidationReport()).contains("\"droppedUnknownMetric\":0");
+    }
+
+    @Test
+    void generateSummary_insightTextCitesANumberFromTheContext_notFlaggedAsUngrounded() {
+        // nonEmptyPersonalContext's DAILY_COMMITS_COUNT has median "3".
+        String json = """
+                {
+                  "headline": "Headline",
+                  "overview": "Overview",
+                  "insights": [
+                    { "kind": "note", "text": "the median held at 3 commits", "metric": "Daily Commits" }
+                  ],
+                  "recommendations": []
+                }
+                """;
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getInsights()).hasSize(1);
+        assertThat(dto.getValidationReport()).contains("\"ungroundedNumberCount\":0");
+    }
+
+    @Test
+    void generateSummary_insightTextCitesANumberAbsentFromTheContext_flaggedButKept() {
+        String json = """
+                {
+                  "headline": "Headline",
+                  "overview": "Overview",
+                  "insights": [
+                    { "kind": "note", "text": "the median held at 999 commits", "metric": "Daily Commits" }
+                  ],
+                  "recommendations": []
+                }
+                """;
+        when(llmClient.complete(any(), any(), any(), anyBoolean())).thenReturn(json);
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getInsights()).hasSize(1);
+        assertThat(dto.getValidationReport()).contains("\"ungroundedNumberCount\":1");
+    }
+
+    @Test
     void stripsMarkdownFencesBeforeParsing() {
         String json = """
                 ```json

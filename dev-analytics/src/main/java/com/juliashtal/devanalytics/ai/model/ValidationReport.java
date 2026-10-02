@@ -7,6 +7,7 @@ public record ValidationReport(
         int droppedUnknownMetric,
         int droppedMissingExplanation,
         int finalInsightCount,
-        boolean insightCountInRange
+        boolean insightCountInRange,
+        int ungroundedNumberCount
 ) {
 }

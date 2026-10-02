@@ -22,10 +22,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -94,7 +98,8 @@ public class MetricsAiService {
         log.info("AI summary generated: userId={}, durationMs={}, responseLen={}", user.getId(), durationMs, raw.length());
 
         MetricsSummaryDto dto = parseSummary(raw, from, to, scope, scopeName,
-                validMetricNames(ctx.getMetrics().keySet()), anomalousMetricNames(ctx.getMetrics()));
+                metricAliases(ctx.getMetrics().keySet()), anomalousMetricNames(ctx.getMetrics()),
+                groundedNumberTokens(ctx.getMetrics()));
         persistenceService.savePersonal(user, dto);
         return dto;
     }
@@ -134,7 +139,7 @@ public class MetricsAiService {
         log.info("Team AI summary generated: teamId={}, durationMs={}, responseLen={}", teamId, durationMs, raw.length());
 
         MetricsSummaryDto dto = parseSummary(raw, from, to, "TEAM", team.getName(),
-                validMetricNames(teamMetricKeys(ctx)), Set.of());
+                metricAliases(teamMetricKeys(ctx)), Set.of(), groundedNumberTokensForTeam(ctx));
         persistenceService.saveTeam(team, dto);
         return dto;
     }
@@ -178,7 +183,8 @@ public class MetricsAiService {
         log.info("Member AI summary generated: memberId={}, durationMs={}, responseLen={}", memberId, durationMs, raw.length());
 
         MetricsSummaryDto dto = parseSummary(raw, from, to, "PERSONAL", member.getUsername(),
-                validMetricNames(ctx.getMetrics().keySet()), anomalousMetricNames(ctx.getMetrics()));
+                metricAliases(ctx.getMetrics().keySet()), anomalousMetricNames(ctx.getMetrics()),
+                groundedNumberTokens(ctx.getMetrics()));
         persistenceService.savePersonal(member, dto);
         return dto;
     }
@@ -254,7 +260,8 @@ public class MetricsAiService {
 
     private MetricsSummaryDto parseSummary(String raw, LocalDate from, LocalDate to,
                                            String scope, String scopeName,
-                                           Set<String> validMetricNames, Set<String> anomalousMetricNames) {
+                                           Map<String, String> metricAliases, Set<String> anomalousMetricNames,
+                                           Set<String> groundedNumbers) {
         String cleaned = raw.strip();
         // Strip markdown code fences that models sometimes add despite instructions
         if (cleaned.startsWith("```")) {
@@ -297,7 +304,8 @@ public class MetricsAiService {
                 }
             }
 
-            SummaryValidator.Result validated = summaryValidator.validate(insights, validMetricNames, anomalousMetricNames);
+            SummaryValidator.Result validated =
+                    summaryValidator.validate(insights, metricAliases, anomalousMetricNames, groundedNumbers);
 
             return MetricsSummaryDto.builder()
                     .from(from)
@@ -345,12 +353,21 @@ public class MetricsAiService {
         }
     }
 
-    private Set<String> validMetricNames(Set<String> contextKeys) {
-        Set<String> names = new HashSet<>();
+    /**
+     * Every spelling the model may legitimately use for a context metric — its human label and
+     * its enum key — mapped to the canonical human label. A sparse period that leaves the model
+     * echoing the raw enum key back (e.g. {@code FOCUS_RATIO_DAYS_TASKS}) must not lose the
+     * insight to a naming slip the prompt already permits either form for.
+     */
+    private Map<String, String> metricAliases(Set<String> contextKeys) {
+        Map<String, String> aliases = new HashMap<>();
         for (String key : contextKeys) {
-            humanName(key).ifPresent(names::add);
+            humanName(key).ifPresent(human -> {
+                aliases.put(human, human);
+                aliases.put(key, human);
+            });
         }
-        return names;
+        return aliases;
     }
 
     private Set<String> anomalousMetricNames(Map<String, AggregatedMetricsContext.MetricAggregate> metrics) {
@@ -370,6 +387,44 @@ public class MetricsAiService {
             keys.addAll(member.getMetrics().keySet());
         }
         return keys;
+    }
+
+    // -------------------------------------------------------------------------
+    // Number groundedness (flag only; see SummaryValidator)
+    // -------------------------------------------------------------------------
+
+    /** Every min/max/median/total/trendPct value actually supplied, exactly as formatted for the prompt. */
+    private Set<String> groundedNumberTokens(Map<String, AggregatedMetricsContext.MetricAggregate> metrics) {
+        Set<String> tokens = new HashSet<>();
+        for (AggregatedMetricsContext.MetricAggregate agg : metrics.values()) {
+            tokens.add(agg.getMin());
+            tokens.add(agg.getMax());
+            tokens.add(agg.getMedian());
+            if (agg.getTotal() != 0) {
+                tokens.add(String.valueOf(agg.getTotal()));
+            }
+            tokens.addAll(trendPctTokens(agg.getTrendPct()));
+        }
+        return tokens;
+    }
+
+    private Set<String> groundedNumberTokensForTeam(TeamMetricsContext ctx) {
+        DecimalFormat df = new DecimalFormat("#.##", DecimalFormatSymbols.getInstance(Locale.US));
+        Set<String> tokens = new HashSet<>();
+        for (TeamMetricsContext.MemberMetrics member : ctx.getMembers()) {
+            member.getMetrics().values().forEach(v -> tokens.add(df.format(v)));
+        }
+        return tokens;
+    }
+
+    /**
+     * Both the one-decimal form the prompt asks for and the bare-integer form a model tends to
+     * fall back to for a whole-number trend (e.g. {@code 0} alongside {@code 0.0}).
+     */
+    private Set<String> trendPctTokens(double trendPct) {
+        String oneDecimal = new DecimalFormat("0.0", DecimalFormatSymbols.getInstance(Locale.US)).format(trendPct);
+        String integer = String.valueOf(Math.round(trendPct));
+        return Set.of(oneDecimal, integer);
     }
 
     // -------------------------------------------------------------------------
