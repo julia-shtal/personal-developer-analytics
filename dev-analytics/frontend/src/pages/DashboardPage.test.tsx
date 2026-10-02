@@ -241,3 +241,26 @@ describe('DashboardPage — backfill coverage chips', () => {
     expect(screen.queryByText(/day\(s\) of history still computing/)).not.toBeInTheDocument();
   });
 });
+
+describe('DashboardPage — DORA proxy badges (R-F-08)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('labels the PR lead time and first-commit-to-merge tiles as DORA proxies', async () => {
+    render(<DashboardPage />, { wrapper: Wrapper });
+
+    await screen.findByText('pr lead time');
+    expect(screen.getAllByText('DORA proxy')).toHaveLength(2);
+  });
+
+  it('exposes the proxy caveat note without needing to click through', async () => {
+    render(<DashboardPage />, { wrapper: Wrapper });
+
+    const [badge] = await screen.findAllByText('DORA proxy');
+    await userEvent.hover(badge);
+
+    expect(await screen.findByText(/not from commit to production deploy/)).toBeInTheDocument();
+  });
+});

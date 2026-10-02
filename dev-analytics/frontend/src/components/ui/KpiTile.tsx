@@ -15,6 +15,7 @@ interface KpiTileProps {
   size?: 'md' | 'lg';
   emphasis?: boolean;
   anomaly?: boolean;
+  badge?: ReactNode;
   onSetGoal?: () => void;
 }
 
@@ -28,6 +29,7 @@ export function KpiTile({
   size = 'md',
   emphasis = false,
   anomaly = false,
+  badge,
   onSetGoal,
 }: KpiTileProps) {
   const [hovered, setHovered] = useState(false);
@@ -48,6 +50,7 @@ export function KpiTile({
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div className="row" style={{ alignItems: 'center', gap: 6 }}>
           <div className="t-eyebrow">{label}</div>
+          {badge}
           {anomaly && (
             <Tooltip content="Anomaly detected — this metric deviates significantly from its recent pattern">
               <span

@@ -10,6 +10,7 @@ import { teamMetricsApi } from '@/api/metrics';
 import { reposApi } from '@/api/repos';
 import { aiApi } from '@/api/ai';
 import { KpiTile } from '@/components/ui/KpiTile';
+import { DoraProxyBadge } from '@/components/ui/DoraProxyBadge';
 import { Chip } from '@/components/ui/Chip';
 import { Modal } from '@/components/ui/Modal';
 import { Avatar } from '@/components/ui/Avatar';
@@ -427,11 +428,11 @@ export function MemberDetailModal({ member, teamId, open, onClose, teamMembers }
   const m = member.metrics;
   const churn = m.DAILY_CHURN_RATIO ?? 0;
 
-  const kpiItems: Array<[string, string, string, ComponentType<{ width?: number; height?: number; style?: CSSProperties }>, string]> = [
+  const kpiItems: Array<[string, string, string, ComponentType<{ width?: number; height?: number; style?: CSSProperties }>, string, MetricType?]> = [
     ['commits',       fmt(m.DAILY_COMMITS_COUNT, 0),                       'accent',  Commits,      'Avg daily commits in the selected period'],
     ['prs merged',    fmt(m.DAILY_PR_MERGED, 0),                           'accent',  PRMerged,     'Avg daily pull requests merged to the default branch'],
     ['issues closed', fmt(m.DAILY_ISSUES_CLOSED, 0),                       'emerald', IssuesClosed, 'Avg daily Jira/GitHub issues resolved or closed'],
-    ['pr lead time',  fmtHours(m.PR_LEAD_TIME_HOURS_MEDIAN),               'cyan',    LeadTime,     'Median time from PR open to first merge'],
+    ['pr lead time',  fmtHours(m.PR_LEAD_TIME_HOURS_MEDIAN),               'cyan',    LeadTime,     'Median time from PR open to first merge', 'PR_LEAD_TIME_HOURS_MEDIAN'],
     ['churn',         churn > 0 ? `${(churn * 100).toFixed(0)}%` : '—',   churn > 0.25 ? 'coral' : 'amber', Churn, 'Ratio of deleted + churned lines to total changed lines. High values indicate rework.'],
     ['focus ratio',   m.FOCUS_RATIO_DAYS_TASKS != null ? `${Math.round(m.FOCUS_RATIO_DAYS_TASKS)}d` : '—', 'emerald', Focus, 'Days where task-related activity (issues) was the primary work type'],
   ];
@@ -558,14 +559,17 @@ export function MemberDetailModal({ member, teamId, open, onClose, teamMembers }
         display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0,
         border: '1px solid var(--line)', borderRadius: 8, marginBottom: 16, overflow: 'hidden',
       }}>
-        {kpiItems.map(([label, val, color, Icon, tip], i) => (
+        {kpiItems.map(([label, val, color, Icon, tip, metricKey], i) => (
           <div key={label} style={{
             padding: '14px 16px',
             borderLeft: i % 3 ? '1px solid var(--line-2)' : 'none',
             borderTop: i >= 3 ? '1px solid var(--line-2)' : 'none',
           }}>
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-              <span className="t-label" style={{ fontSize: 10 }}>{label}</span>
+              <div className="row" style={{ alignItems: 'center', gap: 6 }}>
+                <span className="t-label" style={{ fontSize: 10 }}>{label}</span>
+                {metricKey && <DoraProxyBadge metricKey={metricKey} />}
+              </div>
               <Tooltip content={tip}>
                 <Icon width={13} height={13} style={{ color: `var(--${color})`, cursor: 'default' }} />
               </Tooltip>
@@ -1034,7 +1038,12 @@ export function TeamDashboardPage() {
                   <th style={{ textAlign: 'right' }}>prs merged</th>
                   <th style={{ textAlign: 'right' }}>prs opened</th>
                   <th style={{ textAlign: 'right' }}>issues closed</th>
-                  <th style={{ textAlign: 'right' }}>pr lead</th>
+                  <th style={{ textAlign: 'right' }}>
+                    <span className="row" style={{ justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                      pr lead
+                      <DoraProxyBadge metricKey="PR_LEAD_TIME_HOURS_MEDIAN" />
+                    </span>
+                  </th>
                   <th style={{ textAlign: 'right' }}>churn</th>
                   <th />
                 </tr>

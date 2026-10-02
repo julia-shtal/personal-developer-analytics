@@ -8,6 +8,7 @@ import { metricsApi } from '@/api/metrics';
 import { MetricBarChart } from '@/components/charts/MetricBarChart';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { KpiTile } from '@/components/ui/KpiTile';
+import { DoraProxyBadge } from '@/components/ui/DoraProxyBadge';
 import { Chip } from '@/components/ui/Chip';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { useDateRange } from '@/context/DateRangeContext';
@@ -383,6 +384,7 @@ export function DashboardPage() {
             icon={<LeadTime />}
             tooltip="Median time from when a PR is opened to when it is merged."
             anomaly={anomalies.data?.PR_LEAD_TIME_HOURS_MEDIAN}
+            badge={<DoraProxyBadge metricKey="PR_LEAD_TIME_HOURS_MEDIAN" />}
             onSetGoal={() => openGoalModal('PR_LEAD_TIME_HOURS_MEDIAN', 'pr lead time')}
           />
           <KpiTile
@@ -436,6 +438,7 @@ export function DashboardPage() {
             icon={<FirstCommit />}
             tooltip="Median hours from first commit on a PR branch to its merge."
             anomaly={anomalies.data?.PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN}
+            badge={<DoraProxyBadge metricKey="PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN" />}
             onSetGoal={() => openGoalModal('PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN', '1st commit → merge')}
           />
         </div>

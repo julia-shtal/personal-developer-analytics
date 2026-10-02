@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { MemberSummaryDto } from '@/types';
-import { MemberDetailModal } from './TeamDashboardPage';
+import { MemberDetailModal, TeamDashboardPage } from './TeamDashboardPage';
 
 vi.mock('@/api/users', () => ({
   usersApi: {
@@ -17,11 +18,25 @@ vi.mock('@/api/metrics', () => ({
     memberDailyCommits: vi.fn().mockResolvedValue({ data: [] }),
     memberDailyPrCreated: vi.fn().mockResolvedValue({ data: [] }),
     memberDailyPrMerged: vi.fn().mockResolvedValue({ data: [] }),
+    dailyCommits: vi.fn().mockResolvedValue({ data: [] }),
+    summary: vi.fn().mockResolvedValue({ data: [] }),
   },
 }));
 vi.mock('@/api/ai', () => ({
   aiApi: {
     generateMemberSummary: vi.fn(),
+  },
+}));
+vi.mock('@/api/teams', () => ({
+  teamsApi: {
+    list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Team Rocket' }] }),
+    myMemberships: vi.fn().mockResolvedValue({ data: [] }),
+    exportMeetingPrep: vi.fn(),
+  },
+}));
+vi.mock('@/api/repos', () => ({
+  reposApi: {
+    list: vi.fn().mockResolvedValue({ data: [] }),
   },
 }));
 vi.mock('@/context/DateRangeContext', () => ({
@@ -137,5 +152,57 @@ describe('MemberDetailModal — member comparison (FC-8)', () => {
       expect(teamMetricsApi.memberDailyPrCreated).toHaveBeenCalledWith(1, 9, '2026-06-01', '2026-06-08');
       expect(teamMetricsApi.memberDailyPrMerged).toHaveBeenCalledWith(1, 9, '2026-06-01', '2026-06-08');
     });
+  });
+});
+
+describe('MemberDetailModal — DORA proxy badge (R-F-08)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('labels the pr lead time tile as a DORA proxy', async () => {
+    renderModal();
+    await screen.findByText('pr lead time');
+    expect(screen.getByText('DORA proxy')).toBeInTheDocument();
+  });
+
+  it('exposes the proxy caveat note on hover', async () => {
+    renderModal();
+    await screen.findByText('pr lead time');
+
+    await userEvent.hover(screen.getByText('DORA proxy'));
+
+    expect(await screen.findByText(/not from commit to production deploy/)).toBeInTheDocument();
+  });
+});
+
+describe('TeamDashboardPage — member table DORA proxy badge (R-F-08)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (usersApi.notifications.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { aiBrief: false, syncFailures: false, afterHours: false, newTeamMember: false, defaultContactMethod: 'IN_APP' },
+    });
+    (teamMetricsApi.summary as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: [
+        { userId: 7, username: 'octocat', metrics: { PR_LEAD_TIME_HOURS_MEDIAN: 12 }, email: 'octocat@example.com' },
+      ],
+    });
+  });
+
+  function renderPage() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <TeamDashboardPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it('labels the "pr lead" column as a DORA proxy', async () => {
+    renderPage();
+    await screen.findByText('octocat');
+    expect(screen.getByText('DORA proxy')).toBeInTheDocument();
   });
 });
