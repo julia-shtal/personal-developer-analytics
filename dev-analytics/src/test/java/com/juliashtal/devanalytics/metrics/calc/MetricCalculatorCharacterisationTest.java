@@ -22,7 +22,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -59,9 +58,6 @@ class MetricCalculatorCharacterisationTest {
         repo.setId(REPO_ID);
 
         when(gitRepoRepository.getReferenceById(REPO_ID)).thenReturn(repo);
-        when(snapshotRepository.findExisting(any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(Optional.empty());
-        when(snapshotRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         when(commitRepository.aggregateCommitsDailyByRepoIdsAndIdentity(any(), any(), any(), any(), any())).thenReturn(List.of());
         when(pullRequestRepository.aggregatePrCreatedDailyByRepoIdsAndAuthorGithubId(any(), any(), any(), any())).thenReturn(List.of());

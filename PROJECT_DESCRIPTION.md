@@ -968,7 +968,7 @@ GitHub and `(jira_project_id, source_issue_key)` for Jira
 | `value` | DOUBLE PRECISION | |
 | `period_from` / `period_to` | DATE | Window boundaries; NULL on DAILY rows, set on AGGREGATE rows. The row shape, not the metric type, is what read queries route on |
 
-Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date, metric_type)`.
+Indexes: `(user_id, repository_id, date, metric_type)`, `(user_id, team_id, date, metric_type)`. Unique expression index `uix_metric_snapshots_identity` (V72) on `(user_id, COALESCE(team_id,-1), COALESCE(repository_id,-1), date, metric_type, COALESCE(period_from, DATE '0001-01-01'), COALESCE(period_to, DATE '0001-01-01'))` — one row per identity, COALESCE-d to the same sentinel semantics `findExisting`'s `IS NOT DISTINCT FROM` uses for the nullable dimensions.
 
 **`MetricCoverage`** — Table `metric_coverage`
 
@@ -1017,7 +1017,8 @@ Each value carries three boolean flags — `(inAiContext, dailySum, aggregatePer
 
 **`MetricSnapshotRepository`**
 - Standard JPQL finders by user/team/metricType/date/repo.
-- `findExisting(userId, teamId, repoId, date, metricType, periodFrom, periodTo)` — native SQL upsert guard using `IS NOT DISTINCT FROM` for nullable dimensions.
+- `findExisting(userId, teamId, repoId, date, metricType, periodFrom, periodTo)` — read-only lookup by identity using `IS NOT DISTINCT FROM` for nullable dimensions; used by `MetricSnapshotService.getExisting` and tests, not by the writer.
+- `upsert(userId, teamId, repoId, date, metricType, value, periodFrom, periodTo)` — native `INSERT … ON CONFLICT (…) DO UPDATE SET value, calculated_at`, conflict target the expression list of `uix_metric_snapshots_identity` (V72). What `MetricSnapshotWriter` actually calls: atomic at the database, so two concurrent callers for the same identity can no longer both insert.
 - `findByUserIdsAndTeamIdAndMetricTypeAndDateBetween(userIds, teamId, type, from, to)` — team daily series.
 - `findPersonalInWindow(user, type, from, to)` / `findPersonalByRepositoryInWindow(...)` — window resolution. Returns DAILY rows dated inside the window **plus** AGGREGATE rows whose `[periodFrom, periodTo]` the window fully contains. The shape test lives in the predicate, so callers never need a list of which types are period-stored.
 - `findPersonalAggregateCovering(user, type, from, to)` / `...CoveringByRepository(...)` — fallback for a request narrower than the grain the metric was computed on: returns the AGGREGATE row whose window covers the request.
@@ -1038,7 +1039,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 
 **`MetricCalculatorRegistry`** — Collects all `MetricCalculator` beans at startup. Validates that every `MetricType` enum value is covered by exactly one calculator and that no type is claimed twice. Startup fails immediately if coverage is incomplete — this prevents silent metric gaps when a new `MetricType` value is added without a corresponding calculator.
 
-**`MetricSnapshotWriter`** — Thin wrapper around `MetricSnapshotRepository.saveMetric(...)` used by all calculators to persist snapshots through the native-SQL upsert guard.
+**`MetricSnapshotWriter`** — Thin wrapper around `MetricSnapshotRepository.upsert(...)` used by all calculators to persist snapshots. Delegates the identity collision entirely to the database (`ON CONFLICT DO UPDATE` against `uix_metric_snapshots_identity`, V72) rather than reading first, so two concurrent calls for the same identity cannot both insert; `MetricWriteGate`'s process-local lock still serialises the scheduled writers specifically, but is no longer what closes the race for every caller.
 
 **`RepoScopeResolver`** — Resolves the list of repo IDs for a calculation context: personal scope uses `user_repo_registrations`; team scope uses `data_source_configs.team_id`.
 
@@ -1069,7 +1070,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 - `calculateDailyMetrics(Long userId, LocalDate from, LocalDate to)` — personal scope (team=null). Resolves repo IDs via `RepoScopeResolver`, then runs the registry in **two shapes, because the table stores two**. Series calculators take one pass over `[from, to]`. Calculators producing any `aggregatePeriod` type run once per ISO calendar week the range touches, each windowed on that week's Monday–Sunday, so a one-day nightly request still stores a full-week period. The branch is here, not inside calculators: each `calculate()` still sees exactly one window.
 - `calculateForTeam(Long teamId, Long requestingUserId, LocalDate from, LocalDate to)` — team scope; verifies requester is manager or ADMIN; runs same dispatch for each team member.
 - **Attribution**: always filtered by `user.email` (commits) or `user.githubLogin` (PRs) — shared repos never pollute individual metrics. Attribution is enforced per-calculator inside each `calculate()` implementation.
-- **`saveMetric(user, team, date, type, value, repo, periodFrom, periodTo)`** — on `MetricSnapshotRepository`; native SQL upsert guard; updates if exists, inserts if not. Always accessed through `MetricSnapshotWriter` from calculators.
+- **`upsert(user, team, date, type, value, repo, periodFrom, periodTo)`** — on `MetricSnapshotRepository`; native `INSERT … ON CONFLICT DO UPDATE`, atomic at the database. Always accessed through `MetricSnapshotWriter` from calculators.
 
 **`MetricSnapshotService`** — Query facade over `MetricSnapshotRepository`.
 - `getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to)`
@@ -1530,6 +1531,7 @@ validates the invite, creates the user, and calls `redeemInvite`.
 | V69 | `V69__widen_issue_title.sql` | ALTER `issues.title` from VARCHAR(255) to TEXT. Jira caps a summary at 255 upstream and GitHub does not, so the width suited one tracker and silently rejected the other — a single 550-character title aborted a whole repository's issue collection. `git_commits.message` and `github_pull_requests.title` were already TEXT; this column had kept the JPA default |
 | V70 | `V70__drop_issue_source_context.sql` | DROP `issues.source_context`. It held a denormalised label — repository full name for GitHub, project key for Jira — that nothing read, duplicating `jira_project_id` on a Jira row and `repository_id` on a GitHub one. Catalogue-only change; `IF EXISTS` so a re-run is a no-op |
 | V71 | `V71__metric_summary_runtime_version.sql` | ALTER `metric_summaries` ADD `runtime_version` VARCHAR(64), nullable; backfill existing rows to `UNKNOWN`. Pairs with pinning the `ollama` image in `docker-compose.yml`: a stored summary now carries both the prompt revision (`prompt_version`) and the model runtime build that produced it |
+| V72 | `V72__metric_snapshots_identity_index.sql` | Delete exact-duplicate `metric_snapshots` rows (same identity, keep the latest `calculated_at`, tie-broken by `id`), then `CREATE UNIQUE INDEX uix_metric_snapshots_identity` on the COALESCE-d identity `findExisting` already queries by. The writer's old guard was read-then-write — two concurrent callers computing the same window could both miss it and both insert; this closes that for every caller, not only the scheduled writers `MetricWriteGate` serialises |
 
 ### 4.2 Entity-Relationship Overview
 

@@ -100,16 +100,18 @@ class MetricSnapshotLatestQueryTest {
 
     @Test
     void findDatesByLatestCalculation_laterDateCalculatedEarlier_isNotFirst() {
-        // The row whose window reaches furthest is not the row computed most recently.
+        // The row whose window reaches furthest is not the row computed most recently; olderStill
+        // stays distinct from seed()'s repoA rows so it does not collide with the identity index.
+        LocalDate olderStill = OLD.minusWeeks(2);
         MetricSnapshot stale = snapshot(repoA, LATEST.plusDays(30), 812.0);
         stale.setCalculatedAt(Instant.parse("2026-09-21T08:01:44Z"));
-        MetricSnapshot fresh = snapshot(repoA, OLD, 813.0);
+        MetricSnapshot fresh = snapshot(repoA, olderStill, 813.0);
         fresh.setCalculatedAt(Instant.parse("2026-09-21T09:34:28Z"));
         entityManager.flush();
         entityManager.clear();
 
         assertThat(repository.findDatesByLatestCalculation(user.getId(),
-                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).first().isEqualTo(OLD);
+                MetricType.WIP_OPEN_PR_AGE_HOURS_MEDIAN)).first().isEqualTo(olderStill);
     }
 
     @Test

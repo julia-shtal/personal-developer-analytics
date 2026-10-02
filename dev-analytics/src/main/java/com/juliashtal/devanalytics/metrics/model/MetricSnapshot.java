@@ -45,11 +45,13 @@ import java.time.LocalDate;
  * <p>Invariant: {@code period_from IS NOT NULL AND period_to IS NOT NULL}.</p>
  *
  * <h3>Upsert guard</h3>
- * <p>All writes go through {@code MetricSnapshotWriter}, which uses a native-SQL
- * {@code findExisting} query with {@code IS NOT DISTINCT FROM} on nullable dimensions
- * ({@code repository_id}, {@code team_id}, {@code period_from}, {@code period_to}) to
- * locate an existing row before inserting. The table carries no unique key, so bypassing
- * the writer produces duplicate rows that aggregate incorrectly.</p>
+ * <p>All writes go through {@code MetricSnapshotWriter}, which calls
+ * {@code MetricSnapshotRepository.upsert}, a native {@code INSERT ... ON CONFLICT DO UPDATE}
+ * against the unique index {@code uix_metric_snapshots_identity} (V72). The conflict target
+ * COALESCEs the nullable dimensions ({@code repository_id}, {@code team_id},
+ * {@code period_from}, {@code period_to}) the same way {@code findExisting}'s
+ * {@code IS NOT DISTINCT FROM} compares them, so bypassing the writer with a raw insert is
+ * rejected rather than silently duplicating a row.</p>
  *
  * <h3>Scope</h3>
  * <p>Personal metrics: {@link #team} is {@code NULL}.

@@ -9,12 +9,11 @@ import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * Persists a {@link MetricSnapshot} using the native-SQL upsert guard.
- * Every {@link MetricCalculator} writes its results through this service.
+ * Persists a {@link MetricSnapshot} using the database's own upsert guard.
+ * <p>Every {@link MetricCalculator} writes its results through this service.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -22,6 +21,7 @@ public class MetricSnapshotWriter {
 
     private final MetricSnapshotRepository repository;
 
+    /** Upserts so two concurrent calls for the same identity overwrite rather than duplicate. */
     public void save(User user,
                      Team team,
                      LocalDate date,
@@ -33,20 +33,6 @@ public class MetricSnapshotWriter {
         Long teamId = team != null ? team.getId() : null;
         Long repoId = repo  != null ? repo.getId()  : null;
 
-        MetricSnapshot snapshot = repository
-                .findExisting(user.getId(), teamId, repoId, date, metricType.name(), periodFrom, periodTo)
-                .orElseGet(MetricSnapshot::new);
-
-        snapshot.setUser(user);
-        snapshot.setTeam(team);
-        snapshot.setRepository(repo);
-        snapshot.setDate(date);
-        snapshot.setMetricType(metricType);
-        snapshot.setPeriodFrom(periodFrom);
-        snapshot.setPeriodTo(periodTo);
-        snapshot.setValue(value);
-        snapshot.setCalculatedAt(Instant.now());
-
-        repository.save(snapshot);
+        repository.upsert(user.getId(), teamId, repoId, date, metricType.name(), value, periodFrom, periodTo);
     }
 }
