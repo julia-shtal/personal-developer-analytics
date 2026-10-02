@@ -38,7 +38,7 @@
 | Multi-source collection | Local Git (JGit), GitHub commits + PRs + Issues (Kohsuke), Jira Issues (REST) |
 | Two-phase async enrichment | Fast ingest → immediate enrich top 150 → background scheduler for the rest |
 | Incremental sync | Resumes from last fetched commit hash; no full re-scans |
-| 21 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, commits per week, WIP open-PR age, code review participation |
+| 22 metric types | Daily activity, lead times, churn, focus ratio, after-hours ratio, deep-work streak, knowledge silo, refactor ratio, PR size complexity, merge-without-review, commits per week, WIP open-PR age, code review participation, merges to default branch per week |
 | Dual-scope metrics | Personal (`team = NULL`) and team-scoped (per-member attribution on shared repos) |
 | AI insights | On-demand and weekly scheduled summaries via local Ollama (llama3.2); personal and team scopes; Spring Cache backed |
 | Stateless JWT auth | HS256 access tokens (15 min), rotating refresh tokens (7 days), token-version logout invalidation; single-flight concurrent 401 refresh (one `POST /auth/refresh` per burst) |
@@ -112,7 +112,7 @@ Strict **Controller → Service → Repository** layering. No controller accesse
 | `git/` | Local Git repo registration, JGit commit collection, repo subscription |
 | `github/` | GitHub repo registration, two-phase commit/PR collection, stats enrichment |
 | `issue/` | Unified Jira + GitHub issue collection and retrieval |
-| `metrics/` | 21-metric calculation engine (registry-based dispatch), snapshot persistence and retrieval |
+| `metrics/` | 22-metric calculation engine (registry-based dispatch), snapshot persistence and retrieval |
 | `ai/` | LLM context building, Ollama client, personal/team summaries, weekly scheduler |
 | `security/` | JWT filter, token service, user details, AES-256-GCM token encryption, legacy migration runner |
 | `email/` | SMTP password reset email |
@@ -644,8 +644,7 @@ storage layer.
 
 **Guarantees:**
 - One commit history per upstream repository; no duplicate ingestion.
-- Metric queries over `repoIds` attribute by `author_email` / `githubLogin`; shared repos do
-  not pollute individual metrics.
+- Metric queries over `repoIds` attribute by numeric identity, never by name: `author_github_id = User.githubUserId` for PR/review/issue metrics; `author_github_id` OR `lower(author_email) IN` the user's declared `user_commit_emails` for commit metrics. Shared repos do not pollute individual metrics. See `docs/metrics/author-attribution.md`.
 - Collection is driven by the canonical datasource's token and sync schedule.
 
 **Known trade-offs (intentional ownership semantics, not bugs):**
@@ -671,6 +670,8 @@ storage layer.
 | `last_fetched_commit_hash` | VARCHAR(64) | Watermark for incremental sync |
 | `last_scan_at` | TIMESTAMPTZ | |
 | `collect_issues` | BOOLEAN DEFAULT FALSE | When true, GITHUB-type sync also collects issues |
+| `identity_backfilled_at` | TIMESTAMPTZ | V61; null = GitHub repo awaiting the identity-attribution backfill job, non-GitHub repos seeded non-null (complete by definition) |
+| `default_branch` | VARCHAR(255) | V74; GitHub's `default_branch` for GitHub repos (fetched lazily on next PR sync), or the branch HEAD points to for local repos (set on next scan). Null until that first post-V74 sync/scan |
 
 **`GitCommitEntity`** — Table `git_commits` (sequence allocationSize=500)
 
@@ -744,7 +745,7 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
   - Opens repo via `Git.open(new File(localPath))`.
   - **Phase 1** (single-threaded): walks `git.log().call()`, extracts hash/author/date/message, stops at `lastFetchedCommitHash`. Filters already-known hashes.
   - **Phase 2** (parallel, up to 4 threads): computes diff stats (additions/deletions/filesChanged) via `DiffFormatter`.
-  - Batch-saves every 500 commits; updates `lastFetchedCommitHash` and `lastScanAt`.
+  - Batch-saves every 500 commits; updates `lastFetchedCommitHash`, `lastScanAt`, and `defaultBranch` (V74; set to `repository.getBranch()` on every scan, including the no-new-commits early return).
   - Constants: `BATCH_SIZE=500`, `DIFF_THREADS=min(CPU cores, 4)`.
 
 **`GitRepositoryService`** — `registerLocalRepo(Long userId, RegisterLocalRepoRequest)`, `listReposForUser(Long userId)`, `getRepoForUser(Long userId, Long repoId)` (ownership check), `listCommitsForRepo(Long userId, Long repoId, Pageable)`.
@@ -794,9 +795,11 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 | `repository_id` | FK → git_repositories CASCADE | |
 | `number` | INT | GitHub PR number |
 | `title` | TEXT | |
-| `author_login` | VARCHAR(255) | GitHub username |
+| `author_login` | VARCHAR(255) | GitHub username; **display only** — free text, case-sensitive, reassignable on rename |
+| `author_github_id` | BIGINT | V61; the attribution key every PR/review metric matches on. A login change cannot split one person's history |
 | `state` | VARCHAR(16) | `open` / `closed` |
 | `merged` | BOOLEAN | |
+| `base_branch` | VARCHAR(255) | V75; the PR's target branch (`base.ref`), captured from GitHub's PR list response at ingest, going forward only. Null for a PR ingested before V75, and stays null until its repository resyncs *and* that specific PR's `updated_at` changes — incremental sync skips otherwise-unchanged PRs entirely |
 | `lead_time_hours` | BIGINT | `mergedAt − createdAt` in hours |
 | `created_at` / `updated_at` / `closed_at` / `merged_at` | TIMESTAMPTZ | |
 | `additions` / `deletions` / `changed_files` | INT | Enrichment phase |
@@ -811,7 +814,8 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 |---|---|---|
 | `id` | BIGINT PK (GENERATED ALWAYS AS IDENTITY) | |
 | `pr_id` | FK → github_pull_requests CASCADE | |
-| `reviewer_login` | VARCHAR(255) | |
+| `reviewer_login` | VARCHAR(255) | **Display only** — see `reviewer_github_id` |
+| `reviewer_github_id` | BIGINT | V61; the attribution key `countDistinctPrsReviewedByUser` matches on, and what self-review exclusion compares against `author_github_id` |
 | `state` | VARCHAR(32) | APPROVED / CHANGES_REQUESTED / COMMENTED |
 | `submitted_at` | TIMESTAMPTZ | |
 
@@ -820,19 +824,22 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 **`GitHubPullRequestRepository`**
 - `findByRepositoryAndNumber(repo, number)` → `Optional`
 - `findByRepositoryOrderByCreatedAtDesc(repo, Pageable)` → `Page`
-- Aggregation (per-login filtered):
-  - `aggregatePrCreatedDailyByRepoIdsAndAuthorLogin(repoIds, login, from, to)` — `(day, repoId, count)`
-  - `aggregatePrMergedDailyByRepoIdsAndAuthorLogin(repoIds, login, from, to)`
-  - `findMergedLeadTimesByRepoIdsAndAuthorLogin(repoIds, login, from, to)` — `(repoId, createdAt, mergedAt)`
-  - `findMergedPrsByRepoIdsAndAuthorLogin(repoIds, login, from, to)` → `List<GitHubPullRequestEntity>`
+- Aggregation (filtered by the author's numeric GitHub account ID (V61) — a login is free text, case-sensitive, and reassignable on rename, so it is display-only everywhere below):
+  - `aggregatePrCreatedDailyByRepoIdsAndAuthorGithubId(repoIds, githubUserId, from, to)` — `(day, repoId, count)`
+  - `aggregatePrMergedDailyByRepoIdsAndAuthorGithubId(repoIds, githubUserId, from, to)`
+  - `findMergedLeadTimesByRepoIdsAndAuthorGithubId(repoIds, githubUserId, from, to)` — `(repoId, createdAt, mergedAt)`
+  - `findMergedPrsByRepoIdsAndAuthorGithubId(repoIds, githubUserId, from, to)` → `List<GitHubPullRequestEntity>`
+  - `findOpenPrsByRepoIdsAndAuthorGithubId(repoIds, githubUserId)` → `List<GitHubPullRequestEntity>` — no date bound, unlike every other query here: a PR opened before the reporting window still counts if it is open now. Used by `WipOpenPrAgeCalculator`
+  - `findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(repoIds, githubUserId, from, to)` — `(repoId, createdAt, mergedAt)` (reuses the lead-time projection shape); JPQL predicate `p.baseBranch = p.repository.defaultBranch` — plain equality, so a null on either side excludes rather than matches. Used by `MergesToDefaultBranchCalculator`. V75
 - Enrichment:
   - `findPendingPrsForRepository(StatsStatus, repoId, Pageable)` — newest-first
   - `findRepositoryIdsWithStatsStatus(StatsStatus)` → `List<Long>`
+  - `countByStatsStateInRange(repoIds, from, to)` → `List<StatsCoverageProjection>` — enrichment state grouped by `(statsStatus, statsSkipReason)`, windowed on `createdAt`; backs `GET /metrics/stats-coverage`
 
 **`GitHubPrReviewRepository`**
 - `deleteAllByPullRequest(pr)`, `deleteAllByPullRequestIn(List<pr>)`
 - `findFirstReviewTimestampsByPrIds(List<Long>)` — JPQL aggregate query: `SELECT r.pullRequest.id, MIN(r.submittedAt) ... GROUP BY r.pullRequest.id`; returns `List<Object[]>` with `(prId, firstReviewInstant)`.
-- `countDistinctPrsReviewedByUser(String reviewerLogin, List<Long> repoIds, Instant from, Instant to)` → `long` — counts distinct PRs reviewed within the time window, scoped to given repos, excluding self-reviews. Used by `ReviewParticipationCalculator`.
+- `countDistinctPrsReviewedByUser(Long reviewerGithubId, List<Long> repoIds, Instant from, Instant to)` → `long` — counts distinct PRs reviewed within the time window, scoped to given repos; excludes self-reviews via `pullRequest.authorGithubId <> reviewerGithubId`, a numeric comparison a login respelling cannot defeat. Used by `ReviewParticipationCalculator`.
 
 #### Services
 
@@ -868,7 +875,7 @@ The datasource a subscription belongs to is derived via `repo_id → git_reposit
 3. `GitHubPullRequestStatsEnrichmentService.enrichImmediate()` (Phase B — top 150): fetches reviews (delete+save in `github_pr_reviews`) and detail stats per PR.
 4. Phase C handled by scheduler.
 
-**`GitHubPullRequestIngestService`** — Ingest-only service. Pages PRs from GitHub API, upserts into `github_pull_requests`. Returns `IngestResult(savedEntities, apiBase, token)`.
+**`GitHubPullRequestIngestService`** — Ingest-only service. Pages PRs from GitHub API, upserts into `github_pull_requests`, capturing `base_branch` from each PR's `base.ref` (V75; new/changed PRs only — incremental sync skips the rest). Also backfills `repository.default_branch` (V74) lazily: one `GET /repos/{owner}/{repo}` call per collection run, only when it is still null, soft-failing (logged, never thrown) on any error. Returns `IngestResult(savedEntities, apiBase, token)`.
 
 **`GitHubPullRequestQueryService`** — Read side for stored PRs. `listPullRequests(repoId, pageable)` — the paginated listing `GitHubPullRequestController` serves.
 
@@ -964,7 +971,7 @@ GitHub and `(jira_project_id, source_issue_key)` for Jira
 | `team_id` | FK → teams | NULL = personal; NOT NULL = team scope |
 | `repository_id` | FK → git_repositories | NULL = all-repo aggregate |
 | `date` | DATE NOT NULL | Calendar day |
-| `metric_type` | VARCHAR(64) NOT NULL | One of 21 MetricType values |
+| `metric_type` | VARCHAR(64) NOT NULL | One of 22 MetricType values |
 | `value` | DOUBLE PRECISION | |
 | `period_from` / `period_to` | DATE | Window boundaries; NULL on DAILY rows, set on AGGREGATE rows. The row shape, not the metric type, is what read queries route on |
 
@@ -983,11 +990,11 @@ Unique constraint `uq_metric_coverage_user_date` on `(user_id, date)`; no separa
 
 The ledger records the computation rather than inferring it from the output, which is what makes the backfill converge. `MAX(metric_snapshots.date)` is a high-water mark that a capped run advances past days it skipped; `SELECT DISTINCT date FROM metric_snapshots` fails differently, because calculators write a row only when the day produced data, so a day the user did not commit on would be reported missing forever. Personal scope only — there is no `team_id` column, and `MetricsService` writes here only when `team == null` and the repo scope is non-empty.
 
-#### MetricType (Enum) — 21 values
+#### MetricType (Enum) — 22 values
 
 Each value carries three boolean flags — `(inAiContext, dailySum, aggregatePeriod)`, the triple shown in the Flags column below — and a display unit. The unit is declared on the constant so a new metric cannot be added without one; `TeamExportController` reads `type.unit` for the CSV `unit` column rather than keeping a mapping of its own. `inAiContext` marks whether the metric is included in the AI summary context; `dailySum` marks daily-count metrics (summed per-day); `aggregatePeriod` marks the metrics computed on the canonical **ISO calendar week** grain.
 
-`aggregatePeriod` is *not* a storage-shape flag. Thirteen types are written with `period_from`/`period_to` (see the AGGREGATE shape in `MetricSnapshot`), but only the five flagged ones are recomputed once per ISO week by `MetricsService`; the rest keep whatever window the calculation request covered. Read paths therefore route on the stored row shape (`period_from IS NULL`) rather than on this flag — routing on the flag is what silently dropped the other eight from every aggregate endpoint.
+`aggregatePeriod` is *not* a storage-shape flag. Fourteen types are written with `period_from`/`period_to` (see the AGGREGATE shape in `MetricSnapshot`), but only the five flagged ones are recomputed once per ISO week by `MetricsService`; the rest keep whatever window the calculation request covered. `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` is one of those nine: its calculator buckets ISO weeks itself from a single invocation over the full requested range, rather than being dispatched once per week by `MetricsService`. Read paths therefore route on the stored row shape (`period_from IS NULL`) rather than on this flag — routing on the flag is what silently dropped the other nine from every aggregate endpoint.
 
 | Value | Flags | Description |
 |---|---|---|
@@ -1012,6 +1019,7 @@ Each value carries three boolean flags — `(inAiContext, dailySum, aggregatePer
 | `MERGE_WITHOUT_REVIEW_RATIO` | `(false, false, false)` | Share of merged PRs with zero reviews |
 | `REVIEW_PARTICIPATION_COUNT` | `(true, false, true)` | Count of distinct PRs the user reviewed (excluding self-reviews) in the calculation window |
 | `WIP_OPEN_PR_AGE_HOURS_MEDIAN` | `(false, false, false)` | Median age in hours of the user's currently-open PRs — point-in-time WIP queue signal |
+| `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` | `(false, false, false)` | DORA deployment-frequency proxy: PRs merged into the repository's default branch, per ISO calendar week, per repository — a merge is not a deployment |
 
 #### Repositories (`metrics/repository/`)
 
@@ -1062,14 +1070,16 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 | `KnowledgeSiloCalculator` | `KNOWLEDGE_SILO_SCORE` (max user-share across repos) |
 | `PrSizeComplexityCalculator` | `PR_SIZE_COMPLEXITY_SCORE` (sorted median) |
 | `MergeWithoutReviewCalculator` | `MERGE_WITHOUT_REVIEW_RATIO` (PRs with no review events) |
-| `ReviewParticipationCalculator` | `REVIEW_PARTICIPATION_COUNT` (distinct PRs reviewed, cross-repo, attributed via `githubLogin`) |
+| `ReviewParticipationCalculator` | `REVIEW_PARTICIPATION_COUNT` (distinct PRs reviewed, cross-repo, attributed via `githubUserId`) |
+| `WipOpenPrAgeCalculator` | `WIP_OPEN_PR_AGE_HOURS_MEDIAN` (point-in-time; median age of currently-open PRs) |
+| `MergesToDefaultBranchCalculator` | `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` (PRs merged into the repo's default branch, bucketed into ISO weeks by the calculator itself — not per-week dispatch — one row per `(repository, week)`) |
 
 #### Services
 
 **`MetricsService`** — Thin calculation dispatcher.
 - `calculateDailyMetrics(Long userId, LocalDate from, LocalDate to)` — personal scope (team=null). Resolves repo IDs via `RepoScopeResolver`, then runs the registry in **two shapes, because the table stores two**. Series calculators take one pass over `[from, to]`. Calculators producing any `aggregatePeriod` type run once per ISO calendar week the range touches, each windowed on that week's Monday–Sunday, so a one-day nightly request still stores a full-week period. The branch is here, not inside calculators: each `calculate()` still sees exactly one window.
 - `calculateForTeam(Long teamId, Long requestingUserId, LocalDate from, LocalDate to)` — team scope; verifies requester is manager or ADMIN; runs same dispatch for each team member.
-- **Attribution**: always filtered by `user.email` (commits) or `user.githubLogin` (PRs) — shared repos never pollute individual metrics. Attribution is enforced per-calculator inside each `calculate()` implementation.
+- **Attribution**: always filtered by numeric identity — `user.githubUserId` (PRs, reviews, GitHub issues), `user.jiraAccountId` (Jira issues), or `author_github_id` OR `lower(author_email) IN user_commit_emails` (commits) — never by login or display name, so a rename cannot split one person's history. Shared repos never pollute individual metrics. Attribution is enforced per-calculator inside each `calculate()` implementation; a calculator whose identifier is absent (`AuthorIdentity.hasGithubIdentity()`/`hasCommitIdentity()` false) writes nothing rather than falling back to a looser match. See `docs/metrics/author-attribution.md`.
 - **`upsert(user, team, date, type, value, repo, periodFrom, periodTo)`** — on `MetricSnapshotRepository`; native `INSERT … ON CONFLICT DO UPDATE`, atomic at the database. Always accessed through `MetricSnapshotWriter` from calculators.
 
 **`MetricSnapshotService`** — Query facade over `MetricSnapshotRepository`.
@@ -1089,7 +1099,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 |---|---|
 | `MEDIAN` — median of the per-window medians | `PR_LEAD_TIME_HOURS_MEDIAN`, `PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN`, `ISSUE_LEAD_TIME_HOURS_MEDIAN`, `REVIEW_RESPONSE_TIME_HOURS_MEDIAN`, `PR_SIZE_COMPLEXITY_SCORE`, `WIP_OPEN_PR_AGE_HOURS_MEDIAN` |
 | `MEAN` — average of the per-window ratios | `AFTER_HOURS_COMMIT_RATIO`, `REFACTOR_RATIO`, `MERGE_WITHOUT_REVIEW_RATIO` |
-| `SUM` — windows are disjoint and add up | `REVIEW_PARTICIPATION_COUNT` |
+| `SUM` — windows are disjoint and add up | `REVIEW_PARTICIPATION_COUNT`, `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` |
 | `WIDEST_WINDOW` — report one stored window verbatim | `DEEP_WORK_STREAK_DAYS`, `COMMITS_PER_WEEK_AVG`, `KNOWLEDGE_SILO_SCORE` |
 
 `WIDEST_WINDOW` exists because three metrics cannot be recovered from sub-windows at all: a deep-work streak may run across a window boundary, `COMMITS_PER_WEEK_AVG` is already a per-week rate, and the denominator behind `KNOWLEDGE_SILO_SCORE` is not stored. Reducing them would state something that was never measured, so one window is reported as-is and the caller labels the figure with it. Cross-repository rows sharing a window are combined first, so a user with more repositories does not get a longer series.
@@ -1156,6 +1166,7 @@ Read-only; behind `GET /api/metrics/stats-coverage`.
 | GET | `/wip-open-pr-age` | `repoId?` | `MetricPointInTimeDto` — point-in-time, not windowed. Resolved by `calculated_at`, and inside the requested repository when `repoId` is given, so a calculation over another window or another repository cannot decide which figure is returned |
 | GET | `/merge-without-review-ratio` | `from`, `to`, `repoId?` | `MetricAggregateDto` |
 | GET | `/review-participation` | `from`, `to` | `MetricAggregateDto` — cross-repo, no `repoId` param |
+| GET | `/merges-to-default-branch-per-week` | `from`, `to`, `repoId?` | `MetricAggregateDto` — DORA deployment-frequency proxy; not in AI context (`inAiContext=false`) |
 | GET | `/anomalies` | `from`, `to` | `Map<String, Boolean>` — per-metric 2σ anomaly flags |
 | GET | `/freshness` | — | `MetricsFreshnessDto` — `metricsComputedThrough` (latest personal snapshot date), `coverageFrom`, `coverageTo`, `daysRemaining`. Read-only: calls `describeCoverage`, never `backfillUser`, so no backfill runs in a request thread |
 
@@ -1201,6 +1212,7 @@ The AI layer generates natural-language summaries and metric explanations from p
 | `raw_model_output` | TEXT | Verbatim model response |
 | `prompt_version` | VARCHAR(16) NOT NULL | First 16 hex chars of the sha256 of the system prompt that produced the summary; `PRE_VERSIONING` for rows written before V64 |
 | `runtime_version` | VARCHAR(64) | LLM runtime's reported version (`GET /api/version`, cached per process); `UNKNOWN` for rows written before V71 or when the read fails |
+| `validation_report` | TEXT | V73; per-rule validation outcome (dropped-insight counts, final insight count, range check) for a parsed summary. Null for rows written before V73 — "not validated," distinct from an empty report |
 | `generated_at` | TIMESTAMPTZ DEFAULT now() | When the summary was generated |
 
 Unique index: `(COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,''), prompt_version)` — one summary per scope identity **per prompt version**, so two prompt revisions can hold a row for the same scope and period and be compared against each other.
@@ -1532,6 +1544,10 @@ validates the invite, creates the user, and calls `redeemInvite`.
 | V70 | `V70__drop_issue_source_context.sql` | DROP `issues.source_context`. It held a denormalised label — repository full name for GitHub, project key for Jira — that nothing read, duplicating `jira_project_id` on a Jira row and `repository_id` on a GitHub one. Catalogue-only change; `IF EXISTS` so a re-run is a no-op |
 | V71 | `V71__metric_summary_runtime_version.sql` | ALTER `metric_summaries` ADD `runtime_version` VARCHAR(64), nullable; backfill existing rows to `UNKNOWN`. Pairs with pinning the `ollama` image in `docker-compose.yml`: a stored summary now carries both the prompt revision (`prompt_version`) and the model runtime build that produced it |
 | V72 | `V72__metric_snapshots_identity_index.sql` | Delete exact-duplicate `metric_snapshots` rows (same identity, keep the latest `calculated_at`, tie-broken by `id`), then `CREATE UNIQUE INDEX uix_metric_snapshots_identity` on the COALESCE-d identity `findExisting` already queries by. The writer's old guard was read-then-write — two concurrent callers computing the same window could both miss it and both insert; this closes that for every caller, not only the scheduled writers `MetricWriteGate` serialises |
+| V73 | `V73__metric_summaries_validation_report.sql` | ALTER `metric_summaries` ADD `validation_report` TEXT, nullable, no backfill. Records per-rule validation outcome (dropped-insight counts, final count, range check) when a summary is parsed, so a stored insight is always traceable to the rule that let it through. Rows written before this change predate validation entirely, so null means "not validated," a state distinct from an empty report and not safe to manufacture |
+| V74 | `V74__git_repositories_default_branch.sql` | ALTER `git_repositories` ADD `default_branch` VARCHAR(255), nullable. Needed to tell a merge into the mainline from a merge into a feature/release branch (`MERGES_TO_DEFAULT_BRANCH_PER_WEEK`). GitHub's value requires an API call a SQL migration cannot make, so existing rows are backfilled lazily — GitHub repos on their next PR sync, local repos on their next scan — not by this migration |
+| V75 | `V75__github_pull_requests_base_branch.sql` | ALTER `github_pull_requests` ADD `base_branch` VARCHAR(255), nullable. The PR's target branch, captured from GitHub's PR list endpoint (`base.ref`) at ingest — already in the list response, no extra API call. PRs ingested before this migration keep `base_branch = NULL` until their repository is next synced *and* that PR's `updated_at` changes; incremental sync skips otherwise-unchanged PRs, so an already-merged historical PR may never be re-mapped — a deliberate scope cut, not a dedicated backfill job |
+| V76 | `V76__metric_snapshots_comment_refresh.sql` | Restate the `metric_snapshots` table comment (V66 is frozen) to add `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` under the AGGREGATE section: 8 DAILY + 14 AGGREGATE = 22 types, exhaustive and disjoint. Notes that this type is AGGREGATE-shape with `aggregatePeriod=false` — its calculator buckets ISO weeks itself rather than being dispatched once per week by `MetricsService`. Comment-only — no DDL, no data change |
 
 ### 4.2 Entity-Relationship Overview
 
@@ -1701,7 +1717,7 @@ Phase C — Background sweep (every 2 minutes, 50 items/run)
 
 | Scope | team column | Repo source | Attribution |
 |---|---|---|---|
-| Personal | NULL | `UserRepoRegistration` | `author_email = user.email` / `author_login = user.githubLogin` |
+| Personal | NULL | `UserRepoRegistration` | `author_github_id = user.githubUserId` / `lower(author_email) IN user_commit_emails` |
 | Team | team FK | `DataSourceConfig.team_id` | same per-author filter |
 
 ### 8.2 Read-Side Aggregation
@@ -1723,7 +1739,8 @@ Phase C — Background sweep (every 2 minutes, 50 items/run)
 | `KNOWLEDGE_SILO_SCORE` | `KnowledgeSiloCalculator` | `max(userCommitsInRepo / totalCommitsInRepo)` across all repos in window. |
 | `PR_SIZE_COMPLEXITY_SCORE` | `PrSizeComplexityCalculator` | Per PR: `(additions + deletions) / max(commitsCount, 1)`. Groups by repo, takes sorted median. |
 | `MERGE_WITHOUT_REVIEW_RATIO` | `MergeWithoutReviewCalculator` | `findFirstReviewTimestampsByPrIds()` gives PRs WITH reviews. Ratio = `(merged PRs − PRs with reviews) / merged PRs`. |
-| `REVIEW_PARTICIPATION_COUNT` | `ReviewParticipationCalculator` | `countDistinctPrsReviewedByUser` JPQL on `GitHubPrReviewRepository`; cross-repo (`repo=null`); attributed via `User.githubLogin`; guards: skip if `githubLogin=null` or `repoIds` empty. |
+| `REVIEW_PARTICIPATION_COUNT` | `ReviewParticipationCalculator` | `countDistinctPrsReviewedByUser` JPQL on `GitHubPrReviewRepository`; cross-repo (`repo=null`); attributed via `User.githubUserId`; guards: skip if `githubUserId=null` or `repoIds` empty. |
+| `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` | `MergesToDefaultBranchCalculator` | `findMergedToDefaultBranchByRepoIdsAndAuthorGithubId` filters on `base_branch = repository.default_branch` (plain equality — null on either side excludes, never matches). Calculator buckets results by UTC-day-derived ISO week per repo, one `metric_snapshots` row per `(repository, week)`; guards: skip if no GitHub identity or `repoIds` empty. DORA deployment-frequency proxy — see `docs/metrics/merges-to-default-branch-per-week.md`. |
 
 ---
 
@@ -1745,7 +1762,7 @@ AiSummaryController / MeetingExportController
 
 ### 9.2 Context Building
 
-Context building is handled by `AiContextBuilderService`. It uses 12 of the 21 metric types as AI context — those with `inAiContext=true`: 6 activity metrics (5 daily counts plus `DAILY_CHURN_RATIO`), the 4 flow/lead-time metrics, `REVIEW_PARTICIPATION_COUNT`, and `FOCUS_RATIO_DAYS_TASKS`. For each metric it computes:
+Context building is handled by `AiContextBuilderService`. It uses 12 of the 22 metric types as AI context — those with `inAiContext=true`: 6 activity metrics (5 daily counts plus `DAILY_CHURN_RATIO`), the 4 flow/lead-time metrics, `REVIEW_PARTICIPATION_COUNT`, and `FOCUS_RATIO_DAYS_TASKS`. For each metric it computes:
 
 | Aggregate | How |
 |---|---|
@@ -2128,4 +2145,4 @@ Ollama must be running separately: `ollama serve` (and `ollama pull llama3.2` on
 
 ---
 
-*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 21-metric calculation engine (registry-based dispatch via `MetricCalculatorRegistry`, 17 `MetricCalculator` beans) with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries, 2σ anomaly detection, 1:1 meeting prep export, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (25 controllers, 66 Flyway migrations, 25 repositories).*
+*Personal Developer Analytics — multi-source data collection (GitHub, Jira, local Git), two-phase async enrichment, 22-metric calculation engine (registry-based dispatch via `MetricCalculatorRegistry`, 18 `MetricCalculator` beans) with personal/team scope isolation, stateless JWT auth with token-version logout invalidation + AES-256-GCM token encryption + single-flight refresh + httpOnly refresh cookie, RBAC, per-user rate limiting, local LLM AI insights (Ollama llama3.2) with weekly scheduled summaries, 2σ anomaly detection, 1:1 meeting prep export, follow-up AI conversations, token-based team invitations, 1:1 direct messaging, data reliability with sync-job persistence and backfill detection, Actuator health checks with Ollama indicator, and a full React SPA with command palette, messages, anomaly badges, and real-time unread indicators served from the same Spring Boot process (25 controllers, 76 Flyway migrations, 25 repositories).*
