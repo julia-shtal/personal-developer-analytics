@@ -47,6 +47,10 @@ public class GitHubPullRequestEntity {
 
     private String state;       // open, closed
     private boolean merged;
+
+    /** The PR's target branch ("base.ref" in the GitHub API). Null for PRs ingested before this field existed. */
+    private String baseBranch;
+
     private Long leadTimeHours;
 
     private Instant createdAt;

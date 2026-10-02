@@ -472,6 +472,34 @@ class MetricsControllerTest {
                 .andExpect(jsonPath("$.value").value(0.1));
     }
 
+    @Test
+    @WithMockUser
+    void getMergesToDefaultBranchPerWeek_returnsAggregate() throws Exception {
+        when(snapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
+                any(), eq(MetricType.MERGES_TO_DEFAULT_BRANCH_PER_WEEK), eq(FROM), eq(TO)))
+                .thenReturn(List.of(aggregateSnapshot(MetricType.MERGES_TO_DEFAULT_BRANCH_PER_WEEK, 3.0, FROM, TO)));
+
+        mvc.perform(get("/api/metrics/merges-to-default-branch-per-week")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value(3.0))
+                .andExpect(jsonPath("$.metricType").value("MERGES_TO_DEFAULT_BRANCH_PER_WEEK"));
+    }
+
+    @Test
+    @WithMockUser
+    void getMergesToDefaultBranchPerWeek_repoIdNotAccessible_returnsNotFound() throws Exception {
+        when(repoService.getAccessibleRepo(currentUser.getId(), 34L))
+                .thenThrow(new NoSuchElementException("Git repo not found: 34"));
+
+        mvc.perform(get("/api/metrics/merges-to-default-branch-per-week")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString())
+                        .param("repoId", "34"))
+                .andExpect(status().isNotFound());
+    }
+
     // =========================================================================
     // Focus ratio endpoints
     // =========================================================================

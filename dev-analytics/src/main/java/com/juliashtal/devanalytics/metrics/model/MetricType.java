@@ -18,6 +18,8 @@ public enum MetricType {
     PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN(true, false, true, "h"),
     REVIEW_RESPONSE_TIME_HOURS_MEDIAN(true, false, true, "h"),
     FOCUS_RATIO_DAYS_TASKS(true, false, false, "%"),
+    /** DORA deployment-frequency proxy: PRs merged into the default branch, per ISO week per repository (a merge is not a deployment). */
+    MERGES_TO_DEFAULT_BRANCH_PER_WEEK(false, false, false, "merges/wk"),
 
     // Wellness signals
     /** Ratio of commits made outside 09:00–18:00 Mon–Fri in the user's timezone. */

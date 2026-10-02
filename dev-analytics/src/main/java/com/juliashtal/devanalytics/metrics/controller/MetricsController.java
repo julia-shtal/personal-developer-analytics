@@ -305,6 +305,16 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(MERGE_WITHOUT_REVIEW_RATIO, from, to, repoId);
     }
 
+    @Operation(summary = "Merges to Default Branch per ISO Week (DORA deployment-frequency proxy) for the current user")
+    @GetMapping("/merges-to-default-branch-per-week")
+    public MetricAggregateDto getMergesToDefaultBranchPerWeek(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long repoId
+    ) {
+        return getPersonalLeadTimeAggregate(MERGES_TO_DEFAULT_BRANCH_PER_WEEK, from, to, repoId);
+    }
+
     @Operation(summary = "Code Review Participation (distinct PRs reviewed) for the current user")
     @GetMapping("/review-participation")
     public MetricAggregateDto getReviewParticipation(

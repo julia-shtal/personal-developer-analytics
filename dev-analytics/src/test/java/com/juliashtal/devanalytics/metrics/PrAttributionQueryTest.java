@@ -3,6 +3,7 @@ package com.juliashtal.devanalytics.metrics;
 import com.juliashtal.devanalytics.github.repository.GitHubPrReviewRepository;
 import com.juliashtal.devanalytics.github.repository.GitHubPullRequestRepository;
 import com.juliashtal.devanalytics.metrics.model.DailyCountProjection;
+import com.juliashtal.devanalytics.metrics.model.PrLeadTimeProjection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -181,6 +182,59 @@ class PrAttributionQueryTest {
     }
 
     // -------------------------------------------------------------------------
+    // Default-branch filtering. Each test seeds its own repo (with a specific default
+    // branch) rather than reusing the class-level repoId from seed().
+    // -------------------------------------------------------------------------
+
+    @Test
+    void findMergedToDefaultBranchByRepoIdsAndAuthorGithubId_baseMatchesDefault_isCounted() {
+        Long dsId = insertDataSource(insertUser());
+        Long repo = insertRepoWithDefaultBranch(dsId, "default-branch-match-" + System.nanoTime(), "main");
+        insertMergedPrWithBaseBranch(repo, 1, AUTHOR_ID, WHEN, WHEN, "main");
+
+        List<PrLeadTimeProjection> rows = prRepository.findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(
+                List.of(repo), AUTHOR_ID, FROM, TO);
+
+        assertThat(rows).hasSize(1);
+    }
+
+    @Test
+    void findMergedToDefaultBranchByRepoIdsAndAuthorGithubId_baseIsFeatureBranch_isExcluded() {
+        Long dsId = insertDataSource(insertUser());
+        Long repo = insertRepoWithDefaultBranch(dsId, "default-branch-mismatch-" + System.nanoTime(), "main");
+        insertMergedPrWithBaseBranch(repo, 1, AUTHOR_ID, WHEN, WHEN, "release/1.0");
+
+        List<PrLeadTimeProjection> rows = prRepository.findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(
+                List.of(repo), AUTHOR_ID, FROM, TO);
+
+        assertThat(rows).isEmpty();
+    }
+
+    @Test
+    void findMergedToDefaultBranchByRepoIdsAndAuthorGithubId_repoDefaultBranchUnknown_isExcluded() {
+        Long dsId = insertDataSource(insertUser());
+        Long repo = insertRepoWithDefaultBranch(dsId, "default-branch-unknown-" + System.nanoTime(), null);
+        insertMergedPrWithBaseBranch(repo, 1, AUTHOR_ID, WHEN, WHEN, "main");
+
+        List<PrLeadTimeProjection> rows = prRepository.findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(
+                List.of(repo), AUTHOR_ID, FROM, TO);
+
+        assertThat(rows).isEmpty();
+    }
+
+    @Test
+    void findMergedToDefaultBranchByRepoIdsAndAuthorGithubId_prBaseBranchUnknown_isExcluded() {
+        Long dsId = insertDataSource(insertUser());
+        Long repo = insertRepoWithDefaultBranch(dsId, "pr-base-unknown-" + System.nanoTime(), "main");
+        insertMergedPrWithBaseBranch(repo, 1, AUTHOR_ID, WHEN, WHEN, null);
+
+        List<PrLeadTimeProjection> rows = prRepository.findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(
+                List.of(repo), AUTHOR_ID, FROM, TO);
+
+        assertThat(rows).isEmpty();
+    }
+
+    // -------------------------------------------------------------------------
     // Fixtures
     // -------------------------------------------------------------------------
 
@@ -229,6 +283,25 @@ class PrAttributionQueryTest {
                         + "VALUES (?, ?, 'PR', ?, ?, 'closed', true, ?, ?) RETURNING id",
                 Long.class, repoId, number, STORED_LOGIN, authorGithubId,
                 Timestamp.from(createdAt), Timestamp.from(mergedAt));
+    }
+
+    /** Overload of {@link #insertRepo} that also sets a default branch. */
+    private Long insertRepoWithDefaultBranch(Long dataSourceId, String name, String defaultBranch) {
+        return jdbc.queryForObject(
+                "INSERT INTO git_repositories (data_source_id, name, local_path, repo_type, default_branch) "
+                        + "VALUES (?, ?, ?, 'LOCAL', ?) RETURNING id",
+                Long.class, dataSourceId, name, "/tmp/" + name, defaultBranch);
+    }
+
+    /** Overload of {@link #insertMergedPr} that targets an explicit repo and sets the PR's base branch. */
+    private Long insertMergedPrWithBaseBranch(Long repositoryId, int number, Long authorGithubId,
+                                               Instant createdAt, Instant mergedAt, String baseBranch) {
+        return jdbc.queryForObject(
+                "INSERT INTO github_pull_requests (repository_id, number, title, author_login, "
+                        + "author_github_id, state, merged, created_at, merged_at, base_branch) "
+                        + "VALUES (?, ?, 'PR', ?, ?, 'closed', true, ?, ?, ?) RETURNING id",
+                Long.class, repositoryId, number, STORED_LOGIN, authorGithubId,
+                Timestamp.from(createdAt), Timestamp.from(mergedAt), baseBranch);
     }
 
     private void insertReview(Long prId, String reviewerLogin, Long reviewerGithubId) {

@@ -334,4 +334,116 @@ class GitHubPullRequestIngestServiceTest {
 
         assertThat(result.savedEntities()).hasSize(2);
     }
+
+    // ── base_branch captured from the list response ────────────────────────
+
+    @Test
+    void collectPullRequests_prHasBaseRef_mapsBaseBranch() {
+        GitRepositoryEntity repo = repo();
+        repo.setDefaultBranch("main"); // already known: skip the default-branch fetch path
+        when(repoRepository.findById(10L)).thenReturn(Optional.of(repo));
+        when(clientFactory.getDecryptedToken(any())).thenReturn("token");
+        when(prRepository.findByRepository(repo)).thenReturn(List.of());
+        when(prRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        String body = """
+                [{"number":1,"title":"Feature","state":"open",
+                  "user":{"login":"alice"},
+                  "base":{"ref":"main"},
+                  "created_at":"2024-01-01T10:00:00Z",
+                  "updated_at":"2024-01-02T10:00:00Z",
+                  "merged_at":null,"closed_at":null,
+                  "comments":0,"review_comments":0}]""";
+        stubFor(get(urlPathMatching("/repos/owner/test-repo/pulls.*"))
+                .willReturn(aResponse().withStatus(200).withBody(body)
+                        .withHeader("Content-Type", "application/json")));
+
+        GitHubPullRequestIngestService.IngestResult result = service.collectPullRequests(10L, null);
+
+        assertThat(result.savedEntities().get(0).getBaseBranch()).isEqualTo("main");
+    }
+
+    @Test
+    void collectPullRequests_prMissingBaseNode_leavesBaseBranchNull() {
+        GitRepositoryEntity repo = repo();
+        repo.setDefaultBranch("main");
+        when(repoRepository.findById(10L)).thenReturn(Optional.of(repo));
+        when(clientFactory.getDecryptedToken(any())).thenReturn("token");
+        when(prRepository.findByRepository(repo)).thenReturn(List.of());
+        when(prRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        String body = """
+                [{"number":1,"title":"No base node","state":"open",
+                  "user":{"login":"alice"},
+                  "created_at":"2024-01-01T10:00:00Z",
+                  "updated_at":"2024-01-02T10:00:00Z",
+                  "merged_at":null,"closed_at":null,
+                  "comments":0,"review_comments":0}]""";
+        stubFor(get(urlPathMatching("/repos/owner/test-repo/pulls.*"))
+                .willReturn(aResponse().withStatus(200).withBody(body)
+                        .withHeader("Content-Type", "application/json")));
+
+        GitHubPullRequestIngestService.IngestResult result = service.collectPullRequests(10L, null);
+
+        assertThat(result.savedEntities().get(0).getBaseBranch()).isNull();
+    }
+
+    // ── default_branch backfilled lazily, once, when unknown ────────────────
+
+    @Test
+    void collectPullRequests_repoDefaultBranchUnknown_fetchesAndStoresIt() {
+        GitRepositoryEntity repo = repo(); // defaultBranch is null
+        when(repoRepository.findById(10L)).thenReturn(Optional.of(repo));
+        when(clientFactory.getDecryptedToken(any())).thenReturn("token");
+        when(prRepository.findByRepository(repo)).thenReturn(List.of());
+
+        stubFor(get(urlPathEqualTo("/repos/owner/test-repo"))
+                .willReturn(aResponse().withStatus(200)
+                        .withBody("{\"default_branch\":\"main\"}")
+                        .withHeader("Content-Type", "application/json")));
+        stubFor(get(urlPathMatching("/repos/owner/test-repo/pulls.*"))
+                .willReturn(aResponse().withStatus(200).withBody("[]")
+                        .withHeader("Content-Type", "application/json")));
+
+        service.collectPullRequests(10L, null);
+
+        assertThat(repo.getDefaultBranch()).isEqualTo("main");
+        verify(repoRepository).save(repo); // still the single existing save call, not a second one
+    }
+
+    @Test
+    void collectPullRequests_repoMetadataFetchFails_doesNotFailTheSync() {
+        GitRepositoryEntity repo = repo(); // defaultBranch is null
+        when(repoRepository.findById(10L)).thenReturn(Optional.of(repo));
+        when(clientFactory.getDecryptedToken(any())).thenReturn("token");
+        when(prRepository.findByRepository(repo)).thenReturn(List.of());
+
+        // No stub for GET /repos/owner/test-repo -> WireMock answers 404.
+        stubFor(get(urlPathMatching("/repos/owner/test-repo/pulls.*"))
+                .willReturn(aResponse().withStatus(200).withBody("[]")
+                        .withHeader("Content-Type", "application/json")));
+
+        GitHubPullRequestIngestService.IngestResult result = service.collectPullRequests(10L, null);
+
+        assertThat(repo.getDefaultBranch()).isNull();
+        assertThat(result.savedEntities()).isEmpty(); // no exception propagated
+    }
+
+    @Test
+    void collectPullRequests_repoDefaultBranchAlreadyKnown_doesNotRefetch() {
+        GitRepositoryEntity repo = repo();
+        repo.setDefaultBranch("main");
+        when(repoRepository.findById(10L)).thenReturn(Optional.of(repo));
+        when(clientFactory.getDecryptedToken(any())).thenReturn("token");
+        when(prRepository.findByRepository(repo)).thenReturn(List.of());
+
+        // No stub for GET /repos/owner/test-repo at all: if the code calls it, WireMock verify fails.
+        stubFor(get(urlPathMatching("/repos/owner/test-repo/pulls.*"))
+                .willReturn(aResponse().withStatus(200).withBody("[]")
+                        .withHeader("Content-Type", "application/json")));
+
+        service.collectPullRequests(10L, null);
+
+        verify(0, getRequestedFor(urlPathEqualTo("/repos/owner/test-repo")));
+    }
 }

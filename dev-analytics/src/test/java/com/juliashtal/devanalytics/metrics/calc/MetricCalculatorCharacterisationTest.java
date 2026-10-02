@@ -122,7 +122,8 @@ class MetricCalculatorCharacterisationTest {
                 new PrSizeComplexityCalculator(pullRequestRepository, gitRepoRepository, writer),
                 new MergeWithoutReviewCalculator(pullRequestRepository, prReviewRepository, gitRepoRepository, writer),
                 new ReviewParticipationCalculator(prReviewRepository, writer),
-                new WipOpenPrAgeCalculator(pullRequestRepository, gitRepoRepository, writer)
+                new WipOpenPrAgeCalculator(pullRequestRepository, gitRepoRepository, writer),
+                new MergesToDefaultBranchCalculator(pullRequestRepository, gitRepoRepository, writer)
         ));
     }
 }

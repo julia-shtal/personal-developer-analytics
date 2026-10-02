@@ -178,6 +178,11 @@ export function DashboardPage() {
     queryFn: () => metricsApi.commitsPerWeekAvg(from, to).then((r) => r.data),
   });
 
+  const mergesToDefaultBranch = useQuery({
+    queryKey: ['merges-to-default-branch-per-week', from, to, repoId],
+    queryFn: () => metricsApi.mergesToDefaultBranchPerWeek(from, to, rId).then((r) => r.data),
+  });
+
   const deepWorkStreak = useQuery({
     queryKey: ['deep-work-streak', from, to],
     queryFn: () => metricsApi.deepWorkStreak(from, to).then((r) => r.data),
@@ -483,6 +488,16 @@ export function DashboardPage() {
             icon={<MergeFreq />}
             tooltip="Average number of commits you authored per ISO calendar week in the selected window."
             onSetGoal={() => openGoalModal('COMMITS_PER_WEEK_AVG', 'commits per week')}
+          />
+          <KpiTile
+            label="merges to main"
+            value={numSuffix(mergesToDefaultBranch.data?.value, '/wk')}
+            sub="default branch · per iso week"
+            accent="accent"
+            icon={<PRMerged />}
+            tooltip="Pull requests you merged into the repository's default branch, per ISO calendar week."
+            badge={<DoraProxyBadge metricKey="MERGES_TO_DEFAULT_BRANCH_PER_WEEK" />}
+            onSetGoal={() => openGoalModal('MERGES_TO_DEFAULT_BRANCH_PER_WEEK', 'merges to main')}
           />
         </div>
         <div className="divider" />

@@ -67,6 +67,10 @@ public class GitRepositoryEntity {
     @Column(name = "issues_last_synced_at")
     private Instant issuesLastSyncedAt;
 
+    /** GitHub's {@code default_branch} for GitHub repos, or the branch HEAD points to for local repos. */
+    @Column(name = "default_branch")
+    private String defaultBranch;
+
     /**
      * When this repository's stored records were confirmed to carry the numeric identity
      * columns. Initialised for every newly created repository, because ingest has captured

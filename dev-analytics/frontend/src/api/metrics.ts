@@ -59,6 +59,9 @@ export const metricsApi = {
   commitsPerWeekAvg: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/commits-per-week-avg', { params: { from, to } }),
 
+  mergesToDefaultBranchPerWeek: (from: string, to: string, repoId?: number) =>
+    api.get<MetricAggregateDto>('/metrics/merges-to-default-branch-per-week', { params: { from, to, repoId } }),
+
   deepWorkStreak: (from: string, to: string) =>
     api.get<MetricAggregateDto>('/metrics/deep-work-streak', { params: { from, to } }),
 
