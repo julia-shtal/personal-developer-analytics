@@ -22,4 +22,9 @@ export const METRIC_QUALIFIERS: Partial<Record<MetricType, MetricQualifier>> = {
     kind: 'proxy',
     note: 'Proxy for DORA lead time for changes: measured from pull-request open (or first commit) to merge, not from commit to production deploy.',
   },
+  MERGES_TO_DEFAULT_BRANCH_PER_WEEK: {
+    dora: 'Deployment frequency',
+    kind: 'proxy',
+    note: 'Proxy for DORA deployment frequency: counts pull requests merged into the default branch, not actual deployments — this platform has no CI/CD pipeline integration.',
+  },
 };

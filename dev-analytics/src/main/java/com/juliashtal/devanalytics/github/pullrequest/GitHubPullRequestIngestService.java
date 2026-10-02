@@ -72,6 +72,10 @@ public class GitHubPullRequestIngestService {
         String apiBase = resolveApiBase(cfg.getBaseUrl());
         String token = clientFactory.getDecryptedToken(cfg);
 
+        if (repo.getDefaultBranch() == null) {
+            fetchAndSetDefaultBranch(repo, apiBase, token);
+        }
+
         if (jobState != null) {
             jobState.phaseTotal = fetchTotalPrCount(apiBase, token, repo.getName());
         }
@@ -203,6 +207,10 @@ public class GitHubPullRequestIngestService {
         entity.setAuthorGithubId(userNode.isObject() && userNode.path("id").isNumber()
                 ? userNode.path("id").asLong() : null);
 
+        JsonNode baseNode = node.path("base");
+        entity.setBaseBranch(baseNode.isMissingNode() || baseNode.isNull()
+                ? null : baseNode.path("ref").asText(null));
+
         entity.setState(node.path("state").asText("open"));
 
         Instant createdAt = parseInstant(node.path("created_at"));
@@ -276,5 +284,30 @@ public class GitHubPullRequestIngestService {
             log.debug("Could not fetch total PR count for {}: {}", repoFullName, e.getMessage());
         }
         return -1;
+    }
+
+    /**
+     * Fetches and stores the repository's default branch once, when unknown.
+     * <p>Best-effort: a failure is logged and swallowed rather than failing the PR sync.</p>
+     */
+    private void fetchAndSetDefaultBranch(GitRepositoryEntity repo, String apiBase, String token) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(apiBase + "/repos/" + repo.getName()))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github+json")
+                    .GET()
+                    .build();
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                String defaultBranch = objectMapper.readTree(response.body())
+                        .path("default_branch").asText(null);
+                if (defaultBranch != null && !defaultBranch.isBlank()) {
+                    repo.setDefaultBranch(defaultBranch);
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not fetch default branch for {}: {}", repo.getName(), e.getMessage());
+        }
     }
 }

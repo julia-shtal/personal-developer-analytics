@@ -48,6 +48,7 @@ const LABEL: Record<MetricType, string> = {
   REFACTOR_RATIO: '',
   PR_SIZE_COMPLEXITY_SCORE: '',
   COMMITS_PER_WEEK_AVG: '',
+  MERGES_TO_DEFAULT_BRANCH_PER_WEEK: '',
 };
 
 /**

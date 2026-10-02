@@ -112,6 +112,30 @@ public interface GitHubPullRequestRepository extends JpaRepository<GitHubPullReq
             @Param("to") Instant to);
 
     /**
+     * Merged PRs whose base branch matches the repository's current default branch — the
+     * merge events {@code MERGES_TO_DEFAULT_BRANCH_PER_WEEK} counts. A repo or PR with an
+     * unknown default/base branch contributes nothing: {@code =} is false (not true) when
+     * either side is null, so this never falls back to assuming a match.
+     */
+    @Query("""
+    select p.repository.id as repoId,
+           p.createdAt     as createdAt,
+           p.mergedAt      as mergedAt
+    from GitHubPullRequestEntity p
+    where p.repository.id IN :repoIds
+      and p.authorGithubId = :githubUserId
+      and p.merged = true
+      and p.mergedAt >= :from
+      and p.mergedAt  < :to
+      and p.baseBranch = p.repository.defaultBranch
+    """)
+    List<PrLeadTimeProjection> findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(
+            @Param("repoIds") List<Long> repoIds,
+            @Param("githubUserId") Long githubUserId,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    /**
      * Currently-open PRs (not merged, not closed) authored by the given GitHub account within the repo
      * scope. Unlike every other PR query this has no date bound: a PR opened before the reporting
      * window still counts if it is open now. Used by WipOpenPrAgeCalculator.

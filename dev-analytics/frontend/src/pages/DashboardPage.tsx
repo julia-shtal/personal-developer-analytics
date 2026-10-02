@@ -178,6 +178,11 @@ export function DashboardPage() {
     queryFn: () => metricsApi.commitsPerWeekAvg(from, to).then((r) => r.data),
   });
 
+  const mergesToDefaultBranch = useQuery({
+    queryKey: ['merges-to-default-branch-per-week', from, to, repoId],
+    queryFn: () => metricsApi.mergesToDefaultBranchPerWeek(from, to, rId).then((r) => r.data),
+  });
+
   const deepWorkStreak = useQuery({
     queryKey: ['deep-work-streak', from, to],
     queryFn: () => metricsApi.deepWorkStreak(from, to).then((r) => r.data),
@@ -550,6 +555,16 @@ export function DashboardPage() {
             icon={<Review />}
             tooltip="Number of distinct pull requests in which you participated as a reviewer (approved, requested changes, or commented) in the selected period. Self-reviews excluded."
             onSetGoal={() => openGoalModal('REVIEW_PARTICIPATION_COUNT', 'code review participation')}
+          />
+          <KpiTile
+            label="merges to main"
+            value={numSuffix(mergesToDefaultBranch.data?.value, '/wk')}
+            sub="default branch · per iso week"
+            accent="accent"
+            icon={<PRMerged />}
+            tooltip="Pull requests you merged into the repository's default branch, per ISO calendar week."
+            badge={<DoraProxyBadge metricKey="MERGES_TO_DEFAULT_BRANCH_PER_WEEK" />}
+            onSetGoal={() => openGoalModal('MERGES_TO_DEFAULT_BRANCH_PER_WEEK', 'merges to main')}
           />
         </div>
       </div>

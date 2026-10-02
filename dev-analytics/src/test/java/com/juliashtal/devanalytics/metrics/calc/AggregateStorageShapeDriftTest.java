@@ -80,7 +80,8 @@ class AggregateStorageShapeDriftTest {
             WIP_OPEN_PR_AGE_HOURS_MEDIAN,
             DEEP_WORK_STREAK_DAYS,
             COMMITS_PER_WEEK_AVG,
-            KNOWLEDGE_SILO_SCORE);
+            KNOWLEDGE_SILO_SCORE,
+            MERGES_TO_DEFAULT_BRANCH_PER_WEEK);
 
     private static final Long REPO_ID = 10L;
     private static final LocalDate FROM = LocalDate.of(2024, 1, 15);   // Monday
@@ -117,6 +118,8 @@ class AggregateStorageShapeDriftTest {
         List<DailyCountProjection> prsMerged  = List.of(dailyCount(FROM.plusDays(1), 2L));
         List<PrLeadTimeProjection> prLeadTimes =
                 List.of(prLeadTime(REPO_ID, instant(FROM, 9), instant(FROM.plusDays(1), 15)));
+        List<PrLeadTimeProjection> mergesToDefaultBranch =
+                List.of(prLeadTime(REPO_ID, instant(FROM, 9), instant(FROM.plusDays(1), 15)));
         List<GitHubPullRequestEntity> mergedPrs =
                 List.of(pr(1L, instant(FROM, 9), instant(FROM.plusDays(1), 15), 200, 40, 4));
         List<GitHubPullRequestEntity> openPrs = List.of(pr(2L, instant(FROM, 9), null, 10, 5, 1));
@@ -146,6 +149,8 @@ class AggregateStorageShapeDriftTest {
         when(pullRequestRepository.findMergedPrsByRepoIdsAndAuthorGithubId(any(), any(), any(), any()))
                 .thenReturn(mergedPrs);
         when(pullRequestRepository.findOpenPrsByRepoIdsAndAuthorGithubId(any(), any())).thenReturn(openPrs);
+        when(pullRequestRepository.findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(any(), any(), any(), any()))
+                .thenReturn(mergesToDefaultBranch);
 
         when(prReviewRepository.findFirstReviewTimestampsByPrIds(any())).thenReturn(firstReviews);
         when(prReviewRepository.countDistinctPrsReviewedByUser(any(), any(), any(), any())).thenReturn(6L);
@@ -292,7 +297,8 @@ class AggregateStorageShapeDriftTest {
                 new PrSizeComplexityCalculator(pullRequestRepository, gitRepoRepository, writer),
                 new MergeWithoutReviewCalculator(pullRequestRepository, prReviewRepository, gitRepoRepository, writer),
                 new ReviewParticipationCalculator(prReviewRepository, writer),
-                new WipOpenPrAgeCalculator(pullRequestRepository, gitRepoRepository, writer)
+                new WipOpenPrAgeCalculator(pullRequestRepository, gitRepoRepository, writer),
+                new MergesToDefaultBranchCalculator(pullRequestRepository, gitRepoRepository, writer)
         ));
     }
 

@@ -57,6 +57,7 @@ public class AggregateWindowResolver {
         m.put(MERGE_WITHOUT_REVIEW_RATIO, Reduction.MEAN);
 
         m.put(REVIEW_PARTICIPATION_COUNT, Reduction.SUM);
+        m.put(MERGES_TO_DEFAULT_BRANCH_PER_WEEK, Reduction.SUM);
 
         m.put(DEEP_WORK_STREAK_DAYS, Reduction.WIDEST_WINDOW);
         m.put(COMMITS_PER_WEEK_AVG, Reduction.WIDEST_WINDOW);

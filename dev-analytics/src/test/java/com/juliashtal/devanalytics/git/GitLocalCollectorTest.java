@@ -167,6 +167,34 @@ class GitLocalCollectorTest {
     }
 
     @Test
+    void collectForRepository_freshRepo_setsDefaultBranchToCurrentHeadBranch() throws Exception {
+        buildThreeCommitRepo();
+        GitRepositoryEntity dbRepo = dbRepoPointingAtTempDir();
+        when(repoRepository.findByIdWithDataSourceConfig(REPO_ID)).thenReturn(Optional.of(dbRepo));
+        when(commitRepository.findHashesByRepositoryId(REPO_ID)).thenReturn(List.of(rootCommit.getName()));
+
+        collector.collectForRepository(REPO_ID, null);
+
+        try (Git git = Git.open(repoPath.toFile())) {
+            assertThat(dbRepo.getDefaultBranch()).isEqualTo(git.getRepository().getBranch());
+        }
+    }
+
+    @Test
+    void collectForRepository_noNewCommits_stillSetsDefaultBranch() throws Exception {
+        buildThreeCommitRepo();
+        GitRepositoryEntity dbRepo = dbRepoPointingAtTempDir();
+        dbRepo.setLastFetchedCommitHash(thirdCommit.getName()); // nothing new to collect
+        when(repoRepository.findByIdWithDataSourceConfig(REPO_ID)).thenReturn(Optional.of(dbRepo));
+        when(commitRepository.findHashesByRepositoryId(REPO_ID))
+                .thenReturn(List.of(rootCommit.getName(), secondCommit.getName(), thirdCommit.getName()));
+
+        collector.collectForRepository(REPO_ID, null);
+
+        assertThat(dbRepo.getDefaultBranch()).isNotNull();
+    }
+
+    @Test
     void collectForRepository_withJobState_tracksPhaseProgress() throws Exception {
         buildThreeCommitRepo();
         GitRepositoryEntity dbRepo = dbRepoPointingAtTempDir();

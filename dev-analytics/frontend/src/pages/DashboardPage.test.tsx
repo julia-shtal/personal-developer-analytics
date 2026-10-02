@@ -24,6 +24,7 @@ vi.mock('@/api/metrics', () => ({
     dailyAfterHours: vi.fn().mockResolvedValue({ data: [] }),
     dailyRefactorRatio: vi.fn().mockResolvedValue({ data: [] }),
     commitsPerWeekAvg: vi.fn().mockResolvedValue({ data: null }),
+    mergesToDefaultBranchPerWeek: vi.fn().mockResolvedValue({ data: null }),
     deepWorkStreak: vi.fn().mockResolvedValue({ data: null }),
     mergeWithoutReview: vi.fn().mockResolvedValue({ data: null }),
     prSizeComplexity: vi.fn().mockResolvedValue({ data: null }),
@@ -145,6 +146,27 @@ describe('DashboardPage — WIP open PR age tile', () => {
   });
 });
 
+describe('DashboardPage — merges to default branch tile', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('renders the weekly merge count once loaded', async () => {
+    const { metricsApi } = await import('@/api/metrics');
+    vi.mocked(metricsApi.mergesToDefaultBranchPerWeek).mockResolvedValue({
+      data: { metricType: 'MERGES_TO_DEFAULT_BRANCH_PER_WEEK', value: 4, periodFrom: '2026-06-02', periodTo: '2026-06-08' },
+    } as never);
+
+    render(<DashboardPage />, { wrapper: Wrapper });
+
+    await screen.findByText('merges to main');
+    // numSuffix renders the number and unit in separate nodes: "4.0" + "/wk".
+    expect(await screen.findByText('4.0')).toBeInTheDocument();
+    expect(screen.getAllByText('/wk').length).toBeGreaterThan(0);
+  });
+});
+
 describe('DashboardPage — period comparison', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -252,7 +274,14 @@ describe('DashboardPage — DORA proxy badges (R-F-08)', () => {
     render(<DashboardPage />, { wrapper: Wrapper });
 
     await screen.findByText('pr lead time');
-    expect(screen.getAllByText('DORA proxy')).toHaveLength(2);
+    expect(screen.getAllByText('DORA proxy')).toHaveLength(3);
+  });
+
+  it('labels the merges-to-default-branch tile as a DORA proxy', async () => {
+    render(<DashboardPage />, { wrapper: Wrapper });
+
+    await screen.findByText('merges to main');
+    expect(screen.getAllByText('DORA proxy')).toHaveLength(3);
   });
 
   it('exposes the proxy caveat note without needing to click through', async () => {

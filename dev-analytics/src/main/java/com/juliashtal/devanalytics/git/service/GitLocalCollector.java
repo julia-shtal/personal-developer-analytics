@@ -77,6 +77,7 @@ public class GitLocalCollector {
 
         try (Git git = Git.open(repoDir)) {
             Repository repository = git.getRepository();
+            dbRepo.setDefaultBranch(repository.getBranch());
 
             // Load all existing hashes in one query to avoid per-commit DB lookups.
             Set<String> existingHashes = new HashSet<>(
