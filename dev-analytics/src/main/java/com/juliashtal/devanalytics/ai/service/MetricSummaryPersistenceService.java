@@ -87,6 +87,7 @@ public class MetricSummaryPersistenceService {
         entity.setOverview(dto.getOverview());
         entity.setModelName(dto.getModelName());
         entity.setPromptVersion(dto.getPromptVersion());
+        entity.setRuntimeVersion(dto.getRuntimeVersion());
         entity.setRawModelOutput(dto.getRawModelOutput());
         entity.setGeneratedAt(Instant.now());
 
@@ -133,6 +134,7 @@ public class MetricSummaryPersistenceService {
                 .rawModelOutput(entity.getRawModelOutput())
                 .modelName(entity.getModelName())
                 .promptVersion(entity.getPromptVersion())
+                .runtimeVersion(entity.getRuntimeVersion())
                 .generatedAt(entity.getGeneratedAt())
                 .build();
     }

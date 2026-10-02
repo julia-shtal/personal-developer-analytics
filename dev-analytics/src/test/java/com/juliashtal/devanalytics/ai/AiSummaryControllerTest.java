@@ -60,6 +60,7 @@ class AiSummaryControllerTest {
                 .rawModelOutput("{}")
                 .modelName("llama3.2")
                 .promptVersion("eded29f49ed62b99")
+                .runtimeVersion("0.34.0")
                 .build();
     }
 
@@ -160,7 +161,8 @@ class AiSummaryControllerTest {
                         .param("to", "2024-01-31"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.headline").value("Consistent delivery week"))
-                .andExpect(jsonPath("$.scope").value("PERSONAL"));
+                .andExpect(jsonPath("$.scope").value("PERSONAL"))
+                .andExpect(jsonPath("$.runtimeVersion").value("0.34.0"));
     }
 
     @Test

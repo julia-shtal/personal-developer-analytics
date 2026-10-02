@@ -15,7 +15,9 @@ services:
       retries: 10
 
   ollama:
-    image: ollama/ollama:latest
+    # Pinned so a reported summary's runtime_version is traceable to a known build; bump
+    # deliberately and update README.md's matching note alongside this line.
+    image: ollama/ollama:0.34.0
     restart: unless-stopped
     volumes:
       - ollama_models:/root/.ollama

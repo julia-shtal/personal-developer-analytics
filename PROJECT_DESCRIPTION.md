@@ -1199,6 +1199,7 @@ The AI layer generates natural-language summaries and metric explanations from p
 | `model_name` | VARCHAR(255) | e.g. `llama3.2` |
 | `raw_model_output` | TEXT | Verbatim model response |
 | `prompt_version` | VARCHAR(16) NOT NULL | First 16 hex chars of the sha256 of the system prompt that produced the summary; `PRE_VERSIONING` for rows written before V64 |
+| `runtime_version` | VARCHAR(64) | LLM runtime's reported version (`GET /api/version`, cached per process); `UNKNOWN` for rows written before V71 or when the read fails |
 | `generated_at` | TIMESTAMPTZ DEFAULT now() | When the summary was generated |
 
 Unique index: `(COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,''), prompt_version)` — one summary per scope identity **per prompt version**, so two prompt revisions can hold a row for the same scope and period and be compared against each other.
@@ -1258,6 +1259,8 @@ Index: `(conversation_id, created_at)`.
 
 - **Prompt versioning**: the two system prompts live in `SystemPrompts` (constants only); `PromptVersionProvider` hashes them at construction and `hashFor(scope)` returns the first 16 hex characters of the sha256. That version is stamped on every generated `MetricsSummaryDto`, persisted on the row, returned by the API, and folded into the cache key, so a stored summary is attributable to the instruction that produced it. `PromptVersionProviderTest` pins the committed versions, so editing a prompt fails the build until the expected values are updated deliberately.
 
+- **Runtime versioning**: every generated `MetricsSummaryDto` also carries `LlmClient.runtimeVersion()`, including the empty-context "No data" path. Unlike the prompt hash, it is not part of the cache key — the runtime build does not change what the model was asked, only which binary answered.
+
 - **System prompt design**: instructs the model to return only a JSON object with fields `headline` (1-sentence), `overview`, `insights` (5–8 items with kind/text/metric), `recommendations` (3–5 items). Priority order for insights: Churn Ratio → Focus Ratio → anomalies → remaining metrics. No markdown, no extra text.
 
 **`MetricsAnomalyService`** — Anomaly detection service.
@@ -1272,7 +1275,7 @@ Index: `(conversation_id, created_at)`.
 - `getLatestTeamSummary(Team)` → most recent team summary.
 - Uses upsert guard with functional index on `(COALESCE(user_id,-1), ...)` to deduplicate by scope identity; `prompt_version` is part of the lookup, so a summary generated under a revised prompt inserts a new row rather than overwriting one that belongs to the previous prompt.
 
-**`OllamaLlmClient`** (`LlmClient` impl) — Posts to `{ollamaBaseUrl}/api/generate` with model, system, prompt, stream=false, format (`"json"` when structured output is requested), options (`num_predict`, `temperature=0.0`, `seed`), and `keep_alive`. Extracts the `response` field from the returned JSON.
+**`OllamaLlmClient`** (`LlmClient` impl) — Posts to `{ollamaBaseUrl}/api/generate` with model, system, prompt, stream=false, format (`"json"` when structured output is requested), options (`num_predict`, `temperature=0.0`, `seed`), and `keep_alive`. Extracts the `response` field from the returned JSON. `runtimeVersion()` reads `GET {ollamaBaseUrl}/api/version` once per process and caches the result on first success; a failed or blank read returns `"UNKNOWN"` without caching, so the next call retries.
 
 #### Scheduler
 
@@ -1297,7 +1300,7 @@ Index: `(conversation_id, created_at)`.
 
 | Class | Fields |
 |---|---|
-| `MetricsSummaryDto` | `from`, `to`, `scope`, `contextRepoName?`, `headline`, `overview`, `insights: List<InsightDto{kind,text,metric}>`, `recommendations: List<String>`, `rawModelOutput`, `modelName` |
+| `MetricsSummaryDto` | `from`, `to`, `scope`, `contextRepoName?`, `headline`, `overview`, `insights: List<InsightDto{kind,text,metric}>`, `recommendations: List<String>`, `rawModelOutput`, `modelName`, `promptVersion`, `runtimeVersion`, `generatedAt?` |
 | `AiResponseDto` (record) | `headline`, `overview`, `insights: List<InsightDto>`, `recommendations: List<String>` — inner record `InsightDto(kind, text, metric)` |
 | `AggregatedMetricsContext` | `from`, `to`, `repoName?`, `metrics: Map<String, MetricAggregate{min,max,median,total,trendPct,anomaly}>` |
 | `TeamMetricsContext` | `from`, `to`, `teamName`, `memberCount`, `members: List<MemberMetrics{username, metrics: Map<String,Double>}>` |
@@ -1526,6 +1529,7 @@ validates the invite, creates the user, and calls `redeemInvite`.
 | V68 | `V68__metric_snapshot_calculated_at.sql` | ALTER `metric_snapshots` ADD `calculated_at` TIMESTAMPTZ, backfilled from `date`. A point-in-time metric measures an age ending at the moment of calculation, and `date` carries the window's first day, so a reader could not tell when the figure was taken. Also the ordering key for point-in-time reads: `date` carries the window a run was asked for, so selecting on it returns whichever window reached furthest rather than whichever run happened last |
 | V69 | `V69__widen_issue_title.sql` | ALTER `issues.title` from VARCHAR(255) to TEXT. Jira caps a summary at 255 upstream and GitHub does not, so the width suited one tracker and silently rejected the other — a single 550-character title aborted a whole repository's issue collection. `git_commits.message` and `github_pull_requests.title` were already TEXT; this column had kept the JPA default |
 | V70 | `V70__drop_issue_source_context.sql` | DROP `issues.source_context`. It held a denormalised label — repository full name for GitHub, project key for Jira — that nothing read, duplicating `jira_project_id` on a Jira row and `repository_id` on a GitHub one. Catalogue-only change; `IF EXISTS` so a re-run is a no-op |
+| V71 | `V71__metric_summary_runtime_version.sql` | ALTER `metric_summaries` ADD `runtime_version` VARCHAR(64), nullable; backfill existing rows to `UNKNOWN`. Pairs with pinning the `ollama` image in `docker-compose.yml`: a stored summary now carries both the prompt revision (`prompt_version`) and the model runtime build that produced it |
 
 ### 4.2 Entity-Relationship Overview
 

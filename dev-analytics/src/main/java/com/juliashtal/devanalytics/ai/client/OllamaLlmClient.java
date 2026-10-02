@@ -27,6 +27,11 @@ public class OllamaLlmClient implements LlmClient {
     private final int seed;
     private final String keepAlive;
 
+    /** Read once per process from {@code /api/version} and reused for every summary after that. */
+    private volatile String cachedRuntimeVersion;
+
+    private static final String UNKNOWN_VERSION = "UNKNOWN";
+
     public OllamaLlmClient(
             @Value("${ai.ollama.base-url:http://localhost:11434}") String baseUrl,
             @Value("${ai.ollama.num-predict:1024}") int numPredict,
@@ -90,5 +95,28 @@ public class OllamaLlmClient implements LlmClient {
     static class OllamaResponse {
         private String model;
         private String response;
+    }
+
+    @Override
+    public String runtimeVersion() {
+        String cached = cachedRuntimeVersion;
+        if (cached != null) return cached;
+
+        try {
+            VersionResponse resp = restTemplate.getForObject(baseUrl + "/api/version", VersionResponse.class);
+            if (resp == null || resp.getVersion() == null || resp.getVersion().isBlank()) {
+                return UNKNOWN_VERSION;
+            }
+            cachedRuntimeVersion = resp.getVersion();
+            return cachedRuntimeVersion;
+        } catch (Exception e) {
+            log.warn("Could not read Ollama runtime version: {}", e.getMessage());
+            return UNKNOWN_VERSION;
+        }
+    }
+
+    @Data
+    static class VersionResponse {
+        private String version;
     }
 }

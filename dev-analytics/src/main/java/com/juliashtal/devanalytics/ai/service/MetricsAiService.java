@@ -228,6 +228,7 @@ public class MetricsAiService {
                 .rawModelOutput(null)
                 .modelName(model)
                 .promptVersion(promptVersionProvider.hashFor(scope))
+                .runtimeVersion(llmClient.runtimeVersion())
                 .build();
     }
 
@@ -291,6 +292,7 @@ public class MetricsAiService {
                     .rawModelOutput(raw)
                     .modelName(model)
                     .promptVersion(promptVersionProvider.hashFor(scope))
+                    .runtimeVersion(llmClient.runtimeVersion())
                     .build();
         } catch (JsonProcessingException e) {
             log.error("Failed to parse AI JSON output, returning raw text as overview. Error: {}", e.getMessage());
@@ -306,6 +308,7 @@ public class MetricsAiService {
                     .rawModelOutput(raw)
                     .modelName(model)
                     .promptVersion(promptVersionProvider.hashFor(scope))
+                    .runtimeVersion(llmClient.runtimeVersion())
                     .build();
         }
     }

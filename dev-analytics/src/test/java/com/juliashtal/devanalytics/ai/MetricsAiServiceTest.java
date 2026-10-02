@@ -288,6 +288,28 @@ class MetricsAiServiceTest {
     }
 
     @Test
+    void generateSummary_stampsTheRuntimeVersionFromTheLlmClient() {
+        when(llmClient.complete(eq(MODEL), any(), any(), anyBoolean())).thenReturn(VALID_JSON);
+        when(llmClient.runtimeVersion()).thenReturn("0.34.0");
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getRuntimeVersion()).isEqualTo("0.34.0");
+    }
+
+    @Test
+    void generateSummary_emptyContext_stillStampsTheRuntimeVersion() {
+        when(contextBuilder.buildPersonalContext(any(), any(), any(), any()))
+                .thenReturn(new AggregatedMetricsContext());
+        when(llmClient.runtimeVersion()).thenReturn("0.34.0");
+
+        MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
+
+        assertThat(dto.getRuntimeVersion()).isEqualTo("0.34.0");
+        verify(llmClient, never()).complete(any(), any(), any(), anyBoolean());
+    }
+
+    @Test
     void generateTeamSummary_teamScope_stampsTheTeamPromptVersion() {
         User manager = userWithRole(1L, Role.MANAGER);
         Team team = team(10L, manager, manager);
