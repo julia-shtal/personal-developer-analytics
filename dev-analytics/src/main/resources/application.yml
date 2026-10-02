@@ -75,6 +75,11 @@ app:
       # resumable throttle, not truncation: whatever it defers is still missing on the
       # next run. Raise it to fill a long range in fewer scheduled passes.
       max-days-per-run: ${METRICS_BACKFILL_MAX_DAYS_PER_RUN:30}
+  retention:
+    # Months of metric_snapshots/metric_coverage/metric_summaries kept before the nightly
+    # RetentionScheduler deletes them. 0 disables retention: nothing is deleted and no read
+    # is clamped. Raw ingested history (commits, PRs, issues) is never affected by this value.
+    metrics-months: ${RETENTION_METRICS_MONTHS:24}
 
 ai:
   ollama:

@@ -93,4 +93,46 @@ class MetricCoverageRepositoryTest {
         assertThat(repository.findDatesInRange(
                 otherUserId, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 1))).hasSize(1);
     }
+
+    @Test
+    void deleteExpired_dateBeforeHorizon_isRemoved() {
+        repository.markCovered(userId, LocalDate.of(2024, 1, 1));
+
+        repository.deleteExpired(LocalDate.of(2024, 6, 1));
+
+        assertThat(repository.findDatesInRange(userId, LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 1)))
+                .isEmpty();
+    }
+
+    @Test
+    void deleteExpired_dateOnOrAfterHorizon_isKept() {
+        repository.markCovered(userId, LocalDate.of(2024, 6, 1));
+
+        repository.deleteExpired(LocalDate.of(2024, 6, 1));
+
+        assertThat(repository.findDatesInRange(userId, LocalDate.of(2024, 6, 1), LocalDate.of(2024, 6, 1)))
+                .containsExactly(LocalDate.of(2024, 6, 1));
+    }
+
+    @Test
+    void deleteExpired_mixAcrossUsers_removesOnlyExpiredRows() {
+        Long otherUserId = jdbc.queryForObject(
+                "INSERT INTO users (username, email, password_hash) " +
+                        "VALUES ('coverage-retention-other', 'coverage-retention-other@example.com', 'x') " +
+                        "RETURNING id",
+                Long.class);
+        repository.markCovered(userId, LocalDate.of(2024, 1, 1));      // expired
+        repository.markCovered(userId, LocalDate.of(2024, 6, 1));      // current
+        repository.markCovered(otherUserId, LocalDate.of(2024, 1, 1)); // expired, other user
+
+        int removed = repository.deleteExpired(LocalDate.of(2024, 6, 1));
+
+        // Global delete against the real, shared dev_analytics database — >= is the only safe
+        // bound against unrelated pre-existing rows; findDatesInRange below pins correctness.
+        assertThat(removed).isGreaterThanOrEqualTo(2);
+        assertThat(repository.findDatesInRange(userId, LocalDate.of(2024, 6, 1), LocalDate.of(2024, 6, 1)))
+                .containsExactly(LocalDate.of(2024, 6, 1));
+        assertThat(repository.findDatesInRange(otherUserId, LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 1)))
+                .isEmpty();
+    }
 }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juliashtal.devanalytics.ai.model.MetricSummaryEntity;
 import com.juliashtal.devanalytics.ai.model.MetricsSummaryDto;
 import com.juliashtal.devanalytics.ai.repository.MetricSummaryRepository;
+import com.juliashtal.devanalytics.metrics.service.RetentionPolicy;
 import com.juliashtal.devanalytics.user.model.Team;
 import com.juliashtal.devanalytics.user.model.User;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class MetricSummaryPersistenceService {
 
     private final MetricSummaryRepository summaryRepository;
     private final ObjectMapper objectMapper;
+    private final RetentionPolicy retentionPolicy;
 
     @Transactional
     public void savePersonal(User user, MetricsSummaryDto dto) {
@@ -48,24 +50,31 @@ public class MetricSummaryPersistenceService {
 
     public Optional<MetricsSummaryDto> findLatestPersonal(User user) {
         return summaryRepository.findTopByUser_IdOrderByGeneratedAtDesc(user.getId())
+                .filter(this::isWithinHorizon)
                 .map(this::toDto);
     }
 
     public Optional<MetricsSummaryDto> findLatestTeam(Team team) {
         return summaryRepository.findTopByTeam_IdOrderByGeneratedAtDesc(team.getId())
+                .filter(this::isWithinHorizon)
                 .map(this::toDto);
     }
 
     public List<MetricsSummaryDto> findHistoryPersonal(User user, int limit) {
         return summaryRepository
                 .findByUser_IdOrderByGeneratedAtDesc(user.getId(), PageRequest.of(0, limit))
-                .stream().map(this::toDto).toList();
+                .stream().filter(this::isWithinHorizon).map(this::toDto).toList();
     }
 
     public List<MetricsSummaryDto> findHistoryTeam(Team team, int limit) {
         return summaryRepository
                 .findByTeam_IdOrderByGeneratedAtDesc(team.getId(), PageRequest.of(0, limit))
-                .stream().map(this::toDto).toList();
+                .stream().filter(this::isWithinHorizon).map(this::toDto).toList();
+    }
+
+    /** False once a stored summary's period ends before the retention horizon. */
+    private boolean isWithinHorizon(MetricSummaryEntity entity) {
+        return !entity.getPeriodTo().isBefore(retentionPolicy.horizon());
     }
 
     private void upsert(User user, Team team, MetricsSummaryDto dto) {

@@ -49,4 +49,15 @@ public interface MetricCoverageRepository extends JpaRepository<MetricCoverage, 
     @Modifying
     @Query("DELETE FROM MetricCoverage c WHERE c.user.id = :userId")
     void deleteByUserId(@Param("userId") Long userId);
+
+    /**
+     * Deletes every coverage row dated before {@code horizon}, across every user.
+     *
+     * <p>Carries its own transaction for the same reason {@link #deleteByUserId} does: its
+     * caller, the nightly {@code RetentionScheduler}, supplies none of its own.</p>
+     */
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM MetricCoverage c WHERE c.date < :horizon")
+    int deleteExpired(@Param("horizon") LocalDate horizon);
 }

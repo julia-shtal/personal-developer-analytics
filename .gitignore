@@ -5,6 +5,7 @@ docs/*
 # The metric-adding procedure is referenced by the thesis and by future contributors,
 # not an internal note, so it ships like docs/metrics/ rather than staying local.
 !docs/adding-a-metric.md
+!docs/retention.md
 .claude/
 .agents/
 .idea
