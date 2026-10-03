@@ -9,7 +9,7 @@
 
 ## Definition
 
-The median elapsed time in hours from the earliest commit in a pull request to the pull request being merged, for all pull requests authored by the user and merged within the specified date window. This metric measures the actual coding-to-delivery cycle duration — the time from when the first line of code was committed to when it landed in the main branch. It complements `PR_LEAD_TIME_HOURS_MEDIAN` (which measures PR creation to merge) by including time spent coding before the PR was opened.
+The median elapsed time in hours from the earliest commit in a pull request to the pull request being merged, for all pull requests authored by the user and merged within the specified date window. This metric measures the coding-to-merge cycle duration — the time from when the first line of code was committed to when it landed in the main branch. It is a proxy for DORA Lead Time for Changes: it ends at the merge, not at the production deployment. It complements `PR_LEAD_TIME_HOURS_MEDIAN` (which measures PR creation to merge) by including time spent coding before the PR was opened.
 
 ## Formula
 

@@ -13,8 +13,10 @@ public enum MetricType {
     DAILY_ISSUES_CREATED(true, true, false, "issues"),
     DAILY_ISSUES_CLOSED(true, true, false, "issues"),
     DAILY_CHURN_RATIO(true, false, false, "%"),
+    /** DORA lead-time proxy: median hours from pull-request creation to merge (not to deployment). */
     PR_LEAD_TIME_HOURS_MEDIAN(true, false, true, "h"),
     ISSUE_LEAD_TIME_HOURS_MEDIAN(true, false, true, "h"),
+    /** DORA lead-time proxy: median hours from a pull request's first commit to merge (not to deployment). */
     PR_FIRST_COMMIT_TO_MERGE_LEAD_TIME_HOURS_MEDIAN(true, false, true, "h"),
     REVIEW_RESPONSE_TIME_HOURS_MEDIAN(true, false, true, "h"),
     FOCUS_RATIO_DAYS_TASKS(true, false, false, "%"),

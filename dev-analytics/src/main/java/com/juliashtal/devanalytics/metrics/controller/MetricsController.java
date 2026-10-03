@@ -148,7 +148,7 @@ public class MetricsController {
         return statsCoverageService.describeCoverage(user, from, to, repoId);
     }
 
-    @Operation(summary = "PR Lead Time (median hours) for the current user")
+    @Operation(summary = "PR Lead Time (DORA lead-time proxy, median hours) for the current user")
     @GetMapping("/pr-lead-time")
     public MetricAggregateDto getPrLeadTimeMedian(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -158,7 +158,7 @@ public class MetricsController {
         return getPersonalLeadTimeAggregate(PR_LEAD_TIME_HOURS_MEDIAN, from, to, repoId);
     }
 
-    @Operation(summary = "PR First-Commit-to-Merge Lead Time (median hours) for the current user")
+    @Operation(summary = "PR First-Commit-to-Merge Lead Time (DORA lead-time proxy, median hours) for the current user")
     @GetMapping("/pr-first-commit-to-merge-lead-time")
     public MetricAggregateDto getPrFirstCommitLeadTimeMedian(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

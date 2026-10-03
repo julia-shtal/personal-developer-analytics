@@ -9,7 +9,7 @@
 
 ## Definition
 
-The median elapsed time in hours between a pull request being created and being merged, for all pull requests authored by the user and merged within the specified date window. This metric is the primary DORA Lead Time for Changes signal available without direct CI/CD integration. A shorter median indicates faster review and merge cycles. (Forsgren, Humble & Kim, 2018.)
+The median elapsed time in hours between a pull request being created and being merged, for all pull requests authored by the user and merged within the specified date window. This metric is a proxy for DORA Lead Time for Changes: it ends at the merge, not at the production deployment, and the platform has no CI/CD integration. A shorter median indicates faster review and merge cycles. (Forsgren, Humble & Kim, 2018.)
 
 ## Formula
 
