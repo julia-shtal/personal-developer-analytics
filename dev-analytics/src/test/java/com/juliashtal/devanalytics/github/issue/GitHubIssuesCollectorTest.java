@@ -93,6 +93,44 @@ class GitHubIssuesCollectorTest {
                 .hasMessageContaining("GitRepositoryEntity not found");
     }
 
+    // ── entity overload writes only the sync timestamp onto the current row ──
+
+    @Test
+    void collectIssuesForRepo_staleEntityPassedIn_keepsColumnsSetByEarlierStages() {
+        GitRepositoryEntity current = new GitRepositoryEntity();
+        current.setId(10L);
+        current.setRepoFullName(FULL_NAME);
+        current.setDefaultBranch("main");
+        current.setLastFetchedCommitHash("abc123");
+        current.setLastScanAt(Instant.parse("2026-01-01T00:00:00Z"));
+        when(gitRepositoryEntityRepository.findById(10L)).thenReturn(Optional.of(current));
+
+        GitHubIssuesCollector spy = spy(collector);
+        doReturn(3).when(spy).collectIssuesForRepo(cfg, FULL_NAME);
+
+        int result = spy.collectIssuesForRepo(cfg, repoEntity);
+
+        assertThat(result).isEqualTo(3);
+        verify(gitRepositoryEntityRepository).save(argThat(saved -> saved == current));
+        verify(gitRepositoryEntityRepository, never()).save(argThat(saved -> saved == repoEntity));
+        assertThat(current.getDefaultBranch()).isEqualTo("main");
+        assertThat(current.getLastFetchedCommitHash()).isEqualTo("abc123");
+        assertThat(current.getLastScanAt()).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));
+        assertThat(current.getIssuesLastSyncedAt()).isNotNull();
+    }
+
+    @Test
+    void collectIssuesForRepo_entityRowGoneAfterCollection_throwsIllegalState() {
+        when(gitRepositoryEntityRepository.findById(10L)).thenReturn(Optional.empty());
+
+        GitHubIssuesCollector spy = spy(collector);
+        doReturn(0).when(spy).collectIssuesForRepo(cfg, FULL_NAME);
+
+        assertThatThrownBy(() -> spy.collectIssuesForRepo(cfg, repoEntity))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("GitRepositoryEntity not found for id 10");
+    }
+
     // ── empty issue list → saves nothing, returns 0 ─────────────────────────
 
     @Test
@@ -242,6 +280,7 @@ class GitHubIssuesCollectorTest {
                 .thenReturn(Optional.of(repoEntity));
 
         mockIssueQueryChain(ghRepo, emptyPagedIterable());
+        when(gitRepositoryEntityRepository.findById(10L)).thenReturn(Optional.of(repoEntity));
         when(gitRepositoryEntityRepository.save(repoEntity)).thenReturn(repoEntity);
 
         collector.collectIssuesForRepo(cfg, repoEntity);

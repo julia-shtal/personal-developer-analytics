@@ -34,12 +34,19 @@ public class GitHubIssuesCollector {
 
     /**
      * Collects issues for a repository entity — updates {@code issuesLastSyncedAt} on success.
+     *
+     * <p>The caller's {@code repo} may predate the commit and pull-request stages, so the row is
+     * re-read before the timestamp is written; saving the caller's copy would reset the columns
+     * those stages set.</p>
      */
     @Transactional
     public int collectIssuesForRepo(DataSourceConfig config, GitRepositoryEntity repo) {
         int count = collectIssuesForRepo(config, repo.getRepoFullName());
-        repo.setIssuesLastSyncedAt(Instant.now());
-        gitRepositoryEntityRepository.save(repo);
+        GitRepositoryEntity current = gitRepositoryEntityRepository.findById(repo.getId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "GitRepositoryEntity not found for id " + repo.getId()));
+        current.setIssuesLastSyncedAt(Instant.now());
+        gitRepositoryEntityRepository.save(current);
         return count;
     }
 
