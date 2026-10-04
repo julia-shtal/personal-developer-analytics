@@ -31,11 +31,14 @@ into release branches before those reach the default branch.
 ## Formula
 
 ```
+week_from = Monday 00:00 UTC of the ISO week containing `from`
+week_to   = Monday 00:00 UTC after the ISO week containing the last day before `to`
+
 merged_prs = github_pull_requests p
   WHERE p.repository_id   IN :repoIds
     AND p.author_github_id = user.githubUserId
     AND p.merged           = true
-    AND p.merged_at        >= from AND p.merged_at < to
+    AND p.merged_at        >= week_from AND p.merged_at < week_to
     AND p.base_branch       = p.repository.default_branch
 
 FOR each merged PR:
@@ -55,11 +58,15 @@ FOR each (repo_id, week_start) with count > 0:
   comparison. SQL equality is false — not true — when either side is `NULL`, so a PR or
   repository with an unknown branch is excluded rather than assumed to match. No fallback
   logic treats a missing value as a match.
-- Window: `merged_at >= from` AND `merged_at < to` (half-open, matching the convention used by
-  the other author-scoped pull request queries in `GitHubPullRequestRepository`).
+- Window: half-open, `merged_at >= week_from` AND `merged_at < week_to` (the convention of the
+  other author-scoped pull request queries in `GitHubPullRequestRepository`). The requested
+  window is widened to whole ISO weeks, so a week the window only partly covers is still counted
+  in full. Each stored row therefore depends on the week alone, not on where a calculation run
+  or a backfill chunk happened to start or end; a later run over the same week writes the same
+  value.
 - Bucketing: the calculator does not rely on `MetricsService`'s per-week dispatch
   (`aggregatePeriod = false` on `MetricType.MERGES_TO_DEFAULT_BRANCH_PER_WEEK`). It fetches all
-  matching merges for the full requested window in one query, converts each `merged_at` to a
+  matching merges for the widened window in one query, converts each `merged_at` to a
   UTC calendar day, derives that day's ISO week (Monday as day 1 via `WeekFields.ISO`), and
   groups counts by `(repository, week)` in memory before writing. Each `(repository, week)`
   pair becomes exactly one `metric_snapshots` row, written through `MetricSnapshotWriter`.

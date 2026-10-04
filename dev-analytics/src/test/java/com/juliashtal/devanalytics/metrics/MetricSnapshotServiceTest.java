@@ -217,6 +217,54 @@ class MetricSnapshotServiceTest {
     }
 
     @Test
+    void getMetricSnapshotsByUserAndMetricTypeInWindow_windowEndsBeforeHorizon_returnsEmptyWithoutQuerying() {
+        User user = new User();
+        user.setId(1L);
+        when(retentionPolicy.horizon()).thenReturn(LocalDate.of(2024, 2, 15));
+
+        List<MetricSnapshot> result =
+                service.getMetricSnapshotsByUserAndMetricTypeInWindow(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO);
+
+        assertThat(result).isEmpty();
+        verify(repository, never()).findPersonalInWindow(any(), any(), any(), any());
+        verify(repository, never()).findPersonalAggregateCovering(any(), any(), any(), any());
+    }
+
+    @Test
+    void getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow_windowEndsBeforeHorizon_returnsEmptyWithoutQuerying() {
+        User user = new User();
+        user.setId(1L);
+        GitRepositoryEntity repo = new GitRepositoryEntity();
+        repo.setId(2L);
+        when(retentionPolicy.horizon()).thenReturn(LocalDate.of(2024, 2, 15));
+
+        List<MetricSnapshot> result = service
+                .getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(user, MetricType.REFACTOR_RATIO, repo, FROM, TO);
+
+        assertThat(result).isEmpty();
+        verify(repository, never()).findPersonalByRepositoryInWindow(any(), any(), any(), any(), any());
+        verify(repository, never()).findPersonalAggregateCoveringByRepository(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void getMetricSnapshotsByUserAndMetricTypeInWindow_windowEndsOnHorizon_stillQueriesFromHorizon() {
+        User user = new User();
+        user.setId(1L);
+        LocalDate horizon = LocalDate.of(2024, 1, 31);
+        List<MetricSnapshot> covering = List.of(snapshot(MetricType.PR_LEAD_TIME_HOURS_MEDIAN, 30.0));
+        when(retentionPolicy.horizon()).thenReturn(horizon);
+        when(repository.findPersonalInWindow(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, horizon, TO))
+                .thenReturn(List.of());
+        when(repository.findPersonalAggregateCovering(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, horizon, TO))
+                .thenReturn(covering);
+
+        List<MetricSnapshot> result =
+                service.getMetricSnapshotsByUserAndMetricTypeInWindow(user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, FROM, TO);
+
+        assertThat(result).isEqualTo(covering);
+    }
+
+    @Test
     void getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween_delegatesToRepository() {
         User user = new User();
         user.setId(1L);

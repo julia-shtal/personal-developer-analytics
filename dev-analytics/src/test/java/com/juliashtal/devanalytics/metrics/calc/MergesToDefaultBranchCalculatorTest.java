@@ -172,8 +172,77 @@ class MergesToDefaultBranchCalculatorTest {
     }
 
     @Test
+    void calculate_windowStartsAndEndsMidWeek_queriesWholeIsoWeeks() {
+        // Wednesday 2024-01-17 to Friday 2024-01-26 touches W03 and W04, so the query covers
+        // Monday 2024-01-15 up to (excluding) Monday 2024-01-29.
+        MetricCalcContext midWeek = window(LocalDate.of(2024, 1, 17), LocalDate.of(2024, 1, 26));
+        Instant weekFrom = LocalDate.of(2024, 1, 15).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant weekTo = LocalDate.of(2024, 1, 29).atStartOfDay(ZoneOffset.UTC).toInstant();
+        List<PrLeadTimeProjection> merges = List.of(merged(REPO_ID, "2024-01-16T09:00:00Z"));
+        when(pullRequestRepository.findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(
+                eq(ctx.repoIds()), eq(GITHUB_USER_ID), eq(weekFrom), eq(weekTo)))
+                .thenReturn(merges);
+
+        calculator.calculate(midWeek);
+
+        verify(snapshotRepository).upsert(eq(1L), isNull(), eq(REPO_ID), eq(LocalDate.of(2024, 1, 15)),
+                eq("MERGES_TO_DEFAULT_BRANCH_PER_WEEK"), eq(1.0),
+                eq(LocalDate.of(2024, 1, 15)), eq(LocalDate.of(2024, 1, 21)));
+    }
+
+    @Test
+    void calculate_windowEndsOnMonday_includesThatMondaysWeek() {
+        MetricCalcContext endsMonday = window(LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 22));
+        Instant weekFrom = LocalDate.of(2024, 1, 15).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant weekTo = LocalDate.of(2024, 1, 29).atStartOfDay(ZoneOffset.UTC).toInstant();
+        List<PrLeadTimeProjection> merges = List.of(merged(REPO_ID, "2024-01-26T09:00:00Z"));
+        when(pullRequestRepository.findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(
+                eq(ctx.repoIds()), eq(GITHUB_USER_ID), eq(weekFrom), eq(weekTo)))
+                .thenReturn(merges);
+
+        calculator.calculate(endsMonday);
+
+        verify(snapshotRepository).upsert(eq(1L), isNull(), eq(REPO_ID), eq(LocalDate.of(2024, 1, 22)),
+                eq("MERGES_TO_DEFAULT_BRANCH_PER_WEEK"), eq(1.0),
+                eq(LocalDate.of(2024, 1, 22)), eq(LocalDate.of(2024, 1, 28)));
+    }
+
+    @Test
+    void calculate_twoChunksCutInsideOneWeek_bothWriteTheWholeWeekCount() {
+        // Chunk one ends Thursday and chunk two starts Friday of the same week; the week holds
+        // merges on both sides of the cut, and neither run may store only its own part.
+        List<PrLeadTimeProjection> weekMerges = List.of(
+                merged(REPO_ID, "2024-01-15T09:00:00Z"), // Monday, before the cut
+                merged(REPO_ID, "2024-01-16T09:00:00Z"), // Tuesday, before the cut
+                merged(REPO_ID, "2024-01-19T09:00:00Z"), // Friday, after the cut
+                merged(REPO_ID, "2024-01-20T09:00:00Z")  // Saturday, after the cut
+        );
+        Instant weekFrom = LocalDate.of(2024, 1, 15).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant weekTo = LocalDate.of(2024, 1, 22).atStartOfDay(ZoneOffset.UTC).toInstant();
+        when(pullRequestRepository.findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(
+                eq(ctx.repoIds()), eq(GITHUB_USER_ID), eq(weekFrom), eq(weekTo)))
+                .thenReturn(weekMerges);
+
+        calculator.calculate(window(LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 18)));
+        calculator.calculate(window(LocalDate.of(2024, 1, 19), LocalDate.of(2024, 1, 21)));
+
+        verify(snapshotRepository, times(2)).upsert(eq(1L), isNull(), eq(REPO_ID),
+                eq(LocalDate.of(2024, 1, 15)), eq("MERGES_TO_DEFAULT_BRANCH_PER_WEEK"), eq(4.0),
+                eq(LocalDate.of(2024, 1, 15)), eq(LocalDate.of(2024, 1, 21)));
+        verify(snapshotRepository, times(2))
+                .upsert(any(), any(), any(), any(), any(), anyDouble(), any(), any());
+    }
+
+    @Test
     void produces_returnsOnlyMergesToDefaultBranchPerWeek() {
         assertThat(calculator.produces()).containsExactly(MetricType.MERGES_TO_DEFAULT_BRANCH_PER_WEEK);
+    }
+
+    private MetricCalcContext window(LocalDate fromDate, LocalDate toDate) {
+        return new MetricCalcContext(ctx.user(), null, ctx.repoIds(), ctx.identity(),
+                fromDate.atStartOfDay(ZoneOffset.UTC).toInstant(),
+                toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant(),
+                fromDate, toDate);
     }
 
     private static PrLeadTimeProjection merged(Long repoId, String mergedAtIso) {

@@ -8,8 +8,11 @@ import com.juliashtal.devanalytics.metrics.model.PrLeadTimeProjection;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.WeekFields;
 import java.util.HashMap;
 import java.util.List;
@@ -41,9 +44,11 @@ public class MergesToDefaultBranchCalculator implements MetricCalculator {
         if (ctx.repoIds().isEmpty()) return;
         if (!ctx.identity().hasGithubIdentity()) return;
 
+        // Whole weeks: a window cut mid-week would store a partial count that a later run overwrites.
         List<PrLeadTimeProjection> rows = pullRequestRepository
                 .findMergedToDefaultBranchByRepoIdsAndAuthorGithubId(
-                        ctx.repoIds(), ctx.identity().githubUserId(), ctx.from(), ctx.to());
+                        ctx.repoIds(), ctx.identity().githubUserId(),
+                        startOfIsoWeek(ctx.from()), startOfNextIsoWeek(ctx.to()));
         if (rows.isEmpty()) return;
 
         // repoId -> (isoWeekMonday -> mergeCount)
@@ -63,5 +68,18 @@ public class MergesToDefaultBranchCalculator implements MetricCalculator {
                             MetricType.MERGES_TO_DEFAULT_BRANCH_PER_WEEK, (double) count,
                             repo, weekStart, weekStart.plusDays(6)));
         });
+    }
+
+    /** Monday 00:00 UTC of the ISO week containing {@code instant}. */
+    private static Instant startOfIsoWeek(Instant instant) {
+        return instant.atZone(ZoneOffset.UTC).toLocalDate().with(DayOfWeek.MONDAY)
+                .atStartOfDay(ZoneOffset.UTC).toInstant();
+    }
+
+    /** Monday 00:00 UTC after the ISO week containing the last instant before {@code exclusiveEnd}. */
+    private static Instant startOfNextIsoWeek(Instant exclusiveEnd) {
+        return exclusiveEnd.minusNanos(1).atZone(ZoneOffset.UTC).toLocalDate()
+                .with(TemporalAdjusters.next(DayOfWeek.MONDAY))
+                .atStartOfDay(ZoneOffset.UTC).toInstant();
     }
 }

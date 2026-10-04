@@ -56,6 +56,8 @@ public class MetricSnapshotService {
                                                                              LocalDate from,
                                                                              LocalDate to) {
         from = clamp(from);
+        // An inverted window lies wholly before the horizon; the covering fallback would match a week straddling it.
+        if (from.isAfter(to)) return List.of();
         List<MetricSnapshot> contained = repository.findPersonalInWindow(user, metricType, from, to);
         if (!contained.isEmpty()) return contained;
         return repository.findPersonalAggregateCovering(user, metricType, from, to);
@@ -68,6 +70,7 @@ public class MetricSnapshotService {
                                                                                           LocalDate from,
                                                                                           LocalDate to) {
         from = clamp(from);
+        if (from.isAfter(to)) return List.of();
         List<MetricSnapshot> contained =
                 repository.findPersonalByRepositoryInWindow(user, metricType, repo, from, to);
         if (!contained.isEmpty()) return contained;
