@@ -994,7 +994,7 @@ The ledger records the computation rather than inferring it from the output, whi
 
 Each value carries three boolean flags — `(inAiContext, dailySum, aggregatePeriod)`, the triple shown in the Flags column below — and a display unit. The unit is declared on the constant so a new metric cannot be added without one; `TeamExportController` reads `type.unit` for the CSV `unit` column rather than keeping a mapping of its own. `inAiContext` marks whether the metric is included in the AI summary context; `dailySum` marks daily-count metrics (summed per-day); `aggregatePeriod` marks the metrics computed on the canonical **ISO calendar week** grain.
 
-`aggregatePeriod` is *not* a storage-shape flag. Fourteen types are written with `period_from`/`period_to` (see the AGGREGATE shape in `MetricSnapshot`), but only the five flagged ones are recomputed once per ISO week by `MetricsService`; the rest keep whatever window the calculation request covered. `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` is one of those nine: its calculator buckets ISO weeks itself from a single invocation over the full requested range, rather than being dispatched once per week by `MetricsService`. Read paths therefore route on the stored row shape (`period_from IS NULL`) rather than on this flag — routing on the flag is what silently dropped the other nine from every aggregate endpoint.
+`aggregatePeriod` is *not* a storage-shape flag. Fourteen types are written with `period_from`/`period_to` (see the AGGREGATE shape in `MetricSnapshot`), but only the five flagged ones are recomputed once per ISO week by `MetricsService`; the rest keep whatever window the calculation request covered. `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` is one of those nine: its calculator buckets ISO weeks itself from a single invocation over the requested range, rather than being dispatched once per week by `MetricsService`, and widens its query to whole ISO weeks: a week the range covers only partly would otherwise be stored with a partial count that the next run over the same week overwrites. Read paths therefore route on the stored row shape (`period_from IS NULL`) rather than on this flag — routing on the flag is what silently dropped the other nine from every aggregate endpoint.
 
 | Value | Flags | Description |
 |---|---|---|
@@ -1072,7 +1072,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 | `MergeWithoutReviewCalculator` | `MERGE_WITHOUT_REVIEW_RATIO` (PRs with no review events) |
 | `ReviewParticipationCalculator` | `REVIEW_PARTICIPATION_COUNT` (distinct PRs reviewed, cross-repo, attributed via `githubUserId`) |
 | `WipOpenPrAgeCalculator` | `WIP_OPEN_PR_AGE_HOURS_MEDIAN` (point-in-time; median age of currently-open PRs) |
-| `MergesToDefaultBranchCalculator` | `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` (PRs merged into the repo's default branch, bucketed into ISO weeks by the calculator itself — not per-week dispatch — one row per `(repository, week)`) |
+| `MergesToDefaultBranchCalculator` | `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` (PRs merged into the repo's default branch, bucketed into whole ISO weeks by the calculator itself, its query window widened to week boundaries — not per-week dispatch — one row per `(repository, week)`) |
 
 #### Services
 
@@ -1085,7 +1085,7 @@ The calculation layer uses a registry-based dispatch pattern instead of a monoli
 **`MetricSnapshotService`** — Query facade over `MetricSnapshotRepository`.
 - `getMetricSnapshotsByUserAndMetricTypeAndDateBetween(user, type, from, to)`
 - `getMetricSnapshotsByUserAndMetricTypeAndRepositoryAndDateBetween(user, type, repo, from, to)`
-- `getMetricSnapshotsByUserAndMetricTypeInWindow(user, type, from, to)` — window resolution: contained rows, falling back to the covering window when nothing is contained
+- `getMetricSnapshotsByUserAndMetricTypeInWindow(user, type, from, to)` — window resolution: contained rows, falling back to the covering window when nothing is contained; nothing at all when the horizon-clamped window is empty (the request ends before the retention horizon)
 - `getMetricSnapshotsByUserAndMetricTypeAndRepositoryInWindow(user, type, repo, from, to)`
 - `getMetricSnapshotsByUserIdsAndTeamIdAndMetricTypeInWindow(userIds, teamId, type, from, to)` / `getMetricSnapshotsByUserAndTeamAndMetricTypeInWindow(user, team, type, from, to)` — team-scoped equivalents; no covering fallback, a team summary reports only what is stored inside the request
 - `getMetricSnapshotsByUserAndTeamAndMetricTypeAndDateBetween(user, team, type, from, to)`
@@ -1740,7 +1740,7 @@ Phase C — Background sweep (every 2 minutes, 50 items/run)
 | `PR_SIZE_COMPLEXITY_SCORE` | `PrSizeComplexityCalculator` | Per PR: `(additions + deletions) / max(commitsCount, 1)`. Groups by repo, takes sorted median. |
 | `MERGE_WITHOUT_REVIEW_RATIO` | `MergeWithoutReviewCalculator` | `findFirstReviewTimestampsByPrIds()` gives PRs WITH reviews. Ratio = `(merged PRs − PRs with reviews) / merged PRs`. |
 | `REVIEW_PARTICIPATION_COUNT` | `ReviewParticipationCalculator` | `countDistinctPrsReviewedByUser` JPQL on `GitHubPrReviewRepository`; cross-repo (`repo=null`); attributed via `User.githubUserId`; guards: skip if `githubUserId=null` or `repoIds` empty. |
-| `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` | `MergesToDefaultBranchCalculator` | `findMergedToDefaultBranchByRepoIdsAndAuthorGithubId` filters on `base_branch = repository.default_branch` (plain equality — null on either side excludes, never matches). Calculator buckets results by UTC-day-derived ISO week per repo, one `metric_snapshots` row per `(repository, week)`; guards: skip if no GitHub identity or `repoIds` empty. DORA deployment-frequency proxy — see `docs/metrics/merges-to-default-branch-per-week.md`. |
+| `MERGES_TO_DEFAULT_BRANCH_PER_WEEK` | `MergesToDefaultBranchCalculator` | `findMergedToDefaultBranchByRepoIdsAndAuthorGithubId` filters on `base_branch = repository.default_branch` (plain equality — null on either side excludes, never matches). Calculator widens the query window to whole ISO weeks (so a window edge never splits a week), buckets results by UTC-day-derived ISO week per repo, one `metric_snapshots` row per `(repository, week)`; guards: skip if no GitHub identity or `repoIds` empty. DORA deployment-frequency proxy — see `docs/metrics/merges-to-default-branch-per-week.md`. |
 
 ---
 

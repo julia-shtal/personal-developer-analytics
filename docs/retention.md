@@ -24,7 +24,9 @@ Deletion is not the only enforcement point. Two read paths clamp or filter again
 horizon so a request never sees expired data, even on the day the property changes and before the
 nightly job has run again:
 
-- `MetricSnapshotService` clamps every windowed read's `from` forward to the horizon.
+- `MetricSnapshotService` clamps every windowed read's `from` forward to the horizon. A window that
+  ends before the horizon is then empty and returns nothing; it never reaches the covering-window
+  fallback, which would otherwise match a weekly row that straddles the horizon.
 - `MetricSummaryPersistenceService` hides any stored summary (latest or history) whose period
   ends before the horizon.
 

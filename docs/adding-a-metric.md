@@ -32,7 +32,10 @@ its neighbours, with:
   window; must imply `inAiContext` (see step 8).
 - `aggregatePeriod` — true only if the metric is recomputed per ISO week
   (`MetricsService.writesAggregatePeriod`, which dispatches the calculator's invocation
-  cadence). This is **not** the same thing as "stored in AGGREGATE shape" — see step 5.
+  cadence). This is **not** the same thing as "stored in AGGREGATE shape" — see step 5. A weekly
+  metric left at `false` receives the raw requested range, not whole weeks, so its calculator must
+  query whole ISO weeks itself (as `MergesToDefaultBranchCalculator` does); otherwise a week cut by a
+  backfill chunk is stored with a partial count and overwritten by the next run.
 - `unit` — non-blank; the CSV export column header.
 
 **Coupling:** the enum constant itself. **Caught by test**
