@@ -15,7 +15,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,9 +41,10 @@ class AggregateWindowResolutionIT {
     @Autowired MetricSnapshotService metricSnapshotService;
     @Autowired AiContextBuilderService contextBuilder;
 
-    /** Monday to Sunday — the grain the aggregate calculators now write. */
-    private static final LocalDate WEEK_FROM = LocalDate.of(2024, 3, 4);
-    private static final LocalDate WEEK_TO   = LocalDate.of(2024, 3, 10);
+    /** Monday to Sunday, eight weeks back: inside the retention horizon whatever today's date. */
+    private static final LocalDate WEEK_FROM =
+            LocalDate.now(ZoneOffset.UTC).with(DayOfWeek.MONDAY).minusWeeks(8);
+    private static final LocalDate WEEK_TO   = WEEK_FROM.plusDays(6);
 
     private User user;
 
@@ -113,6 +116,22 @@ class AggregateWindowResolutionIT {
             assertThat(s.getPeriodFrom()).isEqualTo(WEEK_FROM);
             assertThat(s.getPeriodTo()).isEqualTo(WEEK_TO);
         });
+    }
+
+    @Test
+    void getMetricSnapshotsInWindow_windowEndsBeforeTheRetentionHorizon_servesNothing() {
+        LocalDate expiredFrom = WEEK_FROM.minusYears(3);
+        snapshotRepository.save(snapshot(MetricType.PR_LEAD_TIME_HOURS_MEDIAN, expiredFrom,
+                expiredFrom, expiredFrom.plusDays(6), 6.0));
+        snapshotRepository.flush();
+
+        List<MetricSnapshot> rows = metricSnapshotService.getMetricSnapshotsByUserAndMetricTypeInWindow(
+                user, MetricType.PR_LEAD_TIME_HOURS_MEDIAN, expiredFrom.plusDays(1), expiredFrom.plusDays(3));
+        AggregatedMetricsContext ctx =
+                contextBuilder.buildPersonalContext(user, expiredFrom, expiredFrom.plusDays(6), null);
+
+        assertThat(rows).isEmpty();
+        assertThat(ctx.getMetrics()).isEmpty();
     }
 
     @Test
