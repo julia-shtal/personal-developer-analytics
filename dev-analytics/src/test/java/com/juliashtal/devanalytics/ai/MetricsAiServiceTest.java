@@ -184,13 +184,12 @@ class MetricsAiServiceTest {
     }
 
     @Test
-    void wrapsFlatsStringsInInsightsAsFallback() {
-        // Model returns flat strings in insights array instead of {kind, text, metric} objects.
+    void generateSummary_flatStringInsightNamingAContextMetric_wrapsItAndResolvesTheMetric() {
         String json = """
                 {
                   "headline": "Good week overall",
                   "overview": "Metrics look healthy.",
-                  "insights": ["High commit volume", "Fast PR reviews"],
+                  "insights": ["Daily Commits held steady", "High volume everywhere"],
                   "recommendations": ["Keep it up"]
                 }
                 """;
@@ -198,13 +197,10 @@ class MetricsAiServiceTest {
 
         MetricsSummaryDto dto = service.generateSummary(user, from, to, null);
 
-        assertThat(dto.getInsights()).hasSize(2);
-        dto.getInsights().forEach(insight -> {
-            assertThat(insight.getKind()).isEqualTo("note");
-            assertThat(insight.getMetric()).isEqualTo("");
-        });
-        assertThat(dto.getInsights().get(0).getText()).isEqualTo("High commit volume");
-        assertThat(dto.getInsights().get(1).getText()).isEqualTo("Fast PR reviews");
+        assertThat(dto.getInsights()).hasSize(1);
+        assertThat(dto.getInsights().get(0).getKind()).isEqualTo("note");
+        assertThat(dto.getInsights().get(0).getMetric()).isEqualTo("Daily Commits");
+        assertThat(dto.getInsights().get(0).getText()).isEqualTo("Daily Commits held steady");
     }
 
     @Test

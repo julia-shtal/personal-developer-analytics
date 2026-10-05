@@ -8,6 +8,7 @@ public record ValidationReport(
         int droppedMissingExplanation,
         int finalInsightCount,
         boolean insightCountInRange,
-        int ungroundedNumberCount
+        int ungroundedNumberCount,
+        int droppedDirectionMismatch
 ) {
 }

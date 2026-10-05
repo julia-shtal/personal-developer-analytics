@@ -1212,7 +1212,7 @@ The AI layer generates natural-language summaries and metric explanations from p
 | `raw_model_output` | TEXT | Verbatim model response |
 | `prompt_version` | VARCHAR(16) NOT NULL | First 16 hex chars of the sha256 of the system prompt that produced the summary; `PRE_VERSIONING` for rows written before V64 |
 | `runtime_version` | VARCHAR(64) | LLM runtime's reported version (`GET /api/version`, cached per process); `UNKNOWN` for rows written before V71 or when the read fails |
-| `validation_report` | TEXT | V73; per-rule validation outcome (dropped-insight counts, final insight count, range check) for a parsed summary. Null for rows written before V73 — "not validated," distinct from an empty report |
+| `validation_report` | TEXT | V73; per-rule validation outcome (dropped-insight counts per rule, including `droppedDirectionMismatch`; final insight count; range check) for a parsed summary. Null for rows written before V73 — "not validated," distinct from an empty report |
 | `generated_at` | TIMESTAMPTZ DEFAULT now() | When the summary was generated |
 
 Unique index: `(COALESCE(user_id,-1), COALESCE(team_id,-1), period_from, period_to, scope, COALESCE(context_repo_name,''), prompt_version)` — one summary per scope identity **per prompt version**, so two prompt revisions can hold a row for the same scope and period and be compared against each other.

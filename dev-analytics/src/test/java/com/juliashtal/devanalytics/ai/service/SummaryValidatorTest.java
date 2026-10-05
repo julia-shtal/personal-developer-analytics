@@ -51,14 +51,48 @@ class SummaryValidatorTest {
     }
 
     @Test
-    void validate_blankMetric_bypassesTheNameCheck() {
+    void validate_blankMetricTextNamesOneContextMetric_resolvesItToThatMetric() {
         var result = validator.validate(
-                List.of(insight("note", "", null)),
-                aliases("Daily Commits"),
+                List.of(insight("note", "", "Issues Closed is low this month", null)),
+                aliases("Issues Closed", "Issues Created"),
                 Set.of(), Set.of());
 
         assertThat(result.insights()).hasSize(1);
+        assertThat(result.insights().get(0).getMetric()).isEqualTo("Issues Closed");
         assertThat(result.report().droppedUnknownMetric()).isZero();
+    }
+
+    @Test
+    void validate_blankMetricTextNamesNoContextMetric_dropsIt() {
+        var result = validator.validate(
+                List.of(insight("note", "", "High commit volume", null)),
+                aliases("Daily Commits"),
+                Set.of(), Set.of());
+
+        assertThat(result.insights()).isEmpty();
+        assertThat(result.report().droppedUnknownMetric()).isEqualTo(1);
+    }
+
+    @Test
+    void validate_blankMetricTextNamesTwoContextMetrics_dropsIt() {
+        var result = validator.validate(
+                List.of(insight("note", "", "Issues Closed outpaced Issues Created", null)),
+                aliases("Issues Closed", "Issues Created"),
+                Set.of(), Set.of());
+
+        assertThat(result.insights()).isEmpty();
+        assertThat(result.report().droppedUnknownMetric()).isEqualTo(1);
+    }
+
+    @Test
+    void validate_blankMetricResolvedToAnomalousMetricWithoutExplanation_dropsIt() {
+        var result = validator.validate(
+                List.of(insight("risk", "", "Churn Ratio spiked", null)),
+                aliases("Churn Ratio"),
+                Set.of("Churn Ratio"), Set.of());
+
+        assertThat(result.insights()).isEmpty();
+        assertThat(result.report().droppedMissingExplanation()).isEqualTo(1);
     }
 
     @Test
@@ -97,8 +131,8 @@ class SummaryValidatorTest {
     @Test
     void validate_insightCountBelowMinimum_flagsOutOfRange() {
         var result = validator.validate(
-                List.of(insight("note", "", null), insight("note", "", null)),
-                Map.of(), Set.of(), Set.of());
+                List.of(insight("note", "Daily Commits", null), insight("note", "Daily Commits", null)),
+                aliases("Daily Commits"), Set.of(), Set.of());
 
         assertThat(result.report().finalInsightCount()).isEqualTo(2);
         assertThat(result.report().insightCountInRange()).isFalse();
@@ -107,10 +141,11 @@ class SummaryValidatorTest {
     @Test
     void validate_insightCountWithinRange_flagsInRange() {
         List<MetricsSummaryDto.InsightDto> five = List.of(
-                insight("note", "", null), insight("note", "", null), insight("note", "", null),
-                insight("note", "", null), insight("note", "", null));
+                insight("note", "Daily Commits", null), insight("note", "Daily Commits", null),
+                insight("note", "Daily Commits", null), insight("note", "Daily Commits", null),
+                insight("note", "Daily Commits", null));
 
-        var result = validator.validate(five, Map.of(), Set.of(), Set.of());
+        var result = validator.validate(five, aliases("Daily Commits"), Set.of(), Set.of());
 
         assertThat(result.report().finalInsightCount()).isEqualTo(5);
         assertThat(result.report().insightCountInRange()).isTrue();
@@ -154,6 +189,90 @@ class SummaryValidatorTest {
 
         assertThat(result.insights()).isEmpty();
         assertThat(result.report().droppedMissingExplanation()).isEqualTo(1);
+    }
+
+    // -------------------------------------------------------------------------
+    // Direction versus trend: a stated direction must agree with the sign of trendPct.
+    // -------------------------------------------------------------------------
+
+    private SummaryValidator.Result validateWithTrend(MetricsSummaryDto.InsightDto insight, double trendPct) {
+        return validator.validate(List.of(insight), aliases("Daily Commits"), Set.of(), Set.of(),
+                Map.of("Daily Commits", trendPct));
+    }
+
+    @Test
+    void validate_fallWordWhileTrendRises_dropsIt() {
+        var result = validateWithTrend(insight("note", "Daily Commits", "Commits decreased this period", null), 35.0);
+
+        assertThat(result.insights()).isEmpty();
+        assertThat(result.report().droppedDirectionMismatch()).isEqualTo(1);
+    }
+
+    @Test
+    void validate_riseWordWhileTrendFalls_dropsIt() {
+        var result = validateWithTrend(insight("note", "Daily Commits", "Commits rose sharply", null), -35.0);
+
+        assertThat(result.insights()).isEmpty();
+        assertThat(result.report().droppedDirectionMismatch()).isEqualTo(1);
+    }
+
+    @Test
+    void validate_directionWordWhileTrendIsZero_dropsIt() {
+        var result = validateWithTrend(insight("note", "Daily Commits", "Commits dropped", null), 0.0);
+
+        assertThat(result.insights()).isEmpty();
+        assertThat(result.report().droppedDirectionMismatch()).isEqualTo(1);
+    }
+
+    @Test
+    void validate_directionWordAgreesWithTrend_keepsIt() {
+        var result = validateWithTrend(insight("note", "Daily Commits", "Commits fell over the period", null), -35.0);
+
+        assertThat(result.insights()).hasSize(1);
+        assertThat(result.report().droppedDirectionMismatch()).isZero();
+    }
+
+    @Test
+    void validate_directionWordInExplanationContradictsTrend_dropsIt() {
+        var result = validateWithTrend(
+                insight("note", "Daily Commits", "Commit volume changed", "Output increased after the release"), -10.0);
+
+        assertThat(result.insights()).isEmpty();
+        assertThat(result.report().droppedDirectionMismatch()).isEqualTo(1);
+    }
+
+    @Test
+    void validate_textWithoutDirectionWord_keepsItWhateverTheTrend() {
+        var result = validateWithTrend(insight("note", "Daily Commits", "Commit volume is steady", null), 0.0);
+
+        assertThat(result.insights()).hasSize(1);
+    }
+
+    @Test
+    void validate_comparativeWordIsNotADirection_keepsIt() {
+        var result = validateWithTrend(insight("note", "Daily Commits", "Commits are higher than usual", null), -5.0);
+
+        assertThat(result.insights()).hasSize(1);
+    }
+
+    @Test
+    void validate_noTrendForTheMetric_skipsTheDirectionRule() {
+        var result = validator.validate(
+                List.of(insight("note", "Daily Commits", "Commits decreased", null)),
+                aliases("Daily Commits"), Set.of(), Set.of());
+
+        assertThat(result.insights()).hasSize(1);
+        assertThat(result.report().droppedDirectionMismatch()).isZero();
+    }
+
+    @Test
+    void validate_blankMetricResolvedFromText_directionRuleUsesTheResolvedMetricsTrend() {
+        var result = validator.validate(
+                List.of(insight("note", "", "Daily Commits decreased", null)),
+                aliases("Daily Commits"), Set.of(), Set.of(), Map.of("Daily Commits", 100.0));
+
+        assertThat(result.insights()).isEmpty();
+        assertThat(result.report().droppedDirectionMismatch()).isEqualTo(1);
     }
 
     // -------------------------------------------------------------------------

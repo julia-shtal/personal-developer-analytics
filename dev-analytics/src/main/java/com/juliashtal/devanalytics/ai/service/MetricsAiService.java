@@ -99,7 +99,7 @@ public class MetricsAiService {
 
         MetricsSummaryDto dto = parseSummary(raw, from, to, scope, scopeName,
                 metricAliases(ctx.getMetrics().keySet()), anomalousMetricNames(ctx.getMetrics()),
-                groundedNumberTokens(ctx.getMetrics()));
+                groundedNumberTokens(ctx.getMetrics()), trendPctByMetricName(ctx.getMetrics()));
         persistenceService.savePersonal(user, dto);
         return dto;
     }
@@ -139,7 +139,7 @@ public class MetricsAiService {
         log.info("Team AI summary generated: teamId={}, durationMs={}, responseLen={}", teamId, durationMs, raw.length());
 
         MetricsSummaryDto dto = parseSummary(raw, from, to, "TEAM", team.getName(),
-                metricAliases(teamMetricKeys(ctx)), Set.of(), groundedNumberTokensForTeam(ctx));
+                metricAliases(teamMetricKeys(ctx)), Set.of(), groundedNumberTokensForTeam(ctx), Map.of());
         persistenceService.saveTeam(team, dto);
         return dto;
     }
@@ -184,7 +184,7 @@ public class MetricsAiService {
 
         MetricsSummaryDto dto = parseSummary(raw, from, to, "PERSONAL", member.getUsername(),
                 metricAliases(ctx.getMetrics().keySet()), anomalousMetricNames(ctx.getMetrics()),
-                groundedNumberTokens(ctx.getMetrics()));
+                groundedNumberTokens(ctx.getMetrics()), trendPctByMetricName(ctx.getMetrics()));
         persistenceService.savePersonal(member, dto);
         return dto;
     }
@@ -261,7 +261,7 @@ public class MetricsAiService {
     private MetricsSummaryDto parseSummary(String raw, LocalDate from, LocalDate to,
                                            String scope, String scopeName,
                                            Map<String, String> metricAliases, Set<String> anomalousMetricNames,
-                                           Set<String> groundedNumbers) {
+                                           Set<String> groundedNumbers, Map<String, Double> trendPctByMetric) {
         String cleaned = raw.strip();
         // Strip markdown code fences that models sometimes add despite instructions
         if (cleaned.startsWith("```")) {
@@ -305,7 +305,8 @@ public class MetricsAiService {
             }
 
             SummaryValidator.Result validated =
-                    summaryValidator.validate(insights, metricAliases, anomalousMetricNames, groundedNumbers);
+                    summaryValidator.validate(insights, metricAliases, anomalousMetricNames, groundedNumbers,
+                            trendPctByMetric);
 
             return MetricsSummaryDto.builder()
                     .from(from)
@@ -378,6 +379,13 @@ public class MetricsAiService {
             }
         });
         return names;
+    }
+
+    /** Trend of each context metric keyed by canonical human label, the key the validator resolves aliases to. */
+    private Map<String, Double> trendPctByMetricName(Map<String, AggregatedMetricsContext.MetricAggregate> metrics) {
+        Map<String, Double> trends = new HashMap<>();
+        metrics.forEach((key, aggregate) -> humanName(key).ifPresent(name -> trends.put(name, aggregate.getTrendPct())));
+        return trends;
     }
 
     /** TEAM context carries no anomaly flag per metric, so only metric presence is checked at this scope. */
